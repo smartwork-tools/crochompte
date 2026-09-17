@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Politique de confidentialité — Crochompte</title>
+<meta name="robots" content="index, follow">
+<style>
+  :root{
+    --ground:#f4f3f0; --surface:#ffffff; --ink:#15181a; --muted:#5b6560;
+    --rule:#e2e0db; --primary:#0f5132; --warn-soft:#fdf3e0; --warn:#b07d1a;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ground:#121513; --surface:#1b1f1d; --ink:#eceeec; --muted:#9aa5a0;
+      --rule:#2c3330; --primary:#6fb98d; --warn-soft:#2a2313; --warn:#d9a441;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#121513; --surface:#1b1f1d; --ink:#eceeec; --muted:#9aa5a0;
+    --rule:#2c3330; --primary:#6fb98d; --warn-soft:#2a2313; --warn:#d9a441;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--ink);
+    font:400 16px/1.65 "Public Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+    padding:32px 16px 64px;}
+  main{max-width:72ch;margin:0 auto;background:var(--surface);
+    border:1px solid var(--rule);border-radius:16px;padding:28px 26px 34px;}
+  h1{font-size:28px;line-height:1.25;margin:0 0 6px;}
+  h2{font-size:19px;margin:32px 0 10px;}
+  p,li{margin:0 0 12px;}
+  ul{padding-left:20px;}
+  a{color:var(--primary);}
+  .date{color:var(--muted);font-size:14px;margin-bottom:24px;}
+  .todo{background:var(--warn-soft);border:1px solid var(--warn);border-radius:12px;
+    padding:14px 16px;margin:20px 0;}
+  .todo b{color:var(--warn);}
+  table{width:100%;border-collapse:collapse;margin:12px 0 20px;font-size:15px;table-layout:fixed;}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--rule);vertical-align:top;
+    overflow-wrap:anywhere;}
+  th{color:var(--muted);font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:.04em;}
+  /* Sur téléphone, un tableau à trois colonnes est illisible : chaque ligne
+     devient un bloc, avec son intitulé repris devant la valeur. */
+  @media (max-width: 620px){
+    table, tbody, tr, td, th{display:block;width:100%;}
+    thead{display:none;}
+    tr{border:1px solid var(--rule);border-radius:10px;padding:6px 4px;margin-bottom:12px;}
+    td{border:none;padding:6px 10px;}
+    td::before{content:attr(data-l);display:block;font-size:12px;color:var(--muted);
+      text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px;}
+  }
+  .retour{display:inline-block;margin-bottom:20px;font-size:14px;}
+</style>
+</head>
+<body>
+<main>
+
+<a class="retour" href="index.html">← Retour à l'application</a>
+
+<h1>Politique de confidentialité</h1>
+<p class="date">Dernière mise à jour : à compléter lors de la mise en ligne.</p>
+
+<div class="todo">
+  <p><b>À COMPLÉTER AVANT LA MISE EN LIGNE.</b> Les passages entre crochets sont
+  les seuls que tu dois remplir. Ils sont obligatoires : le règlement impose que
+  la personne responsable des données soit identifiable, avec un moyen de la
+  joindre. Une politique sans nom ni adresse ne vaut rien.</p>
+  <p>Supprime ce bloc une fois les crochets remplis.</p>
+</div>
+
+<h2>Qui est responsable de tes données</h2>
+<p>
+  <b>Abdelkarim FARHANI</b>, exerçant sous le nom commercial <b>Crochompte</b>,
+  personne physique,
+  [adresse postale — facultative tant qu'il n'y a pas de SIRET], [numéro SIRET, une fois immatriculé].<br>
+  Pour toute question sur tes données : <b>[adresse de courriel]</b>.
+</p>
+
+<h2>Ce que l'application enregistre</h2>
+<p>
+  Crochompte fonctionne d'abord <b>dans ton navigateur</b> : sans compte,
+  rien ne quitte ton appareil. Si tu crées un compte, voici ce qui est enregistré
+  sur le serveur, et rien d'autre.
+</p>
+
+<table>
+  <tr><th>Donnée</th><th>Pourquoi</th><th>Combien de temps</th></tr>
+  <tr>
+    <td data-l="Donnée">Ton pseudo</td>
+    <td data-l="Pourquoi">Te reconnaître à la connexion. Jamais montré à personne d'autre.</td>
+    <td data-l="Combien de temps">Jusqu'à l'effacement de ton compte</td>
+  </tr>
+  <tr>
+    <td data-l="Donnée">Ton adresse de courriel</td>
+    <td data-l="Pourquoi">Confirmer que le compte est le tien à l'inscription, te reconnecter si
+        tu préfères l'utiliser plutôt que ton pseudo, et t'envoyer un lien si tu oublies ton
+        mot de passe.</td>
+    <td data-l="Combien de temps">Jusqu'à l'effacement de ton compte</td>
+  </tr>
+  <tr>
+    <td data-l="Donnée">Ton mot de passe, chiffré</td>
+    <td data-l="Pourquoi">Te reconnaître à la connexion. Jamais lisible, même par nous.</td>
+    <td data-l="Combien de temps">Jusqu'à l'effacement de ton compte</td>
+  </tr>
+  <tr>
+    <td data-l="Donnée">Ton prénom et ton nom</td>
+    <td data-l="Pourquoi">T'identifier comme titulaire du compte.</td>
+    <td data-l="Combien de temps">Jusqu'à l'effacement de ton compte</td>
+  </tr>
+  <tr>
+    <td data-l="Donnée">Ta date de naissance</td>
+    <td data-l="Pourquoi">Vérifier que le service ne s'adresse pas aux personnes de moins de 15 ans.</td>
+    <td data-l="Combien de temps">Jusqu'à l'effacement de ton compte</td>
+  </tr>
+  <tr>
+    <td data-l="Donnée">Ta ville et ton pays</td>
+    <td data-l="Pourquoi">Situer ton activité, sans avoir besoin de ton adresse complète.</td>
+    <td data-l="Combien de temps">Jusqu'à l'effacement de ton compte</td>
+  </tr>
+  <tr>
+    <td data-l="Donnée">Ton type d'activité (amateur, artisanat, petite entreprise)</td>
+    <td data-l="Pourquoi">Adapter le service à ton usage.</td>
+    <td data-l="Combien de temps">Jusqu'à l'effacement de ton compte</td>
+  </tr>
+  <tr>
+    <td data-l="Donnée">Ton atelier : réglages, matières, créations, pièces, patrons</td>
+    <td data-l="Pourquoi">Te les restituer sur tes différents appareils</td>
+    <td data-l="Combien de temps">Jusqu'à l'effacement de ton compte</td>
+  </tr>
+  <tr>
+    <td data-l="Donnée">Tes photos et les pages de patrons que tu as importées</td>
+    <td data-l="Pourquoi">Les afficher dans ton atelier</td>
+    <td data-l="Combien de temps">Jusqu'à l'effacement de ton compte</td>
+  </tr>
+</table>
+<p>Ton prénom, ton nom, ta date de naissance, ta ville, ton pays et ton type d'activité sont
+modifiables à tout moment dans Réglages, section « Mes informations ».</p>
+
+<p><b>Ce qui n'est pas collecté :</b> aucun traceur publicitaire, aucune mesure
+d'audience, aucun profilage, aucune revente ni partage à des tiers commerciaux.
+L'application ne cherche pas à savoir ce que tu fais : elle t'aide à le compter.</p>
+
+<h2>Sur quelle base juridique</h2>
+<ul>
+  <li><b>L'exécution du service</b> (article 6.1.b du RGPD) : sans ton adresse et
+      ton atelier, il n'y a pas de compte à te rendre.</li>
+  <li>Aucun traitement ne repose sur ton consentement à des fins publicitaires,
+      puisqu'il n'y en a aucune.</li>
+</ul>
+
+<h2>Qui héberge, et où</h2>
+<table>
+  <tr><th>Prestataire</th><th>Rôle</th><th>Lieu</th></tr>
+  <tr>
+    <td data-l="Prestataire">Supabase</td>
+    <td data-l="Rôle">Base de données, comptes, stockage des photos</td>
+    <td data-l="Lieu">Union européenne — Irlande (région <i>West EU</i>)</td>
+  </tr>
+  <tr>
+    <td data-l="Prestataire">GitHub Pages (Microsoft)</td>
+    <td data-l="Rôle">Hébergement des pages du site</td>
+    <td data-l="Lieu">Diffusé par un réseau mondial de serveurs ; l'éditeur, Microsoft,
+        est basé aux États-Unis. Ce transfert est encadré par le
+        <i>Data Privacy Framework</i> UE–États-Unis.</td>
+  </tr>
+  <tr>
+    <td data-l="Prestataire">[service d'envoi de courriels, une fois configuré]</td>
+    <td data-l="Rôle">Envoi des liens de connexion</td>
+    <td data-l="Lieu">[à préciser — Brevo (France) tant que le volume reste faible,
+        sinon Resend ou Postmark (États-Unis)]</td>
+  </tr>
+</table>
+<p>Ces prestataires agissent comme sous-traitants : ils traitent les données
+pour le compte du responsable ci-dessus, et pour rien d'autre.</p>
+
+<h2>Tes droits</h2>
+<p>Tu peux à tout moment :</p>
+<ul>
+  <li><b>Consulter et emporter tes données</b> — l'export de sauvegarde, dans
+      Réglages, te rend l'intégralité de ton atelier dans un fichier lisible.</li>
+  <li><b>Corriger</b> ce qui est inexact — directement dans l'application.</li>
+  <li><b>Tout effacer</b> — le bouton « Effacer mon compte », dans Réglages,
+      supprime définitivement ton atelier, tes photos et ton compte.
+      C'est immédiat et irréversible.</li>
+  <li><b>T'opposer</b> ou demander une limitation : écris à l'adresse ci-dessus.</li>
+</ul>
+<p>
+  Si une demande reste sans réponse, tu peux saisir la
+  <a href="https://www.cnil.fr/fr/plaintes" target="_blank" rel="noopener">CNIL</a>.
+</p>
+
+<h2>Sécurité</h2>
+<ul>
+  <li>Ton mot de passe n'est <b>jamais stocké en clair</b> : il est chiffré
+      dès qu'il arrive sur le serveur, par la brique d'authentification de
+      Supabase. Personne — pas même nous — ne peut le consulter.</li>
+  <li>Ton pseudo n'est <b>jamais montré à personne d'autre</b> qu'à toi : il
+      sert uniquement à te reconnecter, il n'est ni public ni partagé.</li>
+  <li>Ton adresse de courriel sert à confirmer que le compte est le tien, à
+      t'envoyer un lien en cas de mot de passe oublié, et — si tu le
+      préfères à ton pseudo — à te reconnecter. Elle n'est jamais montrée à
+      d'autres utilisatrices.</li>
+  <li>La base applique une <b>séparation par compte au niveau du serveur</b>
+      (row level security) : une requête ne peut renvoyer que les lignes de la
+      personne connectée, quelle que soit la façon dont elle est formulée.</li>
+  <li>Le stockage des photos est <b>privé</b> et cloisonné par compte.</li>
+  <li>Les échanges se font en HTTPS.</li>
+</ul>
+
+<h2>Cookies</h2>
+<p>
+  Aucun cookie publicitaire ni de mesure d'audience. L'application conserve
+  seulement, dans ton navigateur, ton atelier et — si tu es connectée — un jeton
+  de session pour ne pas te redemander de te connecter à chaque visite. Ces
+  éléments sont nécessaires au fonctionnement : ils ne demandent pas de
+  consentement préalable.
+</p>
+
+<h2>Mineurs</h2>
+<p>Le service ne s'adresse pas aux personnes de moins de 15 ans.</p>
+
+<h2>Modifications</h2>
+<p>
+  Toute modification de cette politique sera datée en haut de cette page. Un
+  changement qui élargirait l'usage des données te serait annoncé dans
+  l'application avant d'entrer en vigueur.
+</p>
+
+</main>
+</body>
+</html>

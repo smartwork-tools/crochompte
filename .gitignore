@@ -1,0 +1,9 @@
+# config.js n'est PAS ignoré : sur GitHub Pages, un fichier absent du dépôt
+# n'est pas servi, et l'application repasserait silencieusement en mode hors
+# ligne. La clé qu'il contient est la clé publiable — elle est de toute façon
+# visible dans le navigateur de chaque utilisatrice.
+# Ce qui protège les données, ce sont les règles du schema.sql.
+
+node_modules/
+.DS_Store
+Thumbs.db

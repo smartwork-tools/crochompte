@@ -1,0 +1,18 @@
+# Déploiement Netlify : rien à construire, le site est déjà du HTML.
+[build]
+  publish = "."
+  command = ""
+
+# config.js contient l'adresse du projet et la clé publique : il ne doit pas
+# être mis en cache trop longtemps, pour qu'un changement soit pris vite.
+[[headers]]
+  for = "/config.js"
+  [headers.values]
+    Cache-Control = "public, max-age=60"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "microphone=(self), camera=(self)"
