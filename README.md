@@ -21,10 +21,10 @@ appareil à l'autre.
 | `.gitignore` | fichiers à ne pas envoyer sur GitHub |
 | `confidentialite.html` | politique de confidentialité — **à compléter** |
 | `RGPD.md` | liste de contrôle : ce qui est fait, ce qui reste à ta charge |
-| `edge/inscription/` | fonction serveur : création du compte (pseudo, identité de base, courriel, mot de passe) |
-| `edge/connexion/` | fonction serveur : connexion avec pseudo **ou** courriel + mot de passe |
-| `edge/mot-de-passe-oublie/` | fonction serveur : envoi du lien de réinitialisation à partir du pseudo ou du courriel |
-| `edge/supprimer-compte/` | fonction serveur pour l'effacement complet du compte |
+| `supabase/functions/inscription/` | fonction serveur : création du compte (pseudo, identité de base, courriel, mot de passe) |
+| `supabase/functions/connexion/` | fonction serveur : connexion avec pseudo **ou** courriel + mot de passe |
+| `supabase/functions/mot-de-passe-oublie/` | fonction serveur : envoi du lien de réinitialisation à partir du pseudo ou du courriel |
+| `supabase/functions/supprimer-compte/` | fonction serveur pour l'effacement complet du compte |
 
 > Pas de `netlify.toml` dans ce dossier : ce fichier ne sert qu'avec l'hébergeur
 > Netlify. Comme tu utilises **GitHub Pages**, il ne t'est d'aucune utilité —
@@ -33,6 +33,13 @@ appareil à l'autre.
 **Sans `config.js`, l'application marche exactement comme avant** : tout reste
 dans le navigateur, rien ne part nulle part. C'est ce qui permet de servir la
 même application en version publique et en version avec comptes.
+
+**Dès que `config.js` est rempli, se connecter devient obligatoire** : la
+personne voit un écran de connexion avant l'outil, et doit créer un compte ou
+se connecter pour continuer — il n'y a plus d'usage anonyme sur cette
+installation-ci. C'est un choix voulu (voir `RGPD.md`), pas une étape
+oubliée : si tu préfères garder un accès sans compte en plus de la
+synchronisation, dis-le-moi, ça se change.
 
 ---
 
@@ -93,6 +100,11 @@ supabase functions deploy mot-de-passe-oublie
 ```
 
 (La référence du projet se trouve dans *Project Settings → General*.)
+
+> **Important** : l'outil `supabase` exige que chaque fonction se trouve dans
+> `supabase/functions/<nom>/index.ts`, exactement à cet endroit — c'est pour
+> ça que ce dossier contient un sous-dossier `supabase/functions/`, et non
+> plus le dossier `edge/` d'une version antérieure de ce guide.
 
 **Sans ces trois fonctions déployées, personne ne peut créer de compte ni se
 connecter.** Fais-le avant d'annoncer le site à qui que ce soit.
@@ -171,25 +183,35 @@ GitHub Pages redéploie en une à trois minutes.
 
 ### 5. Vérifier que ça marche
 
-1. Ouvre le site, va dans **Réglages**.
-2. La carte « Compte et synchronisation » doit proposer de créer un compte.
-   Si elle dit « fonctionne hors ligne », c'est que `config.js` n'est pas lu :
-   vérifie qu'il est bien à la racine, à côté de `index.html`.
-3. Crée un compte : choisis un pseudo (l'application te dit tout de suite
-   s'il est disponible), renseigne prénom, nom, date de naissance, ville,
-   pays, type d'activité, une adresse courriel et un mot de passe. Ouvre le
-   courriel de confirmation **sur le même appareil**, clique sur le lien.
-4. Reviens sur le site, connecte-toi cette fois avec **ton pseudo et ton mot
-   de passe**.
-5. Ouvre Réglages → « Mes informations » : tes réponses de l'inscription
+Avec `config.js` rempli, se connecter est **obligatoire** : le site affiche un
+écran de connexion avant tout le reste, il n'y a plus de bouton à chercher
+dans Réglages.
+
+1. Ouvre le site : l'écran de connexion doit s'afficher directement, avant
+   l'outil. S'il affiche plutôt l'accueil sans rien demander, c'est que
+   `config.js` n'est pas lu : vérifie qu'il est bien à la racine, à côté de
+   `index.html`.
+2. Sur cet écran, clique sur « Créer un compte » : choisis un pseudo
+   (l'application te dit tout de suite s'il est disponible), renseigne
+   prénom, nom, date de naissance, ville, pays, type d'activité, une adresse
+   courriel et un mot de passe. Ouvre le courriel de confirmation **sur le
+   même appareil**, clique sur le lien.
+3. Reviens sur le site, connecte-toi cette fois avec **ton pseudo et ton mot
+   de passe** : l'écran de connexion doit s'effacer et laisser place à
+   l'outil.
+4. Va dans Réglages → « Mes informations » : tes réponses de l'inscription
    doivent apparaître déjà remplies. Modifie-en une et enregistre.
-6. Crée une création, attends trois secondes, puis ouvre le même site sur ton
-   téléphone, connecte-toi cette fois avec **ton adresse courriel** (au lieu
-   du pseudo) et ton mot de passe, et clique sur **Récupérer depuis le
-   serveur**.
-7. Pour vérifier le mot de passe oublié : clique sur « Mot de passe oublié »,
-   saisis le pseudo ou l'adresse, ouvre le courriel reçu et choisis un
-   nouveau mot de passe.
+5. Crée une création, attends trois secondes, puis ouvre le même site sur ton
+   téléphone : l'écran de connexion s'affiche à nouveau (chaque appareil doit
+   se connecter séparément). Connecte-toi cette fois avec **ton adresse
+   courriel** (au lieu du pseudo) et ton mot de passe, puis clique sur
+   **Récupérer depuis le serveur** dans Réglages.
+6. Pour vérifier le mot de passe oublié : depuis l'écran de connexion,
+   clique sur « Mot de passe oublié », saisis le pseudo ou l'adresse, ouvre
+   le courriel reçu et choisis un nouveau mot de passe.
+7. Pour vérifier la déconnexion : dans Réglages, clique sur « Se
+   déconnecter ». L'écran de connexion doit revenir immédiatement — l'outil
+   ne doit plus être accessible tant que tu ne t'es pas reconnectée.
 
 ---
 
@@ -255,7 +277,7 @@ GitHub Pages redéploie en une à trois minutes.
 
 Le bouton « Effacer mon compte » supprime l'atelier et les photos par lui-même.
 Pour supprimer aussi **l'identité de connexion**, il faut déployer la fonction
-serveur fournie dans `edge/supprimer-compte/` :
+serveur fournie dans `supabase/functions/supprimer-compte/` :
 
 ```bash
 npm install -g supabase

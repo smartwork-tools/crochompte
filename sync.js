@@ -310,7 +310,23 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 
   /* ───────── interface ───────── */
 
+  /* Dit à index.html si un compte est nécessaire pour utiliser l'outil et si
+     la personne est actuellement connectée : c'est ce qui décide d'afficher
+     l'écran de connexion obligatoire ou l'atelier. On ne le répète que quand
+     l'état a vraiment changé — sinon peindre() (appelé par le nouvel écran
+     qu'index.html vient de monter) redéclencherait aussitôt un nouveau
+     changement d'écran, en boucle. */
+  var dernierEtatAnnonce = null;
+  function declarerEtat(){
+    if (!pont.definirEtatConnexion) return;
+    var connecte = !!etat.session && !etat.recuperation;
+    if (dernierEtatAnnonce && dernierEtatAnnonce.connecte === connecte) return;
+    dernierEtatAnnonce = {exige: true, connecte: connecte};
+    pont.definirEtatConnexion(dernierEtatAnnonce);
+  }
+
   function peindre(msg){
+    declarerEtat();
     var zone = etat.zone;
     if (!zone) return;
     msg = msg || {};
@@ -528,7 +544,8 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
           if (r.error){ peindre({erreur: r.error.message}); return; }
           etat.recuperation = false;
           recupererProfil().then(function(){
-            peindre({info:"Mot de passe changé. Tu es connectée."});
+            pont.toast("Mot de passe changé. Tu es connectée.");
+            peindre();
           });
         });
       });
@@ -658,8 +675,9 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
                   etat.session = (res.data && res.data.session) || null;
                   return recupererProfil();
                 }).then(function(){
-                  peindre({info:"Connectée. Si tu arrives d'un autre appareil, clique sur "+
-                                "« Récupérer depuis le serveur »."});
+                  pont.toast("Connectée. Si tu arrives d'un autre appareil, clique sur "+
+                             "« Récupérer depuis le serveur ».");
+                  peindre();
                 });
             });
         });
@@ -730,11 +748,12 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
         b.disabled = true;
         effacerToutLeCompte(function(etape){ b.textContent = etape; }).then(function(r){
           if (!r.ok){ peindre({erreur: r.message || "L'effacement a échoué."}); return; }
-          peindre({info: r.identite
+          pont.toast(r.identite
             ? "Compte et données effacés. Il ne reste rien sur le serveur."
             : "Atelier et photos effacés, et tu es déconnectée. L'identité de connexion "+
               "(ton adresse et ton pseudo) subsiste tant que la fonction d'effacement du serveur "+
-              "n'est pas installée — voir le README."});
+              "n'est pas installée — voir le README.");
+          peindre();
         });
       });
 
@@ -743,7 +762,8 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
           etat.session = null; etat.vuLe = null; etat.pseudo = null; etat.mode = "connexion";
           etat.brouillon = Object.assign(brouillonInscriptionVide(), {identifiantOubli:"", identifiantConnexion:""});
           etat.brouillonProfil = brouillonProfilVide();
-          peindre({info:"Déconnectée. Tes données restent dans ce navigateur."});
+          pont.toast("Déconnectée.");
+          peindre();
         });
       });
     }
@@ -784,8 +804,9 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
     etat.session = session || null;
     if (!etaitConnectee && session && !etat.recuperation){
       recupererProfil().then(function(){
-        peindre({info:"Connectée. Si tu arrives d'un autre appareil, clique sur "+
-                      "« Récupérer depuis le serveur »."});
+        pont.toast("Connectée. Si tu arrives d'un autre appareil, clique sur "+
+                   "« Récupérer depuis le serveur ».");
+        peindre();
       });
     } else if (!session){
       etat.pseudo = null;

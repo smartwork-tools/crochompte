@@ -525,6 +525,12 @@
   </div>
 </div>
 <main id="main"></main>
+<!-- ═══ Réglage de connexion — chargé avant l'application ═══
+     Doit arriver ici, avant le script principal : c'est lui qui décide si un
+     écran de connexion est nécessaire avant de montrer quoi que ce soit.
+     Sans ce fichier (ou s'il ne se charge pas), rien ne change : l'objet
+     global reste absent et l'application démarre hors ligne, comme avant. -->
+<script src="config.js" onerror="console.info('Crochompte : pas de config.js, mode hors ligne')"></script>
 <script>
 (function(){
 "use strict";
@@ -1006,7 +1012,13 @@ window.CrochomptePont = {
   },
   surZoneCompte: function(fn){ pontCompte = fn; },
   redessiner: function(){ render(); },
-  toast: function(m){ toast(m); }
+  toast: function(m){ toast(m); },
+  /* sync.js appelle ceci chaque fois que l'état de connexion est connu ou
+     change : {exige:true} veut dire « ce déploiement demande un compte pour
+     utiliser l'outil », {connecte:true/false} l'état actuel. Tant que rien
+     n'a jamais été annoncé, l'application attend (renderChargement) au lieu
+     de montrer quoi que ce soit. */
+  definirEtatConnexion: function(info){ definirEtatConnexion(info); }
 };
 var pontCompte = null;
 
@@ -1273,6 +1285,91 @@ function render(){
   else                               renderReglages(main);
   hydraterPhotos(main);
   majBarreChrono();
+  window.scrollTo(0,0);
+}
+
+/* ═════ 6 bis. ÉCRAN DE CONNEXION OBLIGATOIRE ═════
+   Seulement quand config.js déclare une installation avec comptes. Sans lui,
+   ce qui suit ne s'exécute jamais : render() reste l'unique point d'entrée,
+   exactement comme avant.
+
+   sync.js est seul à savoir si une session existe déjà (elle vit dans son
+   propre stockage) : tant qu'il n'a rien annoncé via definirEtatConnexion(),
+   on ne sait pas s'il faut montrer l'outil ou un formulaire de connexion —
+   donc on attend, pour ne jamais laisser entrevoir l'atelier avant d'être
+   sûr que la personne a le droit d'y être. */
+var etatAcces = {recu:false, exige:false, connecte:false};
+var minuteurChargement = null;
+
+function definirEtatConnexion(info){
+  info = info || {};
+  if (minuteurChargement){ clearTimeout(minuteurChargement); minuteurChargement = null; }
+  etatAcces.recu = true;
+  etatAcces.exige = !!info.exige;
+  etatAcces.connecte = !!info.connecte;
+  renderRacine();
+}
+
+function renderRacine(){
+  if (etatAcces.exige && !etatAcces.connecte) renderPortail();
+  else render();
+}
+
+function renderChargement(){
+  arreterVoix();
+  document.getElementById("nav").innerHTML = "";
+  var main = document.getElementById("main");
+  main.innerHTML = "";
+  main.appendChild(el(
+    '<div style="max-width:420px;margin:20vh auto 0;text-align:center;color:var(--muted)">'+
+    '<p>Connexion au service…</p></div>'
+  ));
+}
+
+function renderErreurChargement(){
+  arreterVoix();
+  document.getElementById("nav").innerHTML = "";
+  var main = document.getElementById("main");
+  main.innerHTML = "";
+  var box = el(
+    '<div style="max-width:420px;margin:14vh auto 0" class="card"><div class="body" style="padding:20px">'+
+    '<p style="margin:0 0 10px"><b>Le module de connexion n\'a pas pu se charger.</b></p>'+
+    '<p class="hint" style="margin:0 0 16px">Vérifie ta connexion internet, puis réessaie. '+
+    'Tes données restées dans ce navigateur ne sont pas concernées.</p>'+
+    '<div class="et-act"><button type="button" class="btn primary" id="ea-reessayer">Réessayer</button></div>'+
+    '</div></div>'
+  );
+  main.appendChild(box);
+  document.getElementById("ea-reessayer").addEventListener("click", function(){
+    window.location.reload();
+  });
+}
+
+/* Écran plein cadre, hors des onglets habituels : c'est le passage obligé
+   avant d'atteindre l'outil quand l'installation demande un compte. Il
+   héberge la même zone que sync.js sait déjà peindre (formulaires de
+   connexion / inscription / récupération) — seul l'endroit où elle apparaît
+   change par rapport à l'ancien emplacement, dans Réglages. */
+function renderPortail(){
+  arreterVoix();
+  document.getElementById("nav").innerHTML = "";
+  var main = document.getElementById("main");
+  main.innerHTML = "";
+  var enveloppe = el(
+    '<div style="max-width:480px;margin:0 auto;padding:28px 0 60px">'+
+    '<div class="brandrow" style="justify-content:center;margin-bottom:18px">'+
+    '<span class="brand" style="pointer-events:none">Croch<span>ompte</span></span>'+
+    '</div></div>'
+  );
+  var zone = el('<div id="zone-compte-portail"></div>');
+  enveloppe.appendChild(zone);
+  main.appendChild(enveloppe);
+  if (pontCompte){
+    try{ pontCompte(zone); }catch(e){}
+  } else {
+    zone.innerHTML = '<div class="card"><div class="body" style="padding:20px">'+
+      '<p style="margin:0">Chargement du formulaire de connexion…</p></div></div>';
+  }
   window.scrollTo(0,0);
 }
 
@@ -6553,16 +6650,34 @@ window.addEventListener("pagehide", sauverTout);
 document.addEventListener("visibilitychange", function(){ if (document.hidden) sauverTout(); });
 document.getElementById("brand").addEventListener("click", function(){ view.modeleVu = null; aller("accueil"); });
 view.tab = state.vuAccueil ? "creations" : "accueil";
-render();
+
+/* Avec une installation « comptes » (config.js rempli), rien ne s'affiche
+   tant que sync.js n'a pas dit s'il existe déjà une session : ça évite de
+   montrer l'atelier une fraction de seconde avant de le refermer derrière un
+   écran de connexion. Sans config.js, rien ne change : l'outil démarre
+   comme avant. */
+(function(){
+  var cfg = window.CROCHOMPTE_CONFIG || {};
+  if (cfg.supabaseUrl && cfg.supabaseAnonKey){
+    renderChargement();
+    minuteurChargement = setTimeout(function(){
+      if (!etatAcces.recu) renderErreurChargement();
+    }, 7000);
+  } else {
+    render();
+  }
+})();
 
 })();
 </script>
 
-<!-- ═══ Comptes et synchronisation — facultatifs ═══
+<!-- ═══ Comptes et synchronisation — facultatifs quand config.js est absent ═══
      Sans config.js, l'application fonctionne hors ligne, exactement comme la
-     version publique : tout reste dans le navigateur. Les deux scripts sont
-     chargés après l'application ; une erreur de réseau ne la bloque jamais. -->
-<script src="config.js" onerror="console.info('Crochompte : pas de config.js, mode hors ligne')"></script>
+     version publique : tout reste dans le navigateur. Quand config.js est
+     rempli, se connecter devient obligatoire (voir renderPortail() plus haut
+     dans le script principal) : ce petit script ne sert plus alors qu'en
+     repli, si sync.js ne parvient pas à se charger avant même d'atteindre
+     l'écran de connexion. -->
 <script>
 /* Message par défaut de la zone « compte ». Il est ici, et non dans sync.js,
    pour s'afficher même si sync.js ne se charge pas (réseau coupé, bibliothèque

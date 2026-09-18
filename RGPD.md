@@ -96,8 +96,20 @@ l'obligation le jour venu.
 
 Trois choix d'architecture réduisent le risque à la racine :
 
-1. **Le mode sans compte reste entier.** Une utilisatrice qui ne veut rien
-   confier a une application complète. Peu de services peuvent en dire autant.
+1. **La version publique (sans `config.js` rempli) reste sans compte.**
+   Une utilisatrice de cette version-là ne confie rien : tout reste dans son
+   navigateur. **Cette installation-ci en revanche demande un compte pour
+   utiliser l'outil** (l'écran de connexion s'affiche avant tout le reste) :
+   c'est un choix produit assumé, pas une omission technique — vérifie que le
+   point suivant est bien couvert dans ton registre et ta politique.
+   > ⚠️ Demander une identité complète (nom, date de naissance, ville, pays)
+   > juste pour utiliser un calculateur de prix de revient est plus que ce
+   > qu'exige strictement le service : le principe de minimisation (art. 5.1.c)
+   > demande de collecter le moins possible pour la finalité poursuivie.
+   > Si le compte ne sert qu'à sauvegarder l'atelier d'un appareil à l'autre,
+   > demande-toi si l'âge/la ville/le pays sont vraiment nécessaires dès
+   > l'inscription, ou si un pseudo, un mot de passe et une adresse de
+   > courriel suffiraient, le reste étant proposé plus tard en option.
 2. **Le mot de passe n'est jamais stocké en clair.** Il est chiffré par la
    brique d'authentification de Supabase dès son arrivée sur le serveur —
    même une fuite de la base ne le rendrait pas lisible.
