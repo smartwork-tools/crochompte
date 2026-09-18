@@ -129,7 +129,18 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
   function appelFonction(nom, corps){
     return fetch(urlFonction(nom), {
       method: "POST",
-      headers: {"Content-Type": "application/json", "apikey": cfg.supabaseAnonKey},
+      /* Les deux en-têtes sont nécessaires : Supabase vérifie le jeton dans
+         « Authorization » avant même de laisser la requête atteindre la
+         fonction — sans lui, il la refuse au niveau de la passerelle, sans
+         les en-têtes CORS que la fonction ajouterait elle-même. Le résultat,
+         vu du navigateur, est indiscernable d'un réseau coupé : c'est ce qui
+         produit le message générique ci-dessous, quelle que soit la vraie
+         cause. */
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": cfg.supabaseAnonKey,
+        "Authorization": "Bearer " + cfg.supabaseAnonKey
+      },
       body: JSON.stringify(corps || {})
     }).then(function(r){
       return r.json().catch(function(){ return {}; }).then(function(d){
