@@ -119,6 +119,52 @@ Trois choix d'architecture réduisent le risque à la racine :
 
 ---
 
+## La bibliothèque de patrons partagés — en clair
+
+C'est un **espace d'échange entre utilisatrices**, pas un catalogue que tu
+publies. L'application le dit à trois endroits : sur la bibliothèque, dans la
+déclaration signée avant de publier, et sous chaque patron lu.
+
+### Ce que tu ne peux pas faire disparaître par une clause
+
+Dès qu'on héberge les textes d'autres personnes, on est **hébergeur** au sens
+de la loi (LCEN, article 6). Ça ne se refuse pas et aucune mention « je décline
+toute responsabilité » ne l'efface. Mais ce statut est **fait pour protéger
+l'hébergeur** : tu n'es pas responsable de ce que publient tes utilisatrices.
+Tu ne le deviendrais que si on te signalait un contenu manifestement illicite
+et que tu le laissais en ligne.
+
+### Concrètement, ton obligation tient en deux lignes
+
+1. **Être joignable** — l'adresse de contact de `confidentialite.html` suffit.
+2. **Retirer quand on te le signale.**
+
+Et le deuxième point est **déjà automatisé** : chaque patron a un bouton
+Signaler, et il se retire tout seul au 3ᵉ signalement, sans intervention de ta
+part. Le reste est déjà verrouillé dans la base : texte seul publiable (jamais
+les pages scannées), déclaration de droits obligatoire et horodatée, et chacune
+ne peut toucher qu'à ses propres lignes.
+
+Autrement dit : **tu n'as rien à faire au quotidien.** Jette un œil de temps en
+temps aux signalements, c'est tout :
+
+```sql
+select id, titre, auteur_affiche, signalements, retire
+  from patrons_publics where signalements > 0 order by signalements desc;
+```
+
+Deux choses valent quand même le détour, une fois :
+- **Mentionner dans `confidentialite.html`** qu'un patron publié devient visible
+  par les autres, avec le nom d'autrice choisi — c'est une donnée rendue
+  publique volontairement, donc elle s'annonce.
+- **Ne pas supprimer les colonnes `user_id` et `droits_le`** : ce sont elles qui
+  te permettent de répondre en deux minutes si quelqu'un réclame.
+
+> Ce n'est pas un avis juridique. Si la bibliothèque prend vraiment de l'ampleur,
+> ce sera le moment de faire relire tes conditions d'utilisation — pas avant.
+
+---
+
 ## Ressources
 - [CNIL — le registre des traitements](https://www.cnil.fr/fr/RGPD-le-registre-des-activites-de-traitement)
 - [CNIL — notifier une violation de données](https://www.cnil.fr/fr/notifier-une-violation-de-donnees-personnelles)

@@ -17,6 +17,7 @@ appareil à l'autre.
 | `config.example.js` | à copier en `config.js` avec tes deux clés |
 | `schema.sql` | les tables et les règles de sécurité, à coller dans Supabase |
 | `schema-pseudo.sql` | la table des pseudos et les fonctions de vérification, à coller dans Supabase |
+| `schema-patrons-publics.sql` | la bibliothèque de patrons partagés, à coller dans Supabase |
 | `LICENSE` | tous droits réservés — nécessaire parce que le dépôt GitHub est public |
 | `.gitignore` | fichiers à ne pas envoyer sur GitHub |
 | `confidentialite.html` | politique de confidentialité — **à compléter** |
@@ -65,7 +66,14 @@ Compte 30 minutes la première fois. Tout est gratuit à cette échelle.
    > Tu avais déjà exécuté une version précédente de ce fichier (sans les
    > colonnes de profil) ? Recolle celle-ci et relance **Run** : elle est
    > écrite pour être rejouée sans rien casser.
-5. Va dans **Project Settings → API** et copie deux valeurs :
+5. Toujours dans **SQL Editor**, colle enfin `schema-patrons-publics.sql` et
+   clique **Run**. Ça crée la bibliothèque de patrons partagés : la table, ses
+   règles d'accès, et la fonction de signalement.
+   > Sans ce fichier, l'application fonctionne normalement — l'onglet
+   > « Bibliothèque partagée » affiche simplement qu'elle n'est pas installée.
+   > Lis la section correspondante de `RGPD.md` avant de l'ouvrir au public :
+   > héberger les patrons d'autres personnes t'engage.
+6. Va dans **Project Settings → API** et copie deux valeurs :
    - **Project URL** (`https://xxxx.supabase.co`)
    - **anon public** (une longue chaîne qui commence par `eyJ`)
 

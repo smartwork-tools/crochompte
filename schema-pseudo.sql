@@ -49,6 +49,26 @@ alter table public.pseudos drop constraint if exists pseudos_age_minimum;
 alter table public.pseudos add constraint pseudos_age_minimum
   check (date_naissance is null or date_naissance <= (current_date - interval '15 years'));
 
+-- Longueurs maximales : cohérentes avec edge/inscription (LONGUEUR_MAX_NOM =
+-- 80, LONGUEUR_MAX_LIEU = 100) et les attributs maxlength du formulaire.
+-- Sans ce filet, modifier_mon_profil() — un chemin d'écriture distinct de
+-- l'inscription — laissait passer des valeurs de longueur illimitée.
+alter table public.pseudos drop constraint if exists pseudos_longueur_prenom;
+alter table public.pseudos add constraint pseudos_longueur_prenom
+  check (prenom is null or char_length(prenom) <= 80);
+
+alter table public.pseudos drop constraint if exists pseudos_longueur_nom;
+alter table public.pseudos add constraint pseudos_longueur_nom
+  check (nom is null or char_length(nom) <= 80);
+
+alter table public.pseudos drop constraint if exists pseudos_longueur_ville;
+alter table public.pseudos add constraint pseudos_longueur_ville
+  check (ville is null or char_length(ville) <= 100);
+
+alter table public.pseudos drop constraint if exists pseudos_longueur_pays;
+alter table public.pseudos add constraint pseudos_longueur_pays
+  check (pays is null or char_length(pays) <= 100);
+
 comment on table public.pseudos is
   'Associe un pseudo et quelques informations d''identité à un compte. '
   'Lecture réservée aux fonctions serveur (service_role) pour la résolution '

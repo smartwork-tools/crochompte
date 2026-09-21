@@ -546,16 +546,16 @@ var CATS = [
 ];
 
 var MATIERES_DEFAUT = [
-  ["coton_fin",  "Coton fin amigurumi (25 g)",      "fil",  2.00,   25, "g"],
-  ["coton_dk",   "Coton DK (pelote 50 g)",          "fil",  2.70,   50, "g"],
-  ["coton_3",    "Coton n°3 (pelote 50 g)",         "fil",  3.60,   50, "g"],
-  ["acryl_bebe", "Acrylique bébé (pelote 50 g)",    "fil",  3.20,   50, "g"],
-  ["melange",    "Laine mélangée (pelote 50 g)",    "fil",  4.20,   50, "g"],
-  ["velours",    "Fil velours / peluche (100 g)",   "fil",  6.50,  100, "g"],
-  ["merinos",    "Laine mérinos (pelote 50 g)",     "fil",  8.50,   50, "g"],
-  ["trapilho",   "Trapilho / fil recyclé (500 g)",  "fil",  7.50,  500, "g"],
-  ["corde",      "Corde coton 5 mm (500 g)",        "fil", 12.00,  500, "g"],
-  ["broder",     "Fil à broder noir (détails)",     "fil",  1.20,   20, "utilisation"],
+  ["coton_fin",  "Coton fin amigurumi (25 g)",      "fil",  2.00,   25, "g", "Très fin"],
+  ["coton_dk",   "Coton DK (pelote 50 g)",          "fil",  2.70,   50, "g", "Moyen-fin"],
+  ["coton_3",    "Coton n°3 (pelote 50 g)",         "fil",  3.60,   50, "g", "Fin"],
+  ["acryl_bebe", "Acrylique bébé (pelote 50 g)",    "fil",  3.20,   50, "g", "Fin"],
+  ["melange",    "Laine mélangée (pelote 50 g)",    "fil",  4.20,   50, "g", "Moyen-fin"],
+  ["velours",    "Fil velours / peluche (100 g)",   "fil",  6.50,  100, "g", "Épais"],
+  ["merinos",    "Laine mérinos (pelote 50 g)",     "fil",  8.50,   50, "g", "Moyen-fin"],
+  ["trapilho",   "Trapilho / fil recyclé (500 g)",  "fil",  7.50,  500, "g", "Très épais"],
+  ["corde",      "Corde coton 5 mm (500 g)",        "fil", 12.00,  500, "g", "Très épais"],
+  ["broder",     "Fil à broder noir (détails)",     "fil",  1.20,   20, "utilisation", "Dentelle"],
   ["ouate",      "Ouate de rembourrage (1 kg)",     "garn",13.00, 1000, "g"],
   ["billes",     "Billes de lestage (500 g)",       "garn", 6.00,  500, "g"],
   ["yeux",       "Yeux de sécurité (lot de 20)",    "acc",  4.00,   20, "pièce"],
@@ -826,7 +826,8 @@ function matieresDefaut(){
   return MATIERES_DEFAUT.map(function(m){
     return {id:m[0], nom:m[1], cat:m[2], prix:m[3], contenance:m[4], unite:m[5],
             stock:0, seuil:0, pmp:m[3]/m[4], mouv:[],
-            refCat:null, fibre:"", composition:"", grosseur:"", metrage:null,
+            refCat:null, fibre:"", composition:"", grosseur:m[6]||"", metrage:null,
+            crochetMin:null, crochetMax:null, bain:"",
             prixIndicatif:true, perso:false, maj:null};
   });
 }
@@ -841,11 +842,18 @@ function creationDepuisModele(modeleId, nom, prix, canal){
 function etatInitial(){
   var s = {
     reglages:{tauxHoraire:15, tauxPerte:8, cotisations:12.3, fraisFixes:0, piecesParMois:10,
-              baseCout:"dernier", profil:"vend", mode:"simple"},
+              baseCout:"dernier", profil:"vend", mode:"simple",
+              /* Heures de crochet réellement disponibles par jour : c'est ce
+                 qui transforme « 14 commandes » en « tu ne tiendras pas ». */
+              heuresParJour:3,
+              /* Ce qui figure en haut des factures. Vide au départ : mieux
+                 vaut un crochet visible qu'un nom inventé. */
+              raisonSociale:"", adresse:"", siret:"", contact:""},
     canaux: clone(CANAUX_DEFAUT),
     matieres: matieresDefaut(),
     creations: [],
     pieces: [],
+    commandes: [],
     photosModeles: {},
     chrono: {pid:null, poste:"crochet", debut:null},
     vuAccueil: false
@@ -1018,9 +1026,15 @@ window.CrochomptePont = {
      utiliser l'outil », {connecte:true/false} l'état actuel. Tant que rien
      n'a jamais été annoncé, l'application attend (renderChargement) au lieu
      de montrer quoi que ce soit. */
-  definirEtatConnexion: function(info){ definirEtatConnexion(info); }
+  definirEtatConnexion: function(info){ definirEtatConnexion(info); },
+  /* sync.js dépose ici de quoi lire et publier la bibliothèque partagée.
+     Tant qu'il ne l'a pas fait — installation sans compte, module non chargé —
+     la bibliothèque n'existe simplement pas dans l'interface, plutôt que
+     d'afficher des boutons qui ne feraient rien. */
+  definirBibliotheque: function(api){ bibliothequePartagee = api; render(); }
 };
 var pontCompte = null;
+var bibliothequePartagee = null;
 
 /* ═════ 3. MOTEUR DE CALCUL ═════ */
 
@@ -1137,9 +1151,29 @@ function mouvementMatiere(m, type, qte, prixTotal, note){
   } else if (type === "sortie"){
     m.stock = (Number(m.stock)||0) - qte;
   } else if (type === "inventaire"){
-    m.stock = qte;
+    m.stock = Math.max(0, qte);
   }
-  m.mouv.unshift({d:Date.now(), t:type, q:qte, p:(typeof prixTotal==="number"?prixTotal:null), n:note||""});
+  /* Un mouvement de stock garde la trace de ce qui s'est réellement passé :
+     la quantité, le prix unitaire pratiqué CE jour-là, le total payé, et le
+     stock qui en résulte. Sans le prix unitaire et le stock après, on ne peut
+     ni justifier une valeur d'inventaire ni comprendre un écart — c'est la
+     différence entre un historique et un vrai journal de stock. */
+  var puMouv = null;
+  if (type === "entree"){
+    puMouv = (typeof prixTotal === "number" && prixTotal > 0 && qte > 0)
+      ? prixTotal / qte
+      : (m.contenance ? m.prix / m.contenance : null);
+  } else if (type === "sortie"){
+    puMouv = Number(m.pmp) || (m.contenance ? m.prix/m.contenance : null);
+  }
+  m.mouv.unshift({
+    d: Date.now(), t: type, q: qte,
+    p: (typeof prixTotal === "number" ? prixTotal : (puMouv && type === "sortie" ? puMouv * qte : null)),
+    pu: puMouv,
+    sa: Number(m.stock) || 0,
+    pmp: Number(m.pmp) || null,
+    n: note || ""
+  });
   if (m.mouv.length > 60) m.mouv.length = 60;
 }
 
@@ -1198,6 +1232,20 @@ function dureeTexte(min){
   return h + " h " + (m<10?"0":"") + m;
 }
 function pct(x){ return (Math.round(x*1000)/10).toString().replace(".",",") + " %"; }
+/* Un nombre écrit comme on l'écrit en français : virgule, et pas de zéro
+   décoratif derrière (4 et non 4,00 ; 2,25 reste 2,25). */
+function nb(x){
+  var v = Number(x); if (!isFinite(v)) return "";
+  return (Math.round(v*100)/100).toString().replace(".",",");
+}
+/* Prix unitaire d'une matière, arrondi au centième de centime : à 2 décimales
+   seulement, un fil à 2,70 € les 50 g afficherait « 0,05 € / g » et le détail
+   ne retomberait jamais sur le total. */
+function eurU(n, unite){
+  if (!isFinite(n)) n = 0;
+  var d = Math.abs(n) >= 1 ? 2 : 4;
+  return n.toFixed(d).replace(".",",") + " €" + (unite ? " / " + unite : "");
+}
 function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
 function el(html){
   var t = document.createElement("template");
@@ -1228,6 +1276,7 @@ var TABS = [
   {id:"catalogue",   nom:"Catalogue",      base:true},
   {id:"creations",   nom:"Mes créations",  base:true},
   {id:"fiche",       nom:"Fiche en cours", brouillon:true},
+  {id:"commandes",   nom:"Commandes",      base:true},
   {id:"atelier",     nom:"Atelier"},
   {id:"patrons",     nom:"Mes patrons",    base:true},
   {id:"stock",       nom:"Matières",       base:true},
@@ -1275,6 +1324,7 @@ function render(){
   main.innerHTML = "";
   if (view.tab === "accueil")        renderAccueil(main);
   else if (view.tab === "patrons")   renderPatrons(main);
+  else if (view.tab === "commandes") renderCommandes(main);
   else if (view.tab === "demarrage") renderDemarrage(main);
   else if (view.tab === "catalogue") view.modeleVu ? renderModeleDetail(main) : renderCatalogue(main);
   else if (view.tab === "creations") renderCreations(main);
@@ -1504,12 +1554,6 @@ function fourchette(f){
   if (!f || !f[1]) return "—";   /* pas de relevé : on n'invente pas */
   return String(Math.round(f[0])) + "–" + String(Math.round(f[1])) + " €";
 }
-function puceDiff(d){
-  var s = '<span class="diff" title="Difficulté">';
-  for (var i=1;i<=3;i++) s += '<i class="'+(i<=d?"on":"")+'"></i>';
-  return s + '</span>';
-}
-
 /* Un modèle n'entre au catalogue que s'il a une vraie photo de la pièce :
    celle du livret d'origine, ou celle prise par l'artisane. Sans photo, il n'y
    a rien à regarder et rien sur quoi se projeter — c'est un type d'ouvrage,
@@ -1669,10 +1713,17 @@ function renderCatalogue(main){
 
 function renderModeleDetail(main){
   var m = modele(view.modeleVu);
-  var cr = creationDepuisModele(m[0], mNom(m), 0, "direct");
-  var r = calculer(cr);
   var four = m[7];
-  var prixSuggere = Math.max(four[0], r.prixObjectif ? Math.round(r.prixObjectif) : four[0]);
+  /* Un premier calcul à prix = 0 sert uniquement à obtenir prixObjectif
+     (qui ne dépend pas du prix, par construction). On recalcule ensuite au
+     prix suggéré : à prix = 0, les cotisations et les frais variables du
+     canal — proportionnels au prix de vente — seraient comptés pour zéro,
+     et la tuile « Coût de revient complet » sous-estimerait le vrai coût. */
+  var crPrevisionnel = creationDepuisModele(m[0], mNom(m), 0, "direct");
+  var prixObjectifPrevisionnel = calculer(crPrevisionnel).prixObjectif;
+  var prixSuggere = Math.max(four[0], prixObjectifPrevisionnel ? Math.round(prixObjectifPrevisionnel) : four[0]);
+  var cr = creationDepuisModele(m[0], mNom(m), prixSuggere, "direct");
+  var r = calculer(cr);
 
   var back = el('<button type="button" class="btn sm" style="margin-bottom:16px">← Retour au catalogue</button>');
   back.addEventListener("click", function(){ view.modeleVu = null; render(); });
@@ -1725,6 +1776,11 @@ function renderModeleDetail(main){
       '(Project Gutenberg n° '+ep.source.pg+') : photo et patron sont librement reproductibles. '+
       'Texte traduit et converti en centimètres pour cette application.</p></div></div>'));
   } else if (!aPhotoModele(m[0])){
+    /* Une photo d'illustration d'abord, si on en a une : elle donne l'idée.
+       Le dessin la suit, parce que lui seul dit exactement ce que ce patron
+       produit. Les deux ensemble, jamais l'un à la place de l'autre. */
+    var cIll = carteIllustration(m[0]);
+    if (cIll) main.appendChild(cIll);
     /* Le dessin est construit à partir du patron : il ne peut pas promettre
        autre chose que ce que la fiche fait réellement faire. */
     var cp = el('<div class="card" style="margin-bottom:18px;overflow:hidden">'+
@@ -2236,7 +2292,7 @@ function renderFiche(main){
   rowsBox.addEventListener("input", function(e){
     var row = e.target.closest(".matrow"); if (!row) return;
     if (e.target.getAttribute("data-role") !== "qte") return;
-    d.lignes[Number(row.getAttribute("data-idx"))].qte = Number(e.target.value)||0;
+    d.lignes[Number(row.getAttribute("data-idx"))].qte = Math.max(0, Number(e.target.value)||0);
     peindre();
   });
   rowsBox.addEventListener("click", function(e){
@@ -2260,13 +2316,13 @@ function renderFiche(main){
   inNom.addEventListener("input", function(e){ d.nom = e.target.value; });
   tempsBox.addEventListener("input", function(e){
     var k = e.target.getAttribute("data-poste"); if (!k) return;
-    d.temps[k] = Number(e.target.value)||0;
+    d.temps[k] = Math.max(0, Number(e.target.value)||0);
     peindre();
   });
   selCanal.addEventListener("change", function(){ d.canal = selCanal.value; peindre(); });
-  inExpe.addEventListener("input", function(e){ d.expedition = Number(e.target.value)||0; peindre(); });
+  inExpe.addEventListener("input", function(e){ d.expedition = Math.max(0, Number(e.target.value)||0); peindre(); });
   inPrix.addEventListener("input", function(e){
-    d.prix = Number(e.target.value)||0;
+    d.prix = Math.max(0, Number(e.target.value)||0);
     if (slider) slider.value = d.prix;
     peindre(true);
   });
@@ -2536,28 +2592,45 @@ function renderStockMatieres(main){
 
   /* --- inventaire --- */
   var wrap = el('<div class="tablewrap resp"></div>');
-  var t = el('<table style="min-width:760px"><thead><tr><th>Matière</th><th class="n">Stock</th><th class="n">Seuil d\'alerte</th>'+
-    '<th class="n">Coût moyen</th><th class="n">Dernier prix</th><th class="n">Valeur</th></tr></thead><tbody></tbody></table>');
+  var t = el('<table style="min-width:820px"><thead><tr><th>Matière</th><th class="n">Stock</th><th class="n">Seuil d\'alerte</th>'+
+    '<th class="n">PU moyen</th><th class="n">Dernier PU</th><th class="n">Valeur du stock</th></tr></thead><tbody></tbody></table>');
   var tb = t.querySelector("tbody");
+  var valeurTotale = 0;
   CATS.forEach(function(cat){
     var items = state.matieres.filter(function(m){ return m.cat === cat.id; });
     if (!items.length) return;
-    tb.appendChild(el('<tr class="catrow"><td colspan="6">'+esc(cat.nom)+'</td></tr>'));
+    var sousTotal = 0;
+    items.forEach(function(m){ sousTotal += Math.max(0,Number(m.stock)||0) * (Number(m.pmp)||0); });
+    valeurTotale += sousTotal;
+    tb.appendChild(el('<tr class="catrow"><td colspan="5">'+esc(cat.nom)+'</td>'+
+      '<td class="n" style="font-weight:600">'+esc(eur(sousTotal))+'</td></tr>'));
     items.forEach(function(m){
       var e = etatStock(m);
+      var dernierPU = m.contenance ? m.prix/m.contenance : 0;
+      var valeur = Math.max(0,Number(m.stock)||0) * (Number(m.pmp)||0);
+      /* Un écart franc entre le prix moyen payé et le dernier prix du marché
+         est une information de gestion : c'est là que se cachent les marges
+         qu'on croit avoir et qu'on n'a plus. */
+      var ecart = (m.pmp > 0 && dernierPU > 0) ? (dernierPU - m.pmp)/m.pmp : 0;
       tb.appendChild(el(
         '<tr data-mid="'+esc(m.id)+'">'+
           '<td>'+esc(m.nom)+'</td>'+
           '<td class="n" data-l="Stock"><div class="lignestock">'+
             badgeEtat(e, e.muet ? "—" : qte(m.stock, m.unite))+jauge(e)+'</div></td>'+
           '<td class="n" data-l="Stock de sécurité"><input type="number" inputmode="numeric" min="0" step="1" data-role="seuil" aria-label="Stock de sécurité" value="'+(Number(m.seuil)||0)+'" style="width:82px;text-align:right"></td>'+
-          '<td class="n" data-l="Prix moyen">'+esc(eur(m.pmp))+'</td>'+
-          '<td class="n" data-l="Dernier prix">'+esc(eur(m.contenance ? m.prix/m.contenance : 0))+'</td>'+
-          '<td class="n" data-l="Valeur">'+esc(eur(Math.max(0,Number(m.stock)||0) * (Number(m.pmp)||0)))+'</td>'+
+          '<td class="n" data-l="PU moyen">'+esc(eurU(Number(m.pmp)||0, m.unite))+'</td>'+
+          '<td class="n" data-l="Dernier PU">'+esc(eurU(dernierPU, m.unite))+
+            (Math.abs(ecart) >= 0.08
+              ? '<div class="hint" style="margin:2px 0 0;font-size:11px;color:'+(ecart>0?'var(--warn)':'var(--good)')+'">'+
+                (ecart>0?'+':'−')+nb(Math.abs(ecart)*100)+' % vs moyen</div>' : '')+'</td>'+
+          '<td class="n" data-l="Valeur du stock">'+esc(eur(valeur))+'</td>'+
         '</tr>'
       ));
     });
   });
+  tb.appendChild(el('<tr style="border-top:2px solid var(--rule-strong)">'+
+    '<td colspan="5" style="font-weight:700">Valeur totale de mon stock</td>'+
+    '<td class="n" style="font-weight:700">'+esc(eur(valeurTotale))+'</td></tr>'));
   tb.addEventListener("input", function(e){
     if (e.target.getAttribute("data-role") !== "seuil") return;
     var m = matiere(e.target.closest("tr").getAttribute("data-mid"));
@@ -2584,18 +2657,55 @@ function renderStockMatieres(main){
   });
   tousMouv.sort(function(a,b){ return b.mv.d - a.mv.d; });
   if (tousMouv.length){
-    main.appendChild(el('<div class="sechead"><h2>Derniers mouvements</h2></div>'));
-    var w2 = el('<div class="tablewrap"></div>');
-    var t2 = el('<table style="min-width:560px"><thead><tr><th>Date</th><th>Matière</th><th>Type</th><th class="n">Quantité</th><th class="n">Prix payé</th><th>Note</th></tr></thead><tbody></tbody></table>');
+    main.appendChild(el('<div class="sechead"><h2>Journal des mouvements</h2></div>'));
+    var w2 = el('<div class="tablewrap resp"></div>');
+    var t2 = el('<table style="min-width:860px"><thead><tr><th style="width:86px">Date</th><th>Matière</th>'+
+      '<th style="width:96px">Type</th><th class="n">Quantité</th><th class="n">PU</th>'+
+      '<th class="n">Total</th><th class="n">Stock après</th><th>Note</th></tr></thead><tbody></tbody></table>');
     var tb2 = t2.querySelector("tbody");
     var LIB = {entree:"Entrée", sortie:"Sortie", inventaire:"Inventaire"};
-    tousMouv.slice(0,25).forEach(function(x){
-      tb2.appendChild(el('<tr><td class="n">'+new Date(x.mv.d).toLocaleDateString("fr-FR")+'</td><td>'+esc(x.m.nom)+'</td>'+
-        '<td>'+esc(LIB[x.mv.t]||x.mv.t)+'</td><td class="n">'+esc(qte(x.mv.q, x.m.unite))+'</td>'+
-        '<td class="n">'+(x.mv.p ? esc(eur(x.mv.p)) : "—")+'</td><td>'+esc(x.mv.n||"")+'</td></tr>'));
+    var SIGNE = {entree:"+", sortie:"−", inventaire:"="};
+    var COUL = {entree:"var(--good)", sortie:"var(--bad)", inventaire:"var(--muted)"};
+    var nMouv = Math.min(tousMouv.length, view.mouvTout ? 200 : 25);
+    var entrees = 0, sorties = 0;
+    tousMouv.forEach(function(x){
+      if (x.mv.t === "entree") entrees += Number(x.mv.p) || 0;
+      if (x.mv.t === "sortie") sorties += Number(x.mv.p) || (Number(x.mv.pu)||0) * (Number(x.mv.q)||0);
     });
+    tousMouv.slice(0, nMouv).forEach(function(x){
+      var mv = x.mv;
+      /* Les mouvements enregistrés avant cette version n'ont ni PU ni stock
+         après : on l'affiche honnêtement plutôt que de reconstituer un
+         chiffre qu'on ne connaît pas. */
+      var puAff = (typeof mv.pu === "number" && isFinite(mv.pu)) ? eurU(mv.pu, x.m.unite)
+                : (mv.p && mv.q ? eurU(mv.p/mv.q, x.m.unite) : "—");
+      var totAff = (typeof mv.p === "number" && mv.p) ? eur(mv.p) : "—";
+      var saAff = (typeof mv.sa === "number") ? qte(mv.sa, x.m.unite) : "—";
+      tb2.appendChild(el('<tr><td class="n" data-l="Date">'+new Date(mv.d).toLocaleDateString("fr-FR")+'</td>'+
+        '<td data-l="Matière">'+esc(x.m.nom)+'</td>'+
+        '<td data-l="Type"><span style="color:'+COUL[mv.t]+';font-weight:700">'+SIGNE[mv.t]+'</span> '+esc(LIB[mv.t]||mv.t)+'</td>'+
+        '<td class="n" data-l="Quantité">'+esc(qte(mv.q, x.m.unite))+'</td>'+
+        '<td class="n" data-l="PU">'+esc(puAff)+'</td>'+
+        '<td class="n" data-l="Total">'+esc(totAff)+'</td>'+
+        '<td class="n" data-l="Stock après">'+esc(saAff)+'</td>'+
+        '<td data-l="Note">'+esc(mv.n||"")+'</td></tr>'));
+    });
+    tb2.appendChild(el('<tr style="border-top:2px solid var(--rule-strong)">'+
+      '<td colspan="5" style="font-weight:700">Cumul sur tout l\'historique conservé</td>'+
+      '<td class="n" style="font-weight:700">'+esc(eur(entrees))+' entrés</td>'+
+      '<td class="n" colspan="2" style="font-weight:700">'+esc(eur(sorties))+' consommés</td></tr>'));
     w2.appendChild(t2);
     main.appendChild(w2);
+    if (tousMouv.length > nMouv){
+      var bPlus = bouton("Voir les " + (tousMouv.length - nMouv) + " mouvements plus anciens",
+        function(){ view.mouvTout = true; render(); });
+      bPlus.style.marginTop = "12px";
+      main.appendChild(bPlus);
+    }
+    main.appendChild(el('<p class="hint" style="margin-top:12px;max-width:78ch">'+
+      'Le <b>PU</b> est le prix unitaire réellement pratiqué ce jour-là : au prix d\'achat pour une entrée, '+
+      'au prix moyen pondéré pour une sortie — c\'est ainsi qu\'on valorise une consommation en comptabilité. '+
+      'L\'outil conserve les 60 derniers mouvements par matière.</p>'));
   }
 }
 
@@ -2644,22 +2754,93 @@ function renderMesMatieres(main){
     '<div class="body" style="padding-top:14px"></div></div>');
   var body = card.querySelector(".body");
 
+  /* Filtres : une artisane cherche « ce qui va avec mon crochet 4 mm »,
+     pas « ce qui est classé Moyen-fin ». Le filtre parle sa langue. */
+  var filtres = el('<div class="matfiltres" style="display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:16px">'+
+    '<label class="f" style="flex:2;min-width:180px"><span>Chercher</span>'+
+      '<input type="search" id="mf-q" placeholder="coton, ouate, yeux…" value="'+esc(view.mfQ||"")+'"></label>'+
+    '<label class="f" style="flex:1;min-width:150px"><span>Catégorie</span><select id="mf-cat"></select></label>'+
+    '<label class="f" style="flex:1;min-width:150px"><span>Va avec mon crochet</span><select id="mf-cro"></select></label>'+
+    '</div>');
+  var fCat = filtres.querySelector("#mf-cat");
+  fCat.appendChild(el('<option value="">Toutes</option>'));
+  CATS.forEach(function(c){
+    fCat.appendChild(el('<option value="'+esc(c.id)+'"'+(view.mfCat===c.id?' selected':'')+'>'+esc(c.nom)+'</option>'));
+  });
+  var fCro = filtres.querySelector("#mf-cro");
+  fCro.appendChild(el('<option value="">Toutes tailles</option>'));
+  CROCHETS.forEach(function(c){
+    fCro.appendChild(el('<option value="'+c+'"'+(String(view.mfCro)===String(c)?' selected':'')+'>'+nb(c)+' mm</option>'));
+  });
+  filtres.addEventListener("input", function(e){
+    if (e.target.id === "mf-q")   view.mfQ = e.target.value;
+    if (e.target.id === "mf-cat") view.mfCat = e.target.value;
+    if (e.target.id === "mf-cro") view.mfCro = e.target.value;
+    render();
+  });
+  body.appendChild(filtres);
+
+  function visible(m){
+    if (view.mfCat && m.cat !== view.mfCat) return false;
+    if (view.mfQ){
+      var q = view.mfQ.toLowerCase();
+      var champ = (m.nom + " " + (m.fibre||"") + " " + (m.composition||"") + " " + (m.grosseur||"")).toLowerCase();
+      if (champ.indexOf(q) === -1) return false;
+    }
+    /* Le filtre crochet ne s'applique qu'aux fils : une boîte d'yeux de
+       sécurité n'a pas de taille de crochet, et la masquer serait absurde.
+       Un fil dont la taille n'est pas renseignée n'est pas masqué non plus —
+       il est simplement signalé : faire disparaître une matière sans le dire
+       ferait croire à l'artisane qu'elle ne l'a pas. */
+    if (view.mfCro && m.cat === "fil" && !m.crochetMin && !m.crochetMax && !m.grosseur) return true;
+    if (view.mfCro && m.cat === "fil" && !matiereVaAvecCrochet(m, view.mfCro)) return false;
+    return true;
+  }
+  function sansTaille(m){
+    return view.mfCro && m.cat === "fil" && !m.crochetMin && !m.crochetMax && !m.grosseur;
+  }
+  function mentionTaille(m){
+    if (!view.mfCro || m.cat !== "fil") return "";
+    if (sansTaille(m)) return "taille de crochet non renseignée";
+    if (matiereVaAvecCrochet(m, view.mfCro) === "proche")
+      return "un peu à côté — prévu pour " + crochetTexte(m);
+    return "";
+  }
+
   var wrap = el('<div class="tablewrap resp"></div>');
-  var t = el('<table><thead><tr><th style="min-width:180px">Matière</th><th style="width:110px">Prix payé</th>'+
-    '<th style="width:100px">Contenance</th><th style="width:110px">Unité</th>'+
-    '<th class="n" style="width:130px">Coût unitaire</th><th style="width:44px"></th></tr></thead><tbody></tbody></table>');
+  var t = el('<table><thead><tr><th style="min-width:170px">Matière</th><th style="width:105px">Prix payé</th>'+
+    '<th style="width:95px">Contenance</th><th style="width:95px">Unité</th>'+
+    '<th style="width:120px">Crochet</th>'+
+    '<th class="n" style="width:125px">Coût unitaire</th><th style="width:44px"></th></tr></thead><tbody></tbody></table>');
   var tb = t.querySelector("tbody");
+  var nVisibles = 0;
   CATS.forEach(function(cat){
-    var items = state.matieres.filter(function(m){ return m.cat === cat.id; });
+    var items = state.matieres.filter(function(m){ return m.cat === cat.id && visible(m); });
     if (!items.length) return;
-    tb.appendChild(el('<tr class="catrow"><td colspan="6">'+esc(cat.nom)+'</td></tr>'));
+    nVisibles += items.length;
+    tb.appendChild(el('<tr class="catrow"><td colspan="7">'+esc(cat.nom)+'</td></tr>'));
     items.forEach(function(m){
+      var cellCrochet = m.cat === "fil"
+        ? '<select data-role="crochet" aria-label="Taille de crochet">'+
+            '<option value="">—</option>'+
+            CROCHETS.map(function(c){
+              return '<option value="'+c+'"'+(Number(m.crochetMin)===c?' selected':'')+'>'+nb(c)+' mm</option>';
+            }).join("")+
+          '</select>'+
+          (!m.crochetMin && m.grosseur
+            ? '<div class="hint" style="margin:2px 0 0;font-size:11px">d\'après « '+esc(m.grosseur)+' » : '+esc(crochetTexte(m))+'</div>'
+            : '')
+        : '<span class="hint">—</span>';
       tb.appendChild(el(
-        '<tr data-mid="'+esc(m.id)+'">'+
-          '<td><input type="text" data-role="nom" aria-label="Nom de la matière" value="'+esc(m.nom)+'"></td>'+
+        '<tr data-mid="'+esc(m.id)+'"'+(mentionTaille(m)?' style="opacity:.66"':'')+'>'+
+          '<td><input type="text" data-role="nom" aria-label="Nom de la matière" value="'+esc(m.nom)+'">'+
+            (mentionTaille(m) ? '<div class="hint" style="margin:2px 0 0;font-size:11px">'+esc(mentionTaille(m))+'</div>' : '')+
+            (m.composition ? '<div class="hint" style="margin:2px 0 0;font-size:11px">'+esc(m.composition)+
+              (m.metrage ? ' · '+nb(m.metrage)+' m' : '')+'</div>' : '')+'</td>'+
           '<td data-l="Prix payé"><input type="number" inputmode="decimal" data-role="prix" aria-label="Prix payé" min="0" step="0.05" value="'+m.prix+'"></td>'+
           '<td data-l="Contenance"><input type="number" inputmode="decimal" data-role="contenance" aria-label="Contenance" min="0.01" step="1" value="'+m.contenance+'"></td>'+
           '<td data-l="Unité"><input type="text" data-role="unite" aria-label="Unité" value="'+esc(m.unite)+'"></td>'+
+          '<td data-l="Crochet">'+cellCrochet+'</td>'+
           '<td class="n" data-l="Coût unitaire" data-role="pu">'+esc(coutUnitaireTexte(m))+
             (m.prixSource
                ? ' <span class="chip">prix '+esc(m.prixSource.src)+' · '+esc(m.prixSource.date)+'</span>'
@@ -2669,14 +2850,28 @@ function renderMesMatieres(main){
       ));
     });
   });
+  if (!nVisibles){
+    tb.appendChild(el('<tr><td colspan="7" style="padding:18px 10px"><span class="hint">'+
+      'Aucune matière ne correspond'+(view.mfCro ? ' à un crochet '+nb(view.mfCro)+' mm' : '')+
+      '. Élargis la recherche, ou ajoute-la plus bas.</span></td></tr>'));
+  }
+  tb.addEventListener("change", function(e){
+    if (e.target.getAttribute("data-role") !== "crochet") return;
+    var tr = e.target.closest("tr[data-mid]"); if (!tr) return;
+    var m = matiere(tr.getAttribute("data-mid")); if (!m) return;
+    var v = Number(e.target.value)||0;
+    m.crochetMin = v || null; m.crochetMax = v || null; m.maj = Date.now();
+    sauverTout();
+    toast(v ? "Crochet " + nb(v) + " mm enregistré" : "Taille de crochet effacée");
+  });
   tb.addEventListener("input", function(e){
     var tr = e.target.closest("tr[data-mid]"); if (!tr) return;
     var m = matiere(tr.getAttribute("data-mid")); if (!m) return;
     var role = e.target.getAttribute("data-role");
     if (role === "nom") m.nom = e.target.value;
-    if (role === "prix"){ m.prix = Number(e.target.value)||0; m.prixIndicatif = false;
+    if (role === "prix"){ m.prix = Math.max(0, Number(e.target.value)||0); m.prixIndicatif = false;
                           m.prixSource = null; m.maj = Date.now(); }
-    if (role === "contenance") m.contenance = Number(e.target.value)||1;
+    if (role === "contenance") m.contenance = Math.max(0.01, Number(e.target.value)||1);
     if (role === "unite") m.unite = e.target.value;
     tr.querySelector('[data-role=pu]').innerHTML = esc(coutUnitaireTexte(m)) +
       (m.prixSource
@@ -2684,41 +2879,93 @@ function renderMesMatieres(main){
          : m.prixIndicatif ? ' <span class="hypo">INDICATIF</span>' : '');
     sauver();
   });
+  /* Supprimer une matière ne doit jamais être un mur : si elle sert quelque
+     part, on dit OÙ, et on laisse décider. Refuser sans expliquer, c'est la
+     version de l'outil qui décide à la place de l'artisane. */
   tb.addEventListener("click", function(e){
     if (e.target.getAttribute("data-role") !== "del") return;
-    var mid = e.target.closest("tr[data-mid]").getAttribute("data-mid");
-    var utilisee = state.creations.some(function(c){ return c.lignes.some(function(l){ return l.mid === mid; }); });
-    if (utilisee){ toast("Cette matière sert dans une création"); return; }
-    state.matieres = state.matieres.filter(function(m){ return m.id !== mid; });
+    var bouton2 = e.target;
+    var mid = bouton2.closest("tr[data-mid]").getAttribute("data-mid");
+    var m = matiere(mid); if (!m) return;
+    var ou = state.creations.filter(function(c){
+      return c.lignes.some(function(l){ return l.mid === mid; });
+    });
+    if (!ou.length){
+      if (bouton2.getAttribute("data-arme") !== "1"){
+        bouton2.setAttribute("data-arme","1"); bouton2.textContent = "Confirmer";
+        bouton2.classList.add("primary");
+        setTimeout(function(){ bouton2.setAttribute("data-arme","0"); bouton2.textContent = "✕";
+                               bouton2.classList.remove("primary"); }, 4000);
+        return;
+      }
+      state.matieres = state.matieres.filter(function(x){ return x.id !== mid; });
+      sauverTout(); render(); toast("Matière supprimée");
+      return;
+    }
+    var noms = ou.slice(0,4).map(function(c){ return "• " + c.nom; }).join("\n");
+    if (ou.length > 4) noms += "\n• … et " + (ou.length - 4) + " autre" + (ou.length-4>1?"s":"");
+    if (!confirm("« " + m.nom + " » sert dans " + ou.length + " création" + (ou.length>1?"s":"") + " :\n\n" +
+                 noms + "\n\nLa supprimer la retirera aussi de ces fiches, dont les prix seront " +
+                 "recalculés sans elle.\n\nSupprimer quand même ?")) return;
+    ou.forEach(function(c){
+      c.lignes = c.lignes.filter(function(l){ return l.mid !== mid; });
+    });
+    state.matieres = state.matieres.filter(function(x){ return x.id !== mid; });
     sauverTout(); render();
+    toast("Supprimée, et retirée de " + ou.length + " fiche" + (ou.length>1?"s":""));
   });
   wrap.appendChild(t);
   body.appendChild(wrap);
 
-  var add = el('<div class="grid3" style="margin-top:16px;align-items:end">'+
-    '<label class="f"><span>Nouvelle matière</span><input id="nm-nom" type="text" placeholder="Coton bio écru 50 g"></label>'+
-    '<label class="f"><span>Catégorie</span><select id="nm-cat"></select></label>'+
-    '<label class="f"><span>Prix payé (€)</span><input id="nm-prix" type="number" min="0" step="0.05" value="0"></label>'+
-    '<label class="f"><span>Contenance</span><input id="nm-cont" type="number" min="0.01" step="1" value="50"></label>'+
-    '<label class="f"><span>Unité</span><input id="nm-unite" type="text" value="g"></label></div>');
+  /* Saisie d'une matière : les champs suivent l'étiquette de la pelote, dans
+     l'ordre où on la lit. Seuls le nom, le prix et la contenance sont requis —
+     ce sont les trois seuls dont le calcul a besoin. Le reste sert à s'y
+     retrouver plus tard, et peut rester vide. */
+  var add = el('<div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--rule)">'+
+    '<p style="margin:0 0 4px"><b>Ajouter une matière</b></p>'+
+    '<p class="hint" style="margin:0 0 12px">Recopie ce qui est écrit sur l\'étiquette. '+
+    'Seuls le nom, le prix et la contenance sont nécessaires au calcul.</p>'+
+    '<div class="grid3" style="align-items:end">'+
+      '<label class="f"><span>Nom</span><input id="nm-nom" type="text" placeholder="Coton bio écru 50 g"></label>'+
+      '<label class="f"><span>Catégorie</span><select id="nm-cat"></select></label>'+
+      '<label class="f"><span>Prix payé (€)</span><input id="nm-prix" type="number" min="0" step="0.05" value="0"></label>'+
+      '<label class="f"><span>Contenance</span><input id="nm-cont" type="number" min="0.01" step="1" value="50"></label>'+
+      '<label class="f"><span>Unité</span><input id="nm-unite" type="text" value="g"></label>'+
+      '<label class="f"><span>Crochet (mm)</span><select id="nm-cro"></select></label>'+
+      '<label class="f"><span>Composition</span><input id="nm-comp" type="text" placeholder="100 % coton"></label>'+
+      '<label class="f"><span>Métrage (m)</span><input id="nm-met" type="number" min="0" step="1" placeholder="85"></label>'+
+      '<label class="f"><span>Coloris / bain</span><input id="nm-bain" type="text" placeholder="écru · bain 4821"></label>'+
+    '</div></div>');
   var selCat = add.querySelector("#nm-cat");
   CATS.forEach(function(c){ var o=document.createElement("option"); o.value=c.id; o.textContent=c.nom; selCat.appendChild(o); });
+  var selCro = add.querySelector("#nm-cro");
+  selCro.appendChild(el('<option value="">—</option>'));
+  CROCHETS.forEach(function(c){ selCro.appendChild(el('<option value="'+c+'">'+nb(c)+' mm</option>')); });
   body.appendChild(add);
-  var bCat = el('<button type="button" class="btn" style="margin:12px 10px 0 0">Prendre une matière du catalogue</button>');
-  bCat.addEventListener("click", function(){ view.sub = "catalogue"; render(); });
-  body.appendChild(bCat);
-  var bAdd = el('<button type="button" class="btn primary" style="margin-top:12px">Ajouter cette matière</button>');
+  add.appendChild(el('<p class="hint" style="margin:10px 0 0">Le <b>numéro de bain</b> est le lot de teinture. '+
+    'Deux pelotes du même coloris mais de bains différents ne donnent pas tout à fait la même nuance : '+
+    'le noter évite la démarcation en plein milieu d\'un ouvrage.</p>'));
+  var barAdd = el('<div class="savebar" style="margin-top:14px"></div>');
+  var bAdd = el('<button type="button" class="btn primary">Ajouter cette matière</button>');
   bAdd.addEventListener("click", function(){
     var nom = add.querySelector("#nm-nom").value.trim();
     if (!nom){ toast("Donne-lui un nom"); return; }
-    var prix = Number(add.querySelector("#nm-prix").value)||0;
-    var cont = Number(add.querySelector("#nm-cont").value)||1;
+    var prix = Math.max(0, Number(add.querySelector("#nm-prix").value)||0);
+    var cont = Math.max(0.01, Number(add.querySelector("#nm-cont").value)||1);
+    var cro  = Number(selCro.value)||null;
     state.matieres.push({id:uid(), nom:nom, cat:selCat.value, prix:prix, contenance:cont,
       unite:add.querySelector("#nm-unite").value.trim()||"unité", stock:0, seuil:0, pmp:prix/cont, mouv:[],
-      refCat:null, fibre:"", composition:"", grosseur:"", metrage:null, prixIndicatif:false, perso:true, maj:Date.now()});
+      refCat:null, fibre:"", composition:add.querySelector("#nm-comp").value.trim(),
+      grosseur:"", metrage:Number(add.querySelector("#nm-met").value)||null,
+      crochetMin:cro, crochetMax:cro, bain:add.querySelector("#nm-bain").value.trim(),
+      prixIndicatif:false, perso:true, maj:Date.now()});
     sauverTout(); render(); toast("Matière ajoutée");
   });
-  body.appendChild(bAdd);
+  barAdd.appendChild(bAdd);
+  var bCat = el('<button type="button" class="btn">Prendre une matière du catalogue</button>');
+  bCat.addEventListener("click", function(){ view.sub = "catalogue"; render(); });
+  barAdd.appendChild(bCat);
+  body.appendChild(barAdd);
   main.appendChild(card);
 
   main.appendChild(el('<p class="hint" style="margin-top:16px;max-width:78ch">C\'est ici que se joue l\'erreur la plus fréquente : '+
@@ -2811,6 +3058,7 @@ function renderReglages(main){
       '<label class="f"><span>Cotisations sur le chiffre d\'affaires (%)</span><input type="number" min="0" max="50" step="0.1" data-r="cotisations" value="'+r.cotisations+'"></label>'+
       '<label class="f"><span>Frais fixes par mois (€)</span><input type="number" min="0" step="1" data-r="fraisFixes" value="'+r.fraisFixes+'"></label>'+
       '<label class="f"><span>Pièces vendues par mois</span><input type="number" min="1" step="1" data-r="piecesParMois" value="'+r.piecesParMois+'"></label>'+
+      '<label class="f"><span>Heures de crochet par jour</span><input type="number" min="0" max="16" step="0.5" data-r="heuresParJour" value="'+(r.heuresParJour||3)+'"></label>'+
     '</div>'+
     '<p class="hint">Les frais fixes, ce sont l\'abonnement boutique, l\'assurance, la comptabilité, le site — répartis sur le nombre de pièces vendues dans le mois. '+
     'Le <b>taux de cotisations</b> est rempli par le statut choisi juste au-dessus : tu n\'as pas à le calculer. '+
@@ -2818,6 +3066,30 @@ function renderReglages(main){
     '<p class="hint">Volontairement absents : l\'amortissement de tes crochets, l\'électricité et le mètre carré de ton salon. '+
     'Répartis sur un amigurumi, ça se chiffre en centimes et ça ajoute surtout du bruit.</p>'+
     '</div></div>');
+
+  /* Ce qui figure en haut des factures. Sans ces mentions, une facture n'est
+     pas valable : le vendeur doit être identifiable (article 242 nonies A de
+     l'annexe II du CGI, et articles L441-9 du code de commerce). */
+  var cFact = el('<div class="card" style="margin-bottom:16px"><header><h2>Tes mentions de facture</h2>'+
+    '<p>Ce qui s\'imprimera en haut de chaque facture que tu émets.</p></header><div class="body">'+
+    '<div class="grid2">'+
+      '<label class="f"><span>Nom ou raison sociale</span><input type="text" data-r2f="raisonSociale" placeholder="Marie Dupont, ou Crochet & Cie"></label>'+
+      '<label class="f"><span>SIRET</span><input type="text" data-r2f="siret" placeholder="14 chiffres, une fois immatriculée"></label>'+
+      '<label class="f"><span>Adresse</span><input type="text" data-r2f="adresse" placeholder="12 rue des Lilas, 69000 Lyon"></label>'+
+      '<label class="f"><span>Contact sur la facture</span><input type="text" data-r2f="contact" placeholder="courriel ou téléphone"></label>'+
+    '</div>'+
+    '<p class="hint" style="margin-top:10px">Tant que ces champs sont vides, tes factures portent '+
+    'des crochets à la place — elles ne sont pas valables. Une facture doit permettre d\'identifier '+
+    'le vendeur. La mention « TVA non applicable, article 293 B du CGI » est ajoutée automatiquement '+
+    'tant que tu es en franchise de TVA.</p>'+
+    '</div></div>');
+  ["raisonSociale","siret","adresse","contact"].forEach(function(k){
+    cFact.querySelector('[data-r2f="'+k+'"]').value = r[k] || "";
+  });
+  cFact.addEventListener("input", function(e){
+    var k = e.target.getAttribute("data-r2f"); if (!k) return;
+    state.reglages[k] = e.target.value; sauver();
+  });
 
   var c3 = el('<div class="card" style="margin-bottom:16px"><header><h2>Base de calcul des coûts</h2></header><div class="body">'+
     '<label class="f" style="max-width:460px"><span>Valoriser mes matières avec</span><select data-r2="baseCout">'+
@@ -2833,7 +3105,7 @@ function renderReglages(main){
   [c1,c2].forEach(function(card){
     card.addEventListener("input", function(e){
       var k = e.target.getAttribute("data-r"); if (!k) return;
-      state.reglages[k] = Number(e.target.value)||0;
+      state.reglages[k] = Math.max(0, Number(e.target.value)||0);
       sauver();
     });
   });
@@ -2862,7 +3134,7 @@ function renderReglages(main){
     state.reglages.profil = e.target.value; sauverTout(); render();
     toast(e.target.value === "passion" ? "Mode loisir activé" : "Mode vente activé");
   });
-  main.appendChild(c0); main.appendChild(c1); main.appendChild(cStat); main.appendChild(c2); main.appendChild(cConf); main.appendChild(c3);
+  main.appendChild(c0); main.appendChild(c1); main.appendChild(cStat); main.appendChild(c2); main.appendChild(cConf); main.appendChild(cFact); main.appendChild(c3);
   /* Emplacement du module de comptes, quand il est branché. */
   if (pontCompte){
     var zc = el('<div id="zone-compte" style="margin-bottom:16px"></div>');
@@ -2920,8 +3192,13 @@ function renderReglages(main){
   main.appendChild(cP);
 
   /* --- données --- */
+  var cfgCompte = window.CROCHOMPTE_CONFIG || {};
+  var texteDonnees = (cfgCompte.supabaseUrl && cfgCompte.supabaseAnonKey)
+    ? 'Ton atelier est déjà sauvegardé automatiquement sur ton compte. Cette sauvegarde manuelle '
+      + 'reste utile pour garder une copie de côté, changer d\'appareil sans attendre, ou revenir en arrière.'
+    : 'Elles vivent dans ce navigateur, sur cet appareil. Rien n\'est envoyé ailleurs.';
   var cD = el('<div class="card"><header><h2>Tes données</h2>'+
-    '<p>Elles vivent dans ce navigateur, sur cet appareil. Rien n\'est envoyé ailleurs.</p></header><div class="body"></div></div>');
+    '<p>' + texteDonnees + '</p></header><div class="body"></div></div>');
   var bd = cD.querySelector(".body");
   var bar = el('<div class="savebar" style="margin-bottom:14px"></div>');
   var zone = document.createElement("textarea");
@@ -3013,10 +3290,6 @@ function enStock(cid){
     return p.cid === cid && p.prod === "termine" && p.com !== "vendu" && p.com !== "offert";
   }).length;
 }
-function aProduire(cid){
-  return state.pieces.filter(function(p){ return p.cid === cid && p.prod !== "termine"; }).length;
-}
-
 function ajouterPieces(cid, n, prod, com, client){
   var cr = creation(cid); if (!cr) return 0;
   var r = calculer(cr);
@@ -3067,6 +3340,15 @@ function majCom(p, k, prix){
     var cr = creation(p.cid);
     p.venduLe = p.venduLe || Date.now();
     if (p.prix === null) p.prix = (typeof prix === "number") ? prix : (cr ? Number(cr.prix)||0 : 0);
+    /* Le coût figé à la production peut dater d'avant que le prix de vente
+       ne soit fixé (cotisations et frais variables du canal, proportionnels
+       au prix, comptaient alors pour zéro). Au moment de la vente, le prix
+       réel est connu : on refige le coût dessus pour que la marge affichée
+       dans les Indicateurs reflète la vente réellement faite. */
+    if (cr){
+      var crVendu = clone(cr); crVendu.prix = p.prix;
+      p.coutFige = calculer(crVendu).coutRevient;
+    }
     if (p.prod !== "termine") majProd(p, "termine");
   }
 }
@@ -3359,7 +3641,6 @@ function renderAtelier(main){
 /* ═════ 18. GRAPHIQUES ═════
    Palette catégorielle validée (écarts CVD et vision normale vérifiés sur les deux fonds). */
 
-function couleurSerie(i){ return ["var(--s-1)","var(--s-2)","var(--s-3)"][i % 3]; }
 
 /* Barres groupées dans le temps. series = [{nom, champ, couleur, fmt}] */
 function barTemporel(sx, series, fmtVal){
@@ -4015,6 +4296,66 @@ var FAMILLES_MAT = [
   {id:"outil",nom:"Outils",               aide:"Crochets, aiguilles — non consommés"}
 ];
 
+/* ───────────────────────────────────────────────────────────────────────
+   Grosseurs de fil et tailles de crochet
+   Les fourchettes en millimètres viennent du Standard Yarn Weight System
+   du Craft Yarn Council (craftyarncouncil.com/standards/yarn-weight-system),
+   relevé le 19 septembre 2026. C'est la seule référence publiée : il n'existe
+   aucune norme française ni européenne de grosseur de fil.
+   Les bornes se CHEVAUCHENT volontairement (4,5 appartient à deux catégories) :
+   c'est ainsi dans le standard, et un crochet donné doit pouvoir convenir à
+   plusieurs grosseurs. D'où une comparaison par intervalles, jamais par égalité.
+   ─────────────────────────────────────────────────────────────────────── */
+var GROSSEURS = [
+  {id:"Dentelle",   cyc:"0", min:1.4, max:2.25, nom:"Dentelle",   exemple:"coton à napperon n° 10 à 30"},
+  {id:"Très fin",   cyc:"1", min:2.25,max:3.5,  nom:"Très fin",   exemple:"fil à chaussettes, fingering"},
+  {id:"Fin",        cyc:"2", min:3.5, max:4.5,  nom:"Fin",        exemple:"sport, layette"},
+  {id:"Moyen-fin",  cyc:"3", min:4.5, max:5.5,  nom:"Moyen-fin",  exemple:"DK"},
+  {id:"Moyen",      cyc:"4", min:5.5, max:6.5,  nom:"Moyen",      exemple:"worsted, aran"},
+  {id:"Épais",      cyc:"5", min:6.5, max:9,    nom:"Épais",      exemple:"chunky"},
+  {id:"Très épais", cyc:"6-7", min:9, max:20,   nom:"Très épais", exemple:"trapilho, corde"}
+];
+
+/* Tailles de crochet réellement vendues, pour proposer un choix plutôt
+   qu'un champ libre où chacune écrirait « 4 », « 4,0 » ou « 4 mm ». */
+var CROCHETS = [1.5,1.75,2,2.25,2.5,2.75,3,3.5,4,4.5,5,5.5,6,6.5,7,8,9,10,12,15,20];
+
+function grosseurInfo(g){
+  for (var i=0;i<GROSSEURS.length;i++) if (GROSSEURS[i].id === g) return GROSSEURS[i];
+  return null;
+}
+/* Cette matière convient-elle à ce crochet ? On croit d'abord ce qui est écrit
+   sur l'étiquette (champ « crochet » saisi), et seulement à défaut la
+   fourchette déduite de la grosseur. L'étiquette de la pelote fait foi. */
+/* Renvoie "exact", "proche" ou false.
+   « proche » existe parce que le standard américain et l'usage français ne
+   disent pas tout à fait la même chose : le CYC place le DK à 4,5–5,5 mm,
+   alors qu'en France on le crochète volontiers au 4 mm, et plus serré encore
+   en amigurumi. Masquer ces fils donnerait une réponse fausse à une question
+   légitime ; on les montre donc, en disant qu'ils sont un peu à côté. */
+function matiereVaAvecCrochet(m, taille){
+  if (!taille) return "exact";
+  var t = Number(taille), a, b, g;
+  if (m.crochetMin || m.crochetMax){
+    a = Number(m.crochetMin) || Number(m.crochetMax);
+    b = Number(m.crochetMax) || Number(m.crochetMin);
+  } else {
+    g = grosseurInfo(m.grosseur);
+    if (!g) return false;
+    a = g.min; b = g.max;
+  }
+  if (t >= a - 0.001 && t <= b + 0.001) return "exact";
+  if (t >= a - 1.001 && t <= b + 1.001) return "proche";
+  return false;
+}
+function crochetTexte(m){
+  if (m.crochetMin && m.crochetMax && m.crochetMin !== m.crochetMax)
+    return nb(m.crochetMin) + " à " + nb(m.crochetMax) + " mm";
+  if (m.crochetMin || m.crochetMax) return nb(m.crochetMin || m.crochetMax) + " mm";
+  var g = grosseurInfo(m.grosseur);
+  return g ? nb(g.min) + " à " + nb(g.max) + " mm" : "";
+}
+
 /* [id, nom, cat, fibre, composition, grosseur, prixIndicatif, contenance, unite, metrage] */
 var CATALOGUE_MATIERES = [
 ["cat_cot_fing","Coton peigné fin (fingering)","fil","coton","100 % coton","Fin",3.20,50,"g",125],
@@ -4393,8 +4734,19 @@ function bandeauModele(m){
       '<img src="'+esc(ep.photo)+'" alt="Photo d\'origine du modèle '+esc(ep.nom)+'" loading="lazy" decoding="async">'+
       '<span class="credit">photo d\'origine · '+esc(ep.source.annee)+'</span></span>';
   }
+  /* À défaut, une photo d'illustration sous licence libre — d'un ouvrage
+     comparable, jamais de CE patron. Le bandeau le dit en toutes lettres,
+     pour que personne ne croie que sa fiche donnera cette pièce-là. */
+  var ill = illustration(m[0]);
+  if (ill){
+    return '<span class="band a-photo">'+
+      '<img src="'+esc(ill.u)+'" alt="Photo d\'illustration : '+esc(ill.t)+'" loading="lazy" '+
+      'decoding="async" referrerpolicy="no-referrer">'+
+      '<span class="credit">illustration · pas ce modèle</span></span>';
+  }
   /* Sinon le dessin fait d'après le patron. Jamais la photo de l'ouvrage d'un
-     autre : elle promettrait un rendu que ce patron ne donne pas. */
+     autre présentée comme étant le modèle : elle promettrait un rendu que ce
+     patron ne donne pas. */
   return '<span class="band dessin">'+planche(m[0], 0)+
     '<span class="credit">dessin d\'après le patron</span></span>';
 }
@@ -4533,7 +4885,7 @@ function demarrerChrono(pid, poste){
 function arreterChrono(silencieux){
   var c = chrono();
   if (!c.pid || !c.debut) return 0;
-  var min = (Date.now() - c.debut)/60000;
+  var min = Math.max(0, (Date.now() - c.debut)/60000);
   var p = piece(c.pid);
   if (p){
     var m = mesureDe(p);
@@ -5529,8 +5881,11 @@ function renderDemarrage(main){
       titre: "Ta sauvegarde",
       texte: b.sauvegarde
         ? "Dernière sauvegarde exportée le " + dateLisible(b.sauvegarde) + ". Refais-en une de temps en temps."
-        : "Tes données vivent dans ce navigateur, sur cet appareil. Vider l'historique du navigateur les efface. "
-          + "Exporte un fichier de sauvegarde : c'est aussi comme ça que tu passes du téléphone à l'ordinateur.",
+        : ((window.CROCHOMPTE_CONFIG || {}).supabaseUrl
+            ? "Ton atelier est déjà sauvegardé automatiquement sur ton compte. Exporte aussi un fichier de "
+              + "temps en temps : c'est une copie supplémentaire, indépendante du compte."
+            : "Tes données vivent dans ce navigateur, sur cet appareil. Vider l'historique du navigateur les efface. "
+              + "Exporte un fichier de sauvegarde : c'est aussi comme ça que tu passes du téléphone à l'ordinateur."),
       bouton: ["Exporter ma sauvegarde", function(){ view.sub = "sauvegarde"; aller("reglages"); }]
     }
   ];
@@ -5886,6 +6241,73 @@ function ficheTechnique(mid){
    crochet américaines en millimètres. Les marques de fil citées dans le texte
    d'origine n'existent plus sous cette forme : l'équivalent moderne est donné
    par la grosseur du fil, pas par la marque. */
+
+/* ═══════════════════════════════════════════════════════════════════════
+   PHOTOS D'ILLUSTRATION — Wikimedia Commons
+   Une photo d'illustration n'est PAS l'ouvrage de la fiche : c'est une pièce
+   comparable, photographiée par quelqu'un d'autre, qui sert seulement à voir
+   de quoi on parle. L'application le dit sur chaque photo, sans exception.
+   Toutes sont sous licence libre vérifiée une à une le 19 septembre 2026 via
+   l'API de Wikimedia Commons (champ extmetadata : licence et auteur).
+   Les licences CC BY et CC BY-SA imposent de citer l'auteur et la licence :
+   c'est fait sous chaque image, avec le lien vers la page d'origine.
+   « fid » dit la franchise de la ressemblance : exacte, proche, ou générique.
+   ═══════════════════════════════════════════════════════════════════════ */
+var ILLUSTRATIONS = [
+{m:"ami_petit",u:"https://upload.wikimedia.org/wikipedia/commons/6/64/Crocheted_little_bunny.jpg",p:"https://commons.wikimedia.org/wiki/File:Crocheted_little_bunny.jpg",t:"Crocheted little bunny",a:"רחל1",l:"CC BY-SA 4.0",fid:"proche"},
+{m:"ami_moyen",u:"https://upload.wikimedia.org/wikipedia/commons/e/ec/Conejita_Amigurumi.jpg",p:"https://commons.wikimedia.org/wiki/File:Conejita_Amigurumi.jpg",t:"Conejita Amigurumi",a:"Creativa Atelier",l:"CC BY-SA 4.0",fid:"proche"},
+{m:"ami_grand",u:"https://upload.wikimedia.org/wikipedia/commons/thumb/a/a8/Amigurumi-bear.jpg/960px-Amigurumi-bear.jpg",p:"https://commons.wikimedia.org/wiki/File:Amigurumi-bear.jpg",t:"Amigurumi bear",a:"Thesunandtheturtle",l:"CC BY-SA 4.0",fid:"generique"},
+{m:"ami_poulpe",u:"https://upload.wikimedia.org/wikipedia/commons/5/52/O%C5%9Bmiorniczka_dla_wcze%C5%9Bniak%C3%B3w.jpg",p:"https://commons.wikimedia.org/wiki/File:O%C5%9Bmiorniczka_dla_wcze%C5%9Bniak%C3%B3w.jpg",t:"Pieuvre au crochet",a:"Valki77",l:"CC BY-SA 4.0",fid:"exacte"},
+{m:"pcle",u:"https://upload.wikimedia.org/wikipedia/commons/thumb/d/dc/Szyde%C5%82kowy_brelok.jpg/960px-Szyde%C5%82kowy_brelok.jpg",p:"https://commons.wikimedia.org/wiki/File:Szyde%C5%82kowy_brelok.jpg",t:"Porte-clés au crochet",a:"Valki77",l:"CC BY-SA 4.0",fid:"exacte"},
+{m:"perso_pcleprenom",u:"https://upload.wikimedia.org/wikipedia/commons/thumb/1/10/Szyde%C5%82kowy_brelok_granny_sguare.jpg/960px-Szyde%C5%82kowy_brelok_granny_sguare.jpg",p:"https://commons.wikimedia.org/wiki/File:Szyde%C5%82kowy_brelok_granny_sguare.jpg",t:"Porte-clés granny square",a:"Valki77",l:"CC BY-SA 4.0",fid:"proche"},
+{m:"bonnet_bebe",u:"https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/Bonnet%2C_baby%27s_%28two%29_%28AM_1970.236-7%29.jpg/960px-Bonnet%2C_baby%27s_%28two%29_%28AM_1970.236-7%29.jpg",p:"https://commons.wikimedia.org/wiki/File:Bonnet,_baby's_(two)_(AM_1970.236-7).jpg",t:"Bonnet de bébé au crochet",a:"Auckland Museum",l:"CC BY 4.0",fid:"proche"},
+{m:"couverture",u:"https://upload.wikimedia.org/wikipedia/commons/thumb/b/b8/Baby_blanket_from_flower_loom_motifs_shows_detail_of_flowers.jpg/960px-Baby_blanket_from_flower_loom_motifs_shows_detail_of_flowers.jpg",p:"https://commons.wikimedia.org/wiki/File:Baby_blanket_from_flower_loom_motifs_shows_detail_of_flowers.jpg",t:"Couverture de bébé à motifs fleurs",a:"Teachalakazi",l:"CC BY-SA 3.0",fid:"proche"},
+{m:"bebe_granny",u:"https://upload.wikimedia.org/wikipedia/commons/thumb/4/46/Blanket_of_natural_dyed_yarn.jpg/960px-Blanket_of_natural_dyed_yarn.jpg",p:"https://commons.wikimedia.org/wiki/File:Blanket_of_natural_dyed_yarn.jpg",t:"Plaid en laine teinte naturellement",a:"HRoued",l:"CC BY-SA 2.0",fid:"proche"},
+{m:"snood",u:"https://upload.wikimedia.org/wikipedia/commons/c/c7/Mohair_infinity_scarf_blue_turquoise.jpg",p:"https://commons.wikimedia.org/wiki/File:Mohair_infinity_scarf_blue_turquoise.jpg",t:"Snood en mohair",a:"smittenkittenorig",l:"CC BY 2.0",fid:"exacte"},
+{m:"mode_chale",u:"https://upload.wikimedia.org/wikipedia/commons/thumb/b/b3/Crochet_scarf_in_two_shades_of_blue.jpg/960px-Crochet_scarf_in_two_shades_of_blue.jpg",p:"https://commons.wikimedia.org/wiki/File:Crochet_scarf_in_two_shades_of_blue.jpg",t:"Écharpe au crochet, deux bleus",a:"999real",l:"CC0",fid:"proche"},
+{m:"bandeau",u:"https://upload.wikimedia.org/wikipedia/commons/thumb/9/9b/Head_band.jpg/960px-Head_band.jpg",p:"https://commons.wikimedia.org/wiki/File:Head_band.jpg",t:"Bandeau au crochet",a:"Brindhashanmugam312",l:"CC BY-SA 4.0",fid:"exacte"},
+{m:"sac",u:"https://upload.wikimedia.org/wikipedia/commons/thumb/0/07/Silling_bag.jpg/960px-Silling_bag.jpg",p:"https://commons.wikimedia.org/wiki/File:Silling_bag.jpg",t:"Sac au crochet",a:"Brindhashanmugam312",l:"CC BY-SA 4.0",fid:"proche"},
+{m:"panier",u:"https://upload.wikimedia.org/wikipedia/commons/d/db/Plarn_basket.jpg",p:"https://commons.wikimedia.org/wiki/File:Plarn_basket.jpg",t:"Panier au crochet",a:"Catsimmons",l:"CC BY-SA 3.0",fid:"exacte"},
+{m:"corbeille",u:"https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Granny_square_basket.jpg/960px-Granny_square_basket.jpg",p:"https://commons.wikimedia.org/wiki/File:Granny_square_basket.jpg",t:"Corbeille en granny squares",a:"Valki77",l:"CC BY-SA 4.0",fid:"proche"},
+{m:"dessous",u:"https://upload.wikimedia.org/wikipedia/commons/thumb/b/b0/Crochet_doily.JPG/960px-Crochet_doily.JPG",p:"https://commons.wikimedia.org/wiki/File:Crochet_doily.JPG",t:"Napperon au crochet",a:"רחל1",l:"CC BY-SA 4.0",fid:"proche"},
+{m:"maison_setdetable",u:"https://upload.wikimedia.org/wikipedia/commons/thumb/3/39/Crochet_doilies_1925-1940_Germany.jpg/960px-Crochet_doilies_1925-1940_Germany.jpg",p:"https://commons.wikimedia.org/wiki/File:Crochet_doilies_1925-1940_Germany.jpg",t:"Napperons au crochet, 1925-1940",a:"Vitavia",l:"CC BY-SA 4.0",fid:"proche"},
+{m:"fleur",u:"https://upload.wikimedia.org/wikipedia/commons/thumb/c/c0/Rafflesia_flower_crochet.jpg/960px-Rafflesia_flower_crochet.jpg",p:"https://commons.wikimedia.org/wiki/File:Rafflesia_flower_crochet.jpg",t:"Fleur au crochet",a:"Enziee",l:"CC BY-SA 4.0",fid:"proche"},
+{m:"cactus",u:"https://upload.wikimedia.org/wikipedia/commons/thumb/5/50/Amigurumi_Cactus.jpg/960px-Amigurumi_Cactus.jpg",p:"https://commons.wikimedia.org/wiki/File:Amigurumi_Cactus.jpg",t:"Cactus amigurumi",a:"Lskbrown",l:"CC BY 3.0",fid:"exacte"},
+{m:"veg_tournesol",u:"https://upload.wikimedia.org/wikipedia/commons/d/dc/Kwadrat_babuni_1.jpg",p:"https://commons.wikimedia.org/wiki/File:Kwadrat_babuni_1.jpg",t:"Granny square tournesol",a:"Valki77",l:"CC BY-SA 4.0",fid:"proche"},
+{m:"noel",u:"https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/Crochet_Xmas_ornaments.jpg/960px-Crochet_Xmas_ornaments.jpg",p:"https://commons.wikimedia.org/wiki/File:Crochet_Xmas_ornaments.jpg",t:"Décorations de Noël au crochet",a:"Saintfevrier",l:"CC BY-SA 4.0",fid:"exacte"},
+{m:"couronne",u:"https://upload.wikimedia.org/wikipedia/commons/thumb/f/fd/Szyde%C5%82kowane_bombki.jpg/960px-Szyde%C5%82kowane_bombki.jpg",p:"https://commons.wikimedia.org/wiki/File:Szyde%C5%82kowane_bombki.jpg",t:"Boules de Noël au crochet",a:"Valki77",l:"CC BY-SA 4.0",fid:"generique"},
+{m:"fete_flocon",u:"https://upload.wikimedia.org/wikipedia/commons/thumb/8/85/Szyde%C5%82kowa_%C5%9Bnie%C5%BCynka_1.jpg/960px-Szyde%C5%82kowa_%C5%9Bnie%C5%BCynka_1.jpg",p:"https://commons.wikimedia.org/wiki/File:Szyde%C5%82kowa_%C5%9Bnie%C5%BCynka_1.jpg",t:"Flocon au crochet",a:"Valki77",l:"CC BY-SA 4.0",fid:"exacte"},
+{m:"fete_citrouille",u:"https://upload.wikimedia.org/wikipedia/commons/thumb/2/20/Pumpkin_Granny_Square_Progress_Photo.jpg/960px-Pumpkin_Granny_Square_Progress_Photo.jpg",p:"https://commons.wikimedia.org/wiki/File:Pumpkin_Granny_Square_Progress_Photo.jpg",t:"Citrouille en granny square",a:"Savvy227",l:"CC BY 4.0",fid:"proche"},
+{m:"coeur",u:"https://upload.wikimedia.org/wikipedia/commons/thumb/0/04/Two_white_potholders_with_hearts.jpg/960px-Two_white_potholders_with_hearts.jpg",p:"https://commons.wikimedia.org/wiki/File:Two_white_potholders_with_hearts.jpg",t:"Ouvrages au crochet à motif cœur",a:"Elin B",l:"CC BY 2.0",fid:"generique"},
+{m:"paques",u:"https://upload.wikimedia.org/wikipedia/commons/thumb/e/eb/0679_Beskidische_Ostereier.JPG/960px-0679_Beskidische_Ostereier.JPG",p:"https://commons.wikimedia.org/wiki/File:0679_Beskidische_Ostereier.JPG",t:"Œufs de Pâques habillés au crochet",a:"Silar",l:"CC BY-SA 3.0",fid:"exacte"}
+];
+function illustration(id){
+  for (var i=0;i<ILLUSTRATIONS.length;i++) if (ILLUSTRATIONS[i].m === id) return ILLUSTRATIONS[i];
+  return null;
+}
+var FID_TXT = {
+  exacte:    "C'est bien ce type d'ouvrage",
+  proche:    "Ouvrage très proche, pas identique",
+  generique: "Donne seulement une idée du genre"
+};
+/* La carte d'illustration porte toujours son avertissement et son crédit :
+   la photo montre le travail d'une autre personne, et le patron de la fiche
+   ne produira pas exactement cette pièce-là. */
+function carteIllustration(id){
+  var ill = illustration(id); if (!ill) return null;
+  return el('<div class="card" style="margin-bottom:18px;overflow:hidden">'+
+    '<img src="'+esc(ill.u)+'" alt="Photo d\'illustration : '+esc(ill.t)+'" '+
+      'style="width:100%;max-height:340px;object-fit:cover;display:block;background:var(--surface-2)" '+
+      'loading="lazy" referrerpolicy="no-referrer" '+
+      'onerror="this.closest(\'.card\').hidden=true">'+
+    '<div class="body">'+
+      '<p class="dessinlab" style="margin:0"><b>Photo d\'illustration — ce n\'est pas l\'ouvrage de cette fiche.</b> '+
+      esc(FID_TXT[ill.fid] || "")+'. Elle est là pour te montrer de quoi il s\'agit ; '+
+      'le patron ci-dessous ne donne pas exactement cette pièce.</p>'+
+      '<p class="hint" style="margin-top:8px">'+esc(ill.t)+' — photo de '+esc(ill.a)+', '+
+      esc(ill.l)+', via <a href="'+esc(ill.p)+'" target="_blank" rel="noopener">Wikimedia Commons</a>.</p>'+
+    '</div></div>');
+}
 
 var EPOQUE = [
 {
@@ -6268,6 +6690,149 @@ function epoque(id){
    comme ses photos. Elle les a achetés ou reçus, ils sont à elle, et l'outil
    se contente de les rendre utilisables pendant qu'elle crochète. */
 
+/* ═════ COMMANDES CLIENTES ═════
+   Ce module répond à une défaillance documentée du métier : la commande
+   personnalisée acceptée sur un message, fabriquée, et jamais payée. Trois
+   principes le structurent.
+
+   1. UNE COMMANDE EST UN ACCORD DATÉ, pas une note. Ce qui a été convenu —
+      la pièce, les variantes, le prix, la date promise — est figé à une date,
+      pour qu'il reste quelque chose à opposer en cas de désaccord.
+
+   2. ARRHES OU ACOMPTE, JAMAIS « un petit versement ». Les deux mots ont des
+      effets opposés en droit français (articles L214-1 et suivants du code de
+      la consommation) : avec des ARRHES, la cliente peut se dédire en les
+      perdant, mais si c'est l'artisane qui renonce, elle doit rendre LE
+      DOUBLE. Avec un ACOMPTE, la vente est ferme des deux côtés. Et à défaut
+      de précision, la loi considère que ce sont des arrhes — c'est-à-dire
+      l'option la plus risquée pour l'artisane, par défaut. L'outil force donc
+      le choix, et l'écrit sur la facture.
+
+   3. LA CHARGE SE COMPTE EN HEURES, pas en nombre de commandes. « J'ai
+      14 commandes » ne veut rien dire ; « il me reste 96 h de travail pour
+      31 jours » se décide. C'est la seule chose que Crochompte peut calculer
+      et que personne d'autre ne peut, parce que lui seul mesure le temps réel.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+var STATUTS_CMD = [
+  {id:"devis",    nom:"Devis envoyé",   aide:"proposée, pas encore acceptée"},
+  {id:"acceptee", nom:"Acceptée",       aide:"accord donné, fabrication à lancer"},
+  {id:"encours",  nom:"En fabrication", aide:"le travail a commencé"},
+  {id:"terminee", nom:"Terminée",       aide:"prête, pas encore remise"},
+  {id:"livree",   nom:"Livrée",         aide:"remise à la cliente"},
+  {id:"annulee",  nom:"Annulée",        aide:""}
+];
+function statutCmd(id){
+  for (var i=0;i<STATUTS_CMD.length;i++) if (STATUTS_CMD[i].id === id) return STATUTS_CMD[i];
+  return STATUTS_CMD[0];
+}
+function commandes(){ if (!state.commandes) state.commandes = []; return state.commandes; }
+function commande(id){
+  var l = commandes();
+  for (var i=0;i<l.length;i++) if (l[i].id === id) return l[i];
+  return null;
+}
+function nouvelleCommande(){
+  var c = {
+    id:"cmd_"+uid(), num:null,
+    client:{nom:"", contact:"", note:""},
+    cid:null, libelle:"", variantes:"", personnalisee:false,
+    prixConvenu:0, fraisLivraison:0,
+    versement:{montant:0, date:null, type:"acompte"},
+    paiements:[],
+    dateCommande:new Date().toISOString(), datePromise:"",
+    statut:"devis", canal:"direct", note:"",
+    accordLe:null, heuresEstimees:0, pieceId:null,
+    factureNum:null, factureLe:null
+  };
+  commandes().unshift(c); sauverTout();
+  return c;
+}
+function supprimerCommande(id){
+  state.commandes = commandes().filter(function(c){ return c.id !== id; });
+  sauverTout();
+}
+/* Total encaissé : le versement initial plus les règlements suivants. Les
+   paiements ne se modifient pas, ils s'ajoutent — une correction est une
+   ligne de plus, jamais une réécriture. C'est ce qui rend le compte opposable. */
+function encaisse(c){
+  var t = Number(c.versement && c.versement.montant) || 0;
+  (c.paiements||[]).forEach(function(p){ t += Number(p.montant)||0; });
+  return t;
+}
+function totalDu(c){
+  return (Number(c.prixConvenu)||0) + (Number(c.fraisLivraison)||0);
+}
+function soldeDu(c){ return Math.max(0, totalDu(c) - encaisse(c)); }
+
+/* Le temps que cette commande va demander. On préfère toujours une mesure à
+   une estimation : si la pièce a déjà été chronométrée, c'est ce chiffre-là
+   qui compte ; sinon on retombe sur le temps du modèle. */
+function heuresCommande(c){
+  if (Number(c.heuresEstimees) > 0) return Number(c.heuresEstimees);
+  var cr = c.cid ? creation(c.cid) : null;
+  if (!cr) return 0;
+  return calculer(cr).heures;
+}
+function joursRestants(c){
+  if (!c.datePromise) return null;
+  var d = new Date(c.datePromise + "T23:59:59");
+  if (isNaN(d.getTime())) return null;
+  return Math.ceil((d.getTime() - Date.now()) / 86400000);
+}
+function commandesOuvertes(){
+  return commandes().filter(function(c){
+    return c.statut !== "livree" && c.statut !== "annulee";
+  });
+}
+/* Le plan de charge : des heures promises face à des jours disponibles.
+   C'est la réponse à la panique de décembre — et elle doit être brutale,
+   parce qu'une alerte qui ménage ne sert à rien en novembre. */
+function planDeCharge(){
+  var ouvertes = commandesOuvertes();
+  var heures = 0, enRetard = 0, sansDate = 0, prochaine = null;
+  ouvertes.forEach(function(c){
+    heures += heuresCommande(c);
+    var j = joursRestants(c);
+    if (j === null) { sansDate++; return; }
+    if (j < 0) enRetard++;
+    if (prochaine === null || j < prochaine) prochaine = j;
+  });
+  var parJour = Number(state.reglages.heuresParJour) || 3;
+  var joursNecessaires = parJour > 0 ? heures / parJour : 0;
+  return {
+    n: ouvertes.length, heures: heures, enRetard: enRetard, sansDate: sansDate,
+    prochaine: prochaine, parJour: parJour, joursNecessaires: joursNecessaires,
+    tenable: prochaine === null || joursNecessaires <= prochaine
+  };
+}
+/* Bilan d'une commande livrée : ce qu'elle a réellement rapporté à l'heure.
+   Le coût vient du moteur de prix de revient, au prix effectivement pratiqué. */
+function bilanCommande(c){
+  var cr = c.cid ? creation(c.cid) : null;
+  if (!cr) return null;
+  var copie = clone(cr);
+  copie.prix = Number(c.prixConvenu) || 0;
+  copie.canal = c.canal || cr.canal;
+  var r = calculer(copie);
+  var h = heuresCommande(c);
+  var marge = totalDu(c) - r.coutRevient;
+  return {r:r, heures:h, marge:marge,
+          gainHoraire: h > 0 ? (totalDu(c) - (r.coutRevient - r.mainOeuvre)) / h : 0};
+}
+/* Numérotation des factures : continue et sans trou, comme l'exige
+   l'article 242 nonies A de l'annexe II du code général des impôts. */
+function prochainNumeroFacture(){
+  var an = new Date().getFullYear();
+  var max = 0;
+  commandes().forEach(function(c){
+    if (!c.factureNum) return;
+    var m = String(c.factureNum).match(/^(\d{4})-(\d+)$/);
+    if (m && Number(m[1]) === an) max = Math.max(max, Number(m[2]));
+  });
+  return an + "-" + String(max + 1).padStart(4, "0");
+}
+
 function patrons(){ if (!state.patrons) state.patrons = []; return state.patrons; }
 function patronPerso(id){
   var l = patrons();
@@ -6317,12 +6882,437 @@ function cartePatronPerso(cr){
   return c;
 }
 
+function renderCommandes(main){
+  if (view.cmdVue){
+    var c0 = commande(view.cmdVue);
+    if (c0) return renderCommandeDetail(main, c0);
+    view.cmdVue = null;
+  }
+
+  main.appendChild(enTete("Commandes",
+    "Ce qui est promis, à qui, pour quand, et ce qui reste à encaisser.",
+    [bouton("+ Nouvelle commande", function(){
+      var c = nouvelleCommande(); view.cmdVue = c.id; render();
+    }, true)]));
+
+  var pc = planDeCharge();
+
+  /* Le plan de charge passe avant la liste : savoir si on tiendra les délais
+     est plus urgent que savoir ce qu'il y a dedans. */
+  var tiles = el('<div class="tiles"></div>');
+  tiles.appendChild(el('<div class="tile"><div class="k">Commandes en cours</div><div class="v">'+
+    pc.n+'</div><div class="s">'+(pc.sansDate ? pc.sansDate+' sans date promise' : 'toutes datées')+'</div></div>'));
+  tiles.appendChild(el('<div class="tile"><div class="k">Travail restant</div><div class="v">'+
+    esc(dureeTexte(pc.heures*60))+'</div><div class="s">à '+nb(pc.parJour)+' h par jour, '+
+    Math.ceil(pc.joursNecessaires)+' jour'+(Math.ceil(pc.joursNecessaires)>1?'s':'')+'</div></div>'));
+  var aEncaisser = 0;
+  commandesOuvertes().forEach(function(c){ aEncaisser += soldeDu(c); });
+  tiles.appendChild(el('<div class="tile"><div class="k">Reste à encaisser</div><div class="v">'+
+    esc(eur(aEncaisser))+'</div><div class="s">sur les commandes en cours</div></div>'));
+  tiles.appendChild(el('<div class="tile acc '+(pc.enRetard||!pc.tenable?"acc-warn":"acc-good")+'">'+
+    '<div class="k">Prochaine échéance</div><div class="v '+(pc.enRetard||!pc.tenable?"warn":"good")+'">'+
+    (pc.prochaine === null ? '—' : (pc.prochaine < 0 ? 'en retard' : pc.prochaine+' j'))+'</div>'+
+    '<div class="s">'+(pc.enRetard ? pc.enRetard+' en retard' : 'rien en retard')+'</div></div>'));
+  main.appendChild(tiles);
+
+  if (pc.n && !pc.tenable){
+    main.appendChild(el('<div class="banner" style="background:var(--warn-soft);border-color:var(--warn)"><p>'+
+      '<b>Tu ne tiendras pas.</b> Il te reste '+esc(dureeTexte(pc.heures*60))+' de travail promis, '+
+      'soit '+Math.ceil(pc.joursNecessaires)+' jours à '+nb(pc.parJour)+' h par jour — '+
+      'et la prochaine échéance est dans '+pc.prochaine+' jour'+(pc.prochaine>1?'s':'')+'. '+
+      'Mieux vaut prévenir une cliente maintenant que livrer en retard sans l\'avoir dit : '+
+      'propose un nouveau délai, ou un remboursement, et fais-le acter.</p>'+
+      '<p class="hint" style="margin-top:8px">Tu crochètes plus que '+nb(pc.parJour)+' h par jour ? '+
+      'Corrige-le dans Réglages, le calcul suivra.</p></div>'));
+  }
+
+  var liste = commandes();
+  if (!liste.length){
+    main.appendChild(etatVide("Aucune commande pour l'instant",
+      "Dès qu'une cliente te commande quelque chose, note-le ici : ce qui est convenu, pour quand, "+
+      "et combien elle a versé. C'est ce qui évite de fabriquer pour quelqu'un qui ne paiera pas.",
+      [bouton("+ Nouvelle commande", function(){
+        var c = nouvelleCommande(); view.cmdVue = c.id; render();
+      }, true)]));
+    return;
+  }
+
+  /* Tri par urgence : ce qui est promis le plus tôt se voit en premier. */
+  var triees = liste.slice().sort(function(a,b){
+    var fa = (a.statut === "livree" || a.statut === "annulee") ? 1 : 0;
+    var fb = (b.statut === "livree" || b.statut === "annulee") ? 1 : 0;
+    if (fa !== fb) return fa - fb;
+    var ja = joursRestants(a), jb = joursRestants(b);
+    if (ja === null && jb === null) return 0;
+    if (ja === null) return 1;
+    if (jb === null) return -1;
+    return ja - jb;
+  });
+
+  var wrap = el('<div class="tablewrap resp" style="margin-top:8px"></div>');
+  var t = el('<table style="min-width:840px"><thead><tr><th>Cliente</th><th>Pièce</th>'+
+    '<th style="width:120px">Promise pour</th><th style="width:130px">Statut</th>'+
+    '<th class="n" style="width:110px">Prix convenu</th><th class="n" style="width:110px">Reste dû</th>'+
+    '<th style="width:70px"></th></tr></thead><tbody></tbody></table>');
+  var tb = t.querySelector("tbody");
+  triees.forEach(function(c){
+    var j = joursRestants(c);
+    var fini = c.statut === "livree" || c.statut === "annulee";
+    var urgence = "";
+    if (!fini && j !== null){
+      if (j < 0) urgence = '<span class="chip warn">en retard de '+Math.abs(j)+' j</span>';
+      else if (j <= 7) urgence = '<span class="chip warn">dans '+j+' j</span>';
+    }
+    var solde = soldeDu(c);
+    var tr = el('<tr'+(fini?' style="opacity:.6"':'')+'>'+
+      '<td data-l="Cliente"><b>'+esc(c.client && c.client.nom ? c.client.nom : "Sans nom")+'</b>'+
+        (c.personnalisee ? '<div class="hint" style="font-size:11px;margin-top:2px">personnalisée</div>' : '')+'</td>'+
+      '<td data-l="Pièce">'+esc(c.libelle || (c.cid && creation(c.cid) ? creation(c.cid).nom : "—"))+
+        (c.variantes ? '<div class="hint" style="font-size:11px;margin-top:2px">'+esc(c.variantes)+'</div>' : '')+'</td>'+
+      '<td data-l="Promise pour">'+(c.datePromise ? esc(new Date(c.datePromise).toLocaleDateString("fr-FR")) : '<span class="hint">non fixée</span>')+
+        (urgence ? '<div style="margin-top:2px">'+urgence+'</div>' : '')+'</td>'+
+      '<td data-l="Statut">'+esc(statutCmd(c.statut).nom)+'</td>'+
+      '<td class="n" data-l="Prix convenu">'+esc(eur(totalDu(c)))+'</td>'+
+      '<td class="n" data-l="Reste dû">'+(solde > 0 ? '<b>'+esc(eur(solde))+'</b>' : '<span class="good">soldée</span>')+'</td>'+
+      '<td><button type="button" class="btn sm">ouvrir</button></td></tr>');
+    tr.querySelector("button").addEventListener("click", function(){ view.cmdVue = c.id; render(); });
+    tb.appendChild(tr);
+  });
+  wrap.appendChild(t);
+  main.appendChild(wrap);
+}
+
+function renderCommandeDetail(main, c){
+  var back = bouton("← Retour aux commandes", function(){ view.cmdVue = null; render(); });
+  back.classList.add("sm"); back.style.marginBottom = "16px";
+  main.appendChild(back);
+
+  function maj(){ sauverTout(); }
+
+  /* --- la cliente et ce qui est convenu --- */
+  var cId = el('<div class="card" style="margin-bottom:16px"><header><h2>Ce qui est convenu</h2>'+
+    '<p>Écris-le au moment où c\'est décidé. C\'est ce qui reste si la cliente change d\'avis.</p></header>'+
+    '<div class="body"><div class="grid2">'+
+      '<label class="f"><span>Cliente</span><input data-c="nom" type="text" placeholder="Prénom et nom"></label>'+
+      '<label class="f"><span>Comment la joindre</span><input data-c="contact" type="text" placeholder="téléphone, courriel, Instagram…"></label>'+
+    '</div>'+
+    '<label class="f" style="margin-top:10px"><span>Création commandée</span><select data-c="cid"></select></label>'+
+    '<div class="grid2" style="margin-top:10px">'+
+      '<label class="f"><span>Libellé sur la facture</span><input data-c="libelle" type="text" placeholder="Lapin Céleste, 25 cm"></label>'+
+      '<label class="f"><span>Ce qui a été demandé en plus</span><input data-c="variantes" type="text" placeholder="coton bleu, prénom Léa brodé"></label>'+
+    '</div>'+
+    '<label style="display:flex;gap:10px;align-items:flex-start;margin-top:12px;cursor:pointer">'+
+      '<input type="checkbox" data-c="personnalisee" style="margin-top:3px;width:18px;height:18px;flex:none">'+
+      '<span><b>Pièce personnalisée</b> — faite selon les demandes de la cliente '+
+      '(prénom, couleurs choisies, mesures sur mesure).</span></label>'+
+    '<p class="hint" id="cmd-retract" style="margin-top:6px"></p>'+
+    '<div class="grid3" style="margin-top:12px">'+
+      '<label class="f"><span>Prix convenu (€)</span><input data-c="prixConvenu" type="number" min="0" step="0.5"></label>'+
+      '<label class="f"><span>Livraison (€)</span><input data-c="fraisLivraison" type="number" min="0" step="0.5"></label>'+
+      '<label class="f"><span>Promise pour le</span><input data-c="datePromise" type="date"></label>'+
+    '</div>'+
+    '<div class="grid2" style="margin-top:10px">'+
+      '<label class="f"><span>Statut</span><select data-c="statut"></select></label>'+
+      '<label class="f"><span>Canal de vente</span><select data-c="canal"></select></label>'+
+    '</div>'+
+    '<label class="f" style="margin-top:10px"><span>Note</span><input data-c="note" type="text" placeholder="livrée au marché de Noël, cadeau d\'anniversaire…"></label>'+
+    '<div class="savebar" style="margin-top:14px"></div>'+
+    '</div></div>');
+
+  var selCr = cId.querySelector('[data-c="cid"]');
+  selCr.appendChild(el('<option value="">— aucune, pièce libre —</option>'));
+  state.creations.forEach(function(cr){
+    selCr.appendChild(el('<option value="'+esc(cr.id)+'"'+(c.cid===cr.id?' selected':'')+'>'+esc(cr.nom)+'</option>'));
+  });
+  var selSt = cId.querySelector('[data-c="statut"]');
+  STATUTS_CMD.forEach(function(s){
+    selSt.appendChild(el('<option value="'+esc(s.id)+'"'+(c.statut===s.id?' selected':'')+'>'+esc(s.nom)+'</option>'));
+  });
+  var selCa = cId.querySelector('[data-c="canal"]');
+  state.canaux.forEach(function(k){
+    selCa.appendChild(el('<option value="'+esc(k.id)+'"'+(c.canal===k.id?' selected':'')+'>'+esc(k.nom)+'</option>'));
+  });
+  cId.querySelector('[data-c="nom"]').value      = (c.client && c.client.nom) || "";
+  cId.querySelector('[data-c="contact"]').value  = (c.client && c.client.contact) || "";
+  cId.querySelector('[data-c="libelle"]').value  = c.libelle || "";
+  cId.querySelector('[data-c="variantes"]').value= c.variantes || "";
+  cId.querySelector('[data-c="prixConvenu"]').value = c.prixConvenu || 0;
+  cId.querySelector('[data-c="fraisLivraison"]').value = c.fraisLivraison || 0;
+  cId.querySelector('[data-c="datePromise"]').value = c.datePromise || "";
+  cId.querySelector('[data-c="note"]').value     = c.note || "";
+  cId.querySelector('[data-c="personnalisee"]').checked = !!c.personnalisee;
+
+  /* Le droit de rétractation est le piège le plus coûteux de la vente à
+     distance : 14 jours pendant lesquels la cliente peut rendre la pièce sans
+     motif — sauf si elle est personnalisée. L'outil le dit au moment où la
+     case est cochée, pas dans des conditions générales que personne ne lit. */
+  function majRetract(){
+    var z = cId.querySelector("#cmd-retract");
+    z.innerHTML = c.personnalisee
+      ? 'Une pièce faite selon les demandes de la cliente <b>n\'ouvre pas de droit de '+
+        'rétractation</b> (article L221-28 du code de la consommation). La mention sera '+
+        'portée sur la facture — à condition de l\'avoir dit AVANT de commencer.'
+      : 'Vente à distance : la cliente dispose de <b>14 jours pour se rétracter</b> après '+
+        'réception, sans avoir à se justifier (article L221-18). En vente en main propre '+
+        'sur un marché, ce délai ne s\'applique pas.';
+  }
+  majRetract();
+
+  cId.addEventListener("input", function(e){
+    var k = e.target.getAttribute("data-c"); if (!k) return;
+    if (k === "nom" || k === "contact"){
+      if (!c.client) c.client = {nom:"",contact:"",note:""};
+      c.client[k] = e.target.value;
+    } else if (k === "prixConvenu" || k === "fraisLivraison"){
+      c[k] = Math.max(0, Number(e.target.value)||0);
+    } else if (k === "personnalisee"){
+      c.personnalisee = e.target.checked; majRetract();
+    } else {
+      c[k] = e.target.value;
+    }
+    maj();
+  });
+  cId.addEventListener("change", function(e){
+    var k = e.target.getAttribute("data-c"); if (!k) return;
+    if (k === "cid"){ c.cid = e.target.value || null; }
+    if (k === "statut" || k === "canal"){ c[k] = e.target.value; }
+    maj(); render();
+  });
+
+  /* Figer l'accord : un horodatage, et le rappel de ce qui a été convenu. */
+  var barAccord = cId.querySelector(".savebar");
+  if (!c.accordLe){
+    barAccord.appendChild(bouton("Figer l'accord à aujourd'hui", function(){
+      if (!c.client || !c.client.nom){ toast("Note d'abord le nom de la cliente"); return; }
+      if (!totalDu(c)){ toast("Note d'abord le prix convenu"); return; }
+      c.accordLe = new Date().toISOString();
+      if (c.statut === "devis") c.statut = "acceptee";
+      sauverTout(); render(); toast("Accord figé");
+    }, true));
+  } else {
+    barAccord.appendChild(el('<p class="hint" style="margin:0">Accord figé le <b>'+
+      esc(dateLisible(c.accordLe))+'</b>.</p>'));
+  }
+  main.appendChild(cId);
+
+  /* --- l'argent --- */
+  var enc = encaisse(c), solde = soldeDu(c);
+  var cArgent = el('<div class="card" style="margin-bottom:16px"><header><h2>L\'argent</h2>'+
+    '<p>Ce qui a été versé, ce qui reste dû.</p></header><div class="body">'+
+    '<div class="tiles" style="margin-bottom:14px">'+
+      '<div class="tile"><div class="k">Total de la commande</div><div class="v">'+esc(eur(totalDu(c)))+'</div></div>'+
+      '<div class="tile"><div class="k">Déjà encaissé</div><div class="v">'+esc(eur(enc))+'</div></div>'+
+      '<div class="tile acc '+(solde>0?"acc-warn":"acc-good")+'"><div class="k">Reste dû</div>'+
+        '<div class="v '+(solde>0?"warn":"good")+'">'+esc(eur(solde))+'</div></div>'+
+    '</div>'+
+    '<div class="grid3" style="align-items:end">'+
+      '<label class="f"><span>Versement à la commande (€)</span><input id="cmd-ac-m" type="number" min="0" step="0.5"></label>'+
+      '<label class="f"><span>C\'est…</span><select id="cmd-ac-t">'+
+        '<option value="acompte">Un acompte</option><option value="arrhes">Des arrhes</option></select></label>'+
+      '<label class="f"><span>Reçu le</span><input id="cmd-ac-d" type="date"></label>'+
+    '</div>'+
+    '<p class="hint" id="cmd-ac-aide" style="margin-top:6px"></p>'+
+    '<div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--rule)">'+
+      '<p style="margin:0 0 10px"><b>Règlements suivants</b></p>'+
+      '<div id="cmd-paie"></div>'+
+      '<div class="grid3" style="align-items:end;margin-top:10px">'+
+        '<label class="f"><span>Montant (€)</span><input id="cmd-p-m" type="number" min="0" step="0.5" value="'+(solde||0)+'"></label>'+
+        '<label class="f"><span>Moyen</span><input id="cmd-p-moy" type="text" placeholder="espèces, virement…"></label>'+
+        '<label class="f"><span>Date</span><input id="cmd-p-d" type="date"></label>'+
+      '</div>'+
+      '<div class="savebar" style="margin-top:10px"><button type="button" class="btn" id="cmd-p-add">Enregistrer ce règlement</button></div>'+
+    '</div></div></div>');
+
+  var inM = cArgent.querySelector("#cmd-ac-m"), inT = cArgent.querySelector("#cmd-ac-t"),
+      inD = cArgent.querySelector("#cmd-ac-d");
+  inM.value = (c.versement && c.versement.montant) || 0;
+  inT.value = (c.versement && c.versement.type) || "acompte";
+  inD.value = (c.versement && c.versement.date) || "";
+  function majAideVersement(){
+    cArgent.querySelector("#cmd-ac-aide").innerHTML = inT.value === "arrhes"
+      ? '<b>Arrhes</b> : la cliente peut renoncer en les perdant — mais si c\'est toi qui '+
+        'renonces, tu dois lui rendre <b>le double</b> (article L214-1 du code de la consommation). '+
+        'Attention : si rien n\'est précisé sur la facture, la loi considère que les sommes '+
+        'versées sont des arrhes.'
+      : '<b>Acompte</b> : la vente est ferme des deux côtés. Si la cliente renonce, elle reste '+
+        'tenue du prix ; si tu renonces, tu rembourses ce qui a été versé. C\'est ce qui protège '+
+        'le mieux le travail déjà engagé — dis-le clairement avant de commencer.';
+  }
+  majAideVersement();
+  cArgent.addEventListener("input", function(e){
+    if (!c.versement) c.versement = {montant:0, date:null, type:"acompte"};
+    if (e.target === inM){ c.versement.montant = Math.max(0, Number(e.target.value)||0); maj(); render(); }
+    if (e.target === inD){ c.versement.date = e.target.value; maj(); }
+  });
+  inT.addEventListener("change", function(){
+    if (!c.versement) c.versement = {montant:0, date:null, type:"acompte"};
+    c.versement.type = inT.value; majAideVersement(); maj();
+  });
+
+  var zp = cArgent.querySelector("#cmd-paie");
+  if (!(c.paiements||[]).length){
+    zp.appendChild(el('<p class="hint" style="margin:0">Aucun règlement enregistré après le versement initial.</p>'));
+  } else {
+    c.paiements.forEach(function(p, i){
+      zp.appendChild(el('<div style="display:flex;justify-content:space-between;gap:10px;'+
+        'padding:6px 0;border-bottom:1px solid var(--rule)">'+
+        '<span>'+esc(p.date ? new Date(p.date).toLocaleDateString("fr-FR") : "sans date")+
+        (p.moyen ? ' · '+esc(p.moyen) : '')+'</span>'+
+        '<b>'+esc(eur(p.montant))+'</b></div>'));
+    });
+  }
+  cArgent.querySelector("#cmd-p-add").addEventListener("click", function(){
+    var m = Math.max(0, Number(cArgent.querySelector("#cmd-p-m").value)||0);
+    if (!m){ toast("Indique un montant"); return; }
+    c.paiements = c.paiements || [];
+    c.paiements.push({montant:m, moyen:cArgent.querySelector("#cmd-p-moy").value.trim(),
+                      date:cArgent.querySelector("#cmd-p-d").value || new Date().toISOString().slice(0,10),
+                      saisiLe:Date.now()});
+    sauverTout(); render(); toast("Règlement enregistré");
+  });
+  main.appendChild(cArgent);
+
+  /* --- ce que cette commande te rapporte vraiment --- */
+  var b = bilanCommande(c);
+  if (b){
+    var cB = el('<div class="card" style="margin-bottom:16px"><header><h2>Ce qu\'elle te rapporte</h2>'+
+      '<p>Au prix convenu, une fois les matières, le temps et les frais comptés.</p></header>'+
+      '<div class="body"><div class="tiles">'+
+        '<div class="tile"><div class="k">Coût de revient</div><div class="v">'+esc(eur(b.r.coutRevient))+
+          '</div><div class="s">matières, temps, charges</div></div>'+
+        '<div class="tile"><div class="k">Temps prévu</div><div class="v">'+esc(dureeTexte(b.heures*60))+
+          '</div><div class="s">'+(Number(c.heuresEstimees)>0?'saisi à la main':'d\'après la fiche')+'</div></div>'+
+        '<div class="tile acc '+(b.gainHoraire >= (state.reglages.tauxHoraire||0) ? "acc-good":"acc-warn")+'">'+
+          '<div class="k">Ce que tu gagnes à l\'heure</div>'+
+          '<div class="v '+(b.gainHoraire >= (state.reglages.tauxHoraire||0) ? "good":"warn")+'">'+
+          esc(eur(b.gainHoraire))+'</div><div class="s">tu vises '+esc(eur(state.reglages.tauxHoraire))+' / h</div></div>'+
+        '<div class="tile"><div class="k">Prix qui te paierait ton taux</div><div class="v">'+
+          esc(eur(b.r.prixObjectif))+'</div><div class="s">au canal choisi</div></div>'+
+      '</div>'+
+      '<label class="f" style="max-width:260px;margin-top:14px"><span>Temps réel passé (heures)</span>'+
+      '<input id="cmd-h" type="number" min="0" step="0.25" value="'+(c.heuresEstimees||"")+'" '+
+      'placeholder="'+nb(Math.round(b.heures*4)/4)+'"></label>'+
+      '<p class="hint">Laisse vide pour utiliser le temps de la fiche. Renseigne-le quand tu as '+
+      'chronométré pour de vrai : c\'est la seule façon de savoir ce que cette commande t\'a '+
+      'vraiment payé à l\'heure.</p>'+
+      '</div></div>');
+    cB.querySelector("#cmd-h").addEventListener("input", function(e){
+      c.heuresEstimees = Math.max(0, Number(e.target.value)||0);
+      maj();
+      clearTimeout(window.__cmdH); window.__cmdH = setTimeout(render, 600);
+    });
+    main.appendChild(cB);
+    if (b.gainHoraire < (state.reglages.tauxHoraire||0) && totalDu(c) > 0){
+      main.appendChild(el('<div class="banner" style="background:var(--warn-soft);border-color:var(--warn);margin-bottom:16px">'+
+        '<p><b>À ce prix, tu te paies '+esc(eur(b.gainHoraire))+' de l\'heure</b> au lieu des '+
+        esc(eur(state.reglages.tauxHoraire))+' que tu vises. Ce n\'est pas forcément une erreur — '+
+        'mais que ce soit un choix, pas une surprise. Le prix qui t\'y retrouverait : '+
+        '<b>'+esc(eur(b.r.prixObjectif))+'</b>.</p></div>'));
+    }
+  } else {
+    main.appendChild(el('<div class="banner"><p>Relie cette commande à une de tes créations '+
+      '(plus haut) pour voir ce qu\'elle te rapporte réellement à l\'heure.</p></div>'));
+  }
+
+  /* --- la facture --- */
+  var cF = el('<div class="card" style="margin-bottom:16px"><header><h2>Facture</h2>'+
+    '<p>Numérotée sans trou, avec les mentions obligatoires.</p></header><div class="body">'+
+    (c.factureNum
+      ? '<p style="margin:0">Facture <b>'+esc(c.factureNum)+'</b>, émise le '+esc(dateLisible(c.factureLe))+'.</p>'
+      : '<p style="margin:0" class="hint">Aucune facture émise pour cette commande.</p>')+
+    '<div class="savebar" style="margin-top:12px"></div>'+
+    '<p class="hint" style="margin-top:10px">La numérotation doit être <b>continue et sans trou</b> '+
+    '(article 242 nonies A, annexe II du CGI). Conserve tes factures <b>10 ans</b>.</p>'+
+    '</div></div>');
+  var barF = cF.querySelector(".savebar");
+  barF.appendChild(bouton(c.factureNum ? "Revoir la facture" : "Établir la facture", function(){
+    if (!c.factureNum){
+      if (!c.client || !c.client.nom){ toast("Note d'abord le nom de la cliente"); return; }
+      c.factureNum = prochainNumeroFacture();
+      c.factureLe = new Date().toISOString();
+      sauverTout();
+    }
+    ouvrirFacture(c);
+    render();
+  }, !c.factureNum));
+  main.appendChild(cF);
+
+  var sup = el('<div class="savebar"></div>');
+  var bSup = el('<button type="button" class="btn ghost">Supprimer cette commande</button>');
+  var arme = false;
+  bSup.addEventListener("click", function(){
+    if (!arme){ arme = true; bSup.textContent = "Confirmer la suppression";
+      setTimeout(function(){ arme=false; bSup.textContent="Supprimer cette commande"; }, 4000); return; }
+    supprimerCommande(c.id); view.cmdVue = null; render(); toast("Commande supprimée");
+  });
+  sup.appendChild(bSup);
+  main.appendChild(sup);
+}
+
+/* La facture s'ouvre dans une fenêtre imprimable : pas de dépendance, pas de
+   bibliothèque PDF, et « Imprimer → Enregistrer en PDF » fait le reste. */
+function ouvrirFacture(c){
+  var r = state.reglages;
+  var lignes = [
+    {d:(c.libelle || (c.cid && creation(c.cid) ? creation(c.cid).nom : "Création au crochet")) +
+       (c.variantes ? " — " + c.variantes : ""), m:Number(c.prixConvenu)||0}
+  ];
+  if (Number(c.fraisLivraison) > 0) lignes.push({d:"Livraison", m:Number(c.fraisLivraison)});
+  var enc = encaisse(c), solde = soldeDu(c);
+  var typeVers = (c.versement && c.versement.type === "arrhes") ? "Arrhes" : "Acompte";
+  var h = '<!doctype html><html lang="fr"><head><meta charset="utf-8">'+
+    '<title>Facture '+esc(c.factureNum)+'</title><style>'+
+    'body{font:14px/1.6 system-ui,sans-serif;max-width:760px;margin:32px auto;padding:0 20px;color:#15181a}'+
+    'h1{font-size:22px;margin:0 0 4px} table{width:100%;border-collapse:collapse;margin:22px 0}'+
+    'th,td{text-align:left;padding:8px 6px;border-bottom:1px solid #ddd} td.n,th.n{text-align:right}'+
+    '.tot{font-weight:700;font-size:16px} .ment{font-size:12px;color:#555;margin-top:26px}'+
+    '.head{display:flex;justify-content:space-between;gap:30px;flex-wrap:wrap}'+
+    '@media print{body{margin:0}.noprint{display:none}}</style></head><body>'+
+    '<div class="head"><div><h1>Facture '+esc(c.factureNum)+'</h1>'+
+    '<p>Émise le '+esc(new Date(c.factureLe).toLocaleDateString("fr-FR"))+'</p></div>'+
+    '<div><b>'+esc(r.raisonSociale || "[Ton nom ou ta raison sociale]")+'</b><br>'+
+    esc(r.adresse || "[Ton adresse]")+'<br>'+
+    (r.siret ? "SIRET " + esc(r.siret) : "[Ton SIRET]")+'<br>'+
+    esc(r.contact || "")+'</div></div>'+
+    '<p style="margin-top:20px"><b>Cliente :</b> '+esc(c.client && c.client.nom || "")+
+    (c.client && c.client.contact ? '<br>'+esc(c.client.contact) : '')+'</p>'+
+    '<table><thead><tr><th>Désignation</th><th class="n">Montant</th></tr></thead><tbody>';
+  lignes.forEach(function(l){ h += '<tr><td>'+esc(l.d)+'</td><td class="n">'+esc(eur(l.m))+'</td></tr>'; });
+  h += '<tr class="tot"><td>Total</td><td class="n">'+esc(eur(totalDu(c)))+'</td></tr>';
+  if (enc > 0){
+    h += '<tr><td>'+esc(typeVers)+' déjà versé'+
+      ((c.versement && c.versement.date) ? ' le '+esc(new Date(c.versement.date).toLocaleDateString("fr-FR")) : '')+
+      '</td><td class="n">− '+esc(eur(enc))+'</td></tr>'+
+      '<tr class="tot"><td>Reste à régler</td><td class="n">'+esc(eur(solde))+'</td></tr>';
+  }
+  h += '</tbody></table><div class="ment">'+
+    '<p>TVA non applicable, article 293 B du CGI.</p>'+
+    (c.personnalisee
+      ? '<p>Article confectionné selon les spécifications de la cliente : conformément à '+
+        'l\'article L221-28 du code de la consommation, il n\'ouvre pas de droit de rétractation.</p>'
+      : '')+
+    (c.versement && c.versement.type === "arrhes"
+      ? '<p>Les sommes versées à la commande ont la nature d\'arrhes au sens de l\'article L214-1 '+
+        'du code de la consommation.</p>'
+      : (enc > 0 ? '<p>Les sommes versées à la commande ont la nature d\'acompte : la vente est '+
+                   'ferme et définitive pour les deux parties.</p>' : ''))+
+    '<p>Pénalités de retard : trois fois le taux d\'intérêt légal. Pas d\'escompte pour paiement anticipé.</p>'+
+    '</div>'+
+    '<p class="noprint" style="margin-top:24px"><button onclick="window.print()" '+
+    'style="padding:10px 18px;font-size:15px;cursor:pointer">Imprimer / enregistrer en PDF</button></p>'+
+    '</body></html>';
+  var w = window.open("", "_blank");
+  if (!w){ toast("Autorise les fenêtres pour voir la facture"); return; }
+  w.document.write(h); w.document.close();
+}
+
 function renderPatrons(main){
   if (view.patronVu){
     var p = patronPerso(view.patronVu);
     if (p) return renderPatronDetail(main, p);
     view.patronVu = null;
   }
+  if (view.sousPatrons === "biblio" && bibliothequePartagee) return renderBibliotheque(main);
   var liste = patrons();
 
   main.appendChild(enTete("Mes patrons",
@@ -6332,8 +7322,16 @@ function renderPatrons(main){
       var np = nouveauPatron(); view.patronVu = np.id; render();
     }, true)]));
 
+  if (bibliothequePartagee){
+    var ong = el('<div class="tabs" style="margin-bottom:16px"></div>');
+    ong.appendChild(bouton("Mes patrons", function(){ view.sousPatrons = null; render(); }, true));
+    ong.appendChild(bouton("Bibliothèque partagée", function(){ view.sousPatrons = "biblio"; render(); }));
+    main.appendChild(ong);
+  }
+
   main.appendChild(el('<div class="banner"><p><b>Ces patrons restent chez toi.</b> '+
-    'Ils sont enregistrés dans ce navigateur, sur cet appareil, et ne sont envoyés nulle part. '+
+    'Ils sont enregistrés dans ce navigateur, sur cet appareil, et ne sont envoyés nulle part'+
+    (bibliothequePartagee ? ' — sauf si tu choisis toi-même d\'en partager un, patron par patron' : '')+'. '+
     'Un patron acheté est fait pour être utilisé par toi : garde-le pour toi, ne le repartage pas — '+
     'c\'est le travail d\'une créatrice, comme le tien.</p></div>'));
 
@@ -6364,6 +7362,205 @@ function renderPatrons(main){
     box.appendChild(c);
   });
   main.appendChild(box);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   La bibliothèque partagée
+   Elle ne contient que ce que des utilisatrices ont explicitement choisi d'y
+   mettre, en déclarant en être les autrices. Rien n'y arrive automatiquement.
+   ───────────────────────────────────────────────────────────────────────── */
+var LICENCES = [
+  {id:"CC BY-NC-SA 4.0", nom:"Partage non commercial, à l'identique",
+   aide:"Les autres peuvent l'utiliser et l'adapter sans en faire commerce, en te citant, et doivent partager pareil. Le choix le plus courant."},
+  {id:"CC BY-NC 4.0", nom:"Partage non commercial",
+   aide:"Utilisation et adaptation libres hors commerce, en te citant."},
+  {id:"CC BY-SA 4.0", nom:"Partage libre, à l'identique",
+   aide:"Tout usage permis, y compris commercial, en te citant, à condition de partager pareil."},
+  {id:"CC BY 4.0", nom:"Partage libre",
+   aide:"Tout usage permis, y compris commercial, en te citant."},
+  {id:"CC0", nom:"Je renonce à mes droits",
+   aide:"Chacune en fait ce qu'elle veut, sans même te citer. Irréversible."}
+];
+
+function renderBibliotheque(main){
+  main.appendChild(enTete("Bibliothèque partagée",
+    "Un espace d'échange entre utilisatrices de Crochompte. "+
+    "Chacune publie ce qu'elle a écrit, et en répond."));
+
+  /* Dire les choses une fois, clairement, plutôt que de laisser croire que
+     l'outil aurait relu et validé ces patrons. Il ne les a pas vus. */
+  main.appendChild(el('<div class="banner"><p><b>C\'est un partage entre artisanes, pas un catalogue de l\'application.</b> '+
+    'Crochompte met l\'espace à disposition : il ne relit pas, ne vérifie pas et ne valide pas ce qui est publié ici. '+
+    'Chaque patron reste le travail et la responsabilité de celle qui l\'a mis en ligne — '+
+    'y compris pour les droits, la justesse des explications et le résultat obtenu.</p>'+
+    '<p class="hint" style="margin-top:8px">Tu reconnais un patron protégé publié sans droit, ou un contenu déplacé ? '+
+    'Le bouton <b>Signaler</b>, sur chaque patron, le retire le temps d\'une vérification.</p></div>'));
+
+  var ong = el('<div class="tabs" style="margin-bottom:16px"></div>');
+  ong.appendChild(bouton("Mes patrons", function(){ view.sousPatrons = null; render(); }));
+  ong.appendChild(bouton("Bibliothèque partagée", function(){}, true));
+  main.appendChild(ong);
+
+  var zone = el('<div></div>');
+  main.appendChild(zone);
+  zone.appendChild(el('<p class="hint">Chargement…</p>'));
+
+  bibliothequePartagee.lister(view.biblioQ).then(function(r){
+    zone.innerHTML = "";
+    if (r.erreur){
+      zone.appendChild(el('<div class="banner" style="background:var(--warn-soft);border-color:var(--warn)">'+
+        '<p>'+esc(r.erreur)+'</p></div>'));
+      return;
+    }
+    var rech = el('<label class="f" style="max-width:420px;margin-bottom:16px"><span>Chercher</span>'+
+      '<input type="search" id="bib-q" placeholder="bonnet, pieuvre, châle…" value="'+esc(view.biblioQ||"")+'"></label>');
+    rech.querySelector("input").addEventListener("input", function(e){
+      view.biblioQ = e.target.value;
+      clearTimeout(window.__bibT);
+      window.__bibT = setTimeout(render, 350);
+    });
+    zone.appendChild(rech);
+
+    if (!r.liste.length){
+      zone.appendChild(etatVide(
+        view.biblioQ ? "Rien ne correspond à cette recherche" : "La bibliothèque est encore vide",
+        view.biblioQ ? "Essaie un autre mot."
+          : "Elle se remplira des patrons que les utilisatrices choisiront de partager. "+
+            "Tu peux être la première : ouvre un de tes patrons et publie-le.",
+        [bouton("Voir mes patrons", function(){ view.sousPatrons = null; render(); })]));
+      return;
+    }
+
+    zone.appendChild(el('<p class="hint" style="margin-bottom:12px">'+r.liste.length+
+      ' patron'+(r.liste.length>1?'s':'')+' partagé'+(r.liste.length>1?'s':'')+'.</p>'));
+    var box = el('<div class="pat-lib"></div>');
+    r.liste.forEach(function(p){
+      var aMoi = p.user_id === r.moi;
+      var c = el('<button type="button" class="pcard" style="text-align:left;font:inherit;color:inherit;cursor:pointer">'+
+        '<span class="vig"><span>'+esc(p.licence.replace(" 4.0",""))+'</span></span>'+
+        '<span><h3>'+esc(p.titre)+(aMoi?' <span class="chip good">le tien</span>':'')+'</h3>'+
+        '<p class="m">'+esc(p.auteur_affiche)+
+          (p.niveau ? ' · '+esc(DIFF[p.niveau-1]) : '')+
+          ' · '+new Date(p.cree).toLocaleDateString("fr-FR")+'</p></span>'+
+        '<span class="m">lire →</span></button>');
+      c.addEventListener("click", function(){ view.biblioVu = p; render(); });
+      box.appendChild(c);
+    });
+    zone.appendChild(box);
+
+    if (view.biblioVu){
+      var p2 = view.biblioVu;
+      var det = el('<div class="card" style="margin-top:20px"><header><h2>'+esc(p2.titre)+'</h2>'+
+        '<p>Par '+esc(p2.auteur_affiche)+' · '+esc(p2.licence)+
+        (p2.niveau ? ' · '+esc(DIFF[p2.niveau-1]) : '')+'</p></header><div class="body">'+
+        (p2.materiel ? '<p><b>Matériel :</b> '+esc(p2.materiel)+'</p>' : '')+
+        '<p class="lecture" style="white-space:pre-wrap">'+esc(p2.texte)+'</p>'+
+        (p2.notes ? '<p class="hint" style="white-space:pre-wrap;margin-top:12px">'+esc(p2.notes)+'</p>' : '')+
+        '<div class="savebar" style="margin-top:16px"></div>'+
+        '<p class="hint" style="margin-top:12px">Ce patron est partagé par son autrice sous licence '+
+        esc(p2.licence)+'. Respecte-la si tu le republies ou si tu vends ce que tu en fais. '+
+        'Il est publié tel quel par une autre utilisatrice : Crochompte ne l\'a ni relu ni vérifié.</p>'+
+        '</div></div>');
+      var bar = det.querySelector(".savebar");
+      bar.appendChild(bouton("Copier dans mes patrons", function(){
+        var np = nouveauPatron();
+        np.titre = p2.titre; np.auteur = p2.auteur_affiche;
+        np.origine = "Bibliothèque partagée Crochompte · " + p2.licence;
+        np.texte = p2.texte + (p2.materiel ? "\n\nMatériel : " + p2.materiel : "");
+        np.notes = p2.notes || "";
+        sauverTout(); view.biblioVu = null; view.sousPatrons = null; view.patronVu = np.id; render();
+        toast("Copié dans tes patrons");
+      }, true));
+      bar.appendChild(bouton("Fermer", function(){ view.biblioVu = null; render(); }));
+      if (p2.user_id === r.moi){
+        bar.appendChild(bouton("Retirer de la bibliothèque", function(){
+          if (!confirm("Retirer « "+p2.titre+" » de la bibliothèque partagée ?\n\n"+
+                       "Ta copie personnelle n'est pas touchée.")) return;
+          bibliothequePartagee.retirer(p2.id).then(function(x){
+            if (x.erreur){ toast(x.erreur); return; }
+            view.biblioVu = null; render(); toast("Retiré de la bibliothèque");
+          });
+        }));
+      } else {
+        bar.appendChild(bouton("Signaler", function(){
+          if (!confirm("Signaler ce patron ?\n\n"+
+                       "À utiliser si tu reconnais un patron protégé publié sans droit, "+
+                       "ou un contenu qui n'a rien à faire ici. Au troisième signalement, "+
+                       "il est retiré automatiquement le temps d'une vérification.")) return;
+          bibliothequePartagee.signaler(p2.id).then(function(x){
+            toast(x.erreur ? x.erreur : "Signalé. Merci.");
+            view.biblioVu = null; render();
+          });
+        }));
+      }
+      zone.appendChild(det);
+      det.scrollIntoView({behavior:"smooth", block:"start"});
+    }
+  });
+}
+
+/* Publier un patron : la déclaration de droits n'est pas une formalité, c'est
+   la condition. Sans elle, le bouton ne part pas — et le serveur refuserait. */
+function cartePublication(p){
+  if (!bibliothequePartagee) return null;
+  var c = el('<div class="card" style="margin-bottom:16px"><header><h2>Partager ce patron</h2>'+
+    '<p>Le rendre visible par les autres utilisatrices de Crochompte.</p></header><div class="body">'+
+    '<p style="margin:0 0 12px">Seul <b>le texte</b> du patron est publié. '+
+    'Tes pages photographiées restent sur ton appareil : une page scannée est presque toujours '+
+    'la reproduction d\'un patron acheté, et cela ne peut pas être partagé.</p>'+
+    '<div class="grid2">'+
+      '<label class="f"><span>Nom d\'autrice affiché</span>'+
+        '<input id="pb-auteur" type="text" maxlength="60" value="'+esc(p.auteur||"")+'" placeholder="ton pseudo ou ton nom de plume"></label>'+
+      '<label class="f"><span>Niveau</span><select id="pb-niv">'+
+        '<option value="">—</option><option value="1">Facile</option>'+
+        '<option value="2">Intermédiaire</option><option value="3">Exigeant</option></select></label>'+
+    '</div>'+
+    '<label class="f" style="margin-top:10px"><span>Matériel (fil, crochet, dimensions finies)</span>'+
+      '<input id="pb-mat" type="text" maxlength="200" placeholder="coton DK, crochet 3 mm, 18 cm de haut"></label>'+
+    '<label class="f" style="margin-top:10px"><span>Licence : ce que les autres ont le droit d\'en faire</span>'+
+      '<select id="pb-lic"></select></label>'+
+    '<p class="hint" id="pb-lic-aide" style="margin-top:4px"></p>'+
+    '<label style="display:flex;gap:10px;align-items:flex-start;margin-top:16px;cursor:pointer">'+
+      '<input type="checkbox" id="pb-droits" style="margin-top:3px;width:18px;height:18px;flex:none">'+
+      '<span>Je certifie avoir écrit ce patron moi-même, ou détenir les droits qui me permettent '+
+      'de le partager. Je sais que publier le patron de quelqu\'un d\'autre sans son accord est '+
+      'une contrefaçon, et que <b>j\'en réponds seule</b> : Crochompte met l\'espace de partage '+
+      'à disposition entre utilisatrices, il ne relit ni ne valide ce qui y est publié.</span></label>'+
+    '<div class="savebar" style="margin-top:16px"></div>'+
+    '</div></div>');
+  var selLic = c.querySelector("#pb-lic"), aide = c.querySelector("#pb-lic-aide");
+  LICENCES.forEach(function(l){ selLic.appendChild(el('<option value="'+esc(l.id)+'">'+esc(l.nom)+'</option>')); });
+  function majAide(){
+    var l = LICENCES.filter(function(x){ return x.id === selLic.value; })[0];
+    aide.textContent = l ? l.aide : "";
+  }
+  selLic.addEventListener("change", majAide); majAide();
+  var bPub = bouton("Publier dans la bibliothèque", function(){
+    if (!c.querySelector("#pb-droits").checked){
+      toast("Coche la déclaration de droits pour publier"); return;
+    }
+    var texte = (p.texte||"").trim();
+    if (texte.length < 80){
+      toast("Colle d'abord le texte du patron (80 caractères minimum)"); return;
+    }
+    bPub.disabled = true; bPub.textContent = "Publication…";
+    bibliothequePartagee.publier({
+      titre: p.titre || "Patron sans titre",
+      auteur: c.querySelector("#pb-auteur").value.trim(),
+      famille: null,
+      niveau: Number(c.querySelector("#pb-niv").value) || null,
+      materiel: c.querySelector("#pb-mat").value.trim(),
+      texte: texte, notes: p.notes || "",
+      licence: selLic.value, droits: true
+    }).then(function(r){
+      bPub.disabled = false; bPub.textContent = "Publier dans la bibliothèque";
+      if (r.erreur){ toast(r.erreur); return; }
+      p.publie = true; sauverTout(); render();
+      toast("Publié. Merci — les autres pourront s'en servir.");
+    });
+  }, true);
+  c.querySelector(".savebar").appendChild(bPub);
+  return c;
 }
 
 function renderPatronDetail(main, p){
@@ -6470,6 +7667,10 @@ function renderPatronDetail(main, p){
     sauver();
   });
   main.appendChild(cT);
+
+  /* --- partage dans la bibliothèque commune --- */
+  var cPub = cartePublication(p);
+  if (cPub) main.appendChild(cPub);
 
   /* --- rattachement à une création --- */
   var cR = el('<div class="card" style="margin-bottom:16px"><header><h2>Relier à une création</h2>'+

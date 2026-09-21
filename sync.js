@@ -79,6 +79,10 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
     /* Horodatage du dernier état connu du serveur. Sert à détecter qu'un
        autre appareil a écrit entre-temps. */
     vuLe: null,
+    /* Vrai dès qu'une modification locale n'est pas encore partie. C'est ce
+       qui permet, au retour sur l'onglet, de savoir s'il faut envoyer son
+       travail ou aller chercher celui de l'autre appareil. */
+    sale: false,
     enCours: false,
     minuteur: null,
     minuteurPseudo: null,
@@ -170,32 +174,62 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 
   /* ───────── synchronisation de l'état ───────── */
 
+  /* Un nom d'appareil lisible, pour que l'historique dise « ton téléphone »
+     plutôt qu'une suite de chiffres. Rien d'identifiant n'est envoyé. */
+  function nomAppareil(){
+    var ua = navigator.userAgent || "";
+    if (/iPad|Tablet/i.test(ua)) return "tablette";
+    if (/Mobi|Android|iPhone/i.test(ua)) return "téléphone";
+    return "ordinateur";
+  }
+
+  /* Archive l'état actuellement EN LIGNE avant de le remplacer.
+     C'est la pièce maîtresse : tant que cet appel existe, aucune écriture
+     ne peut faire disparaître définitivement le travail d'un autre appareil. */
+  function archiver(donnees, maj, raison){
+    if (!etat.session || !donnees) return Promise.resolve();
+    return sb.from("ateliers_versions").insert({
+      user_id: etat.session.user.id,
+      donnees: donnees, maj: maj || new Date().toISOString(),
+      appareil: nomAppareil(), raison: raison || "remplacee"
+    }).then(function(){
+      return sb.rpc("purger_versions");
+    }).catch(function(){ /* l'archivage ne doit jamais bloquer un envoi */ });
+  }
+
+  /* ENVOYER — ne refuse jamais.
+     Avant cette version, un conflit bloquait l'enregistrement : l'appareil
+     ne pouvait plus rien sauvegarder, et le seul bouton proposé écrasait son
+     travail. Désormais : si la version en ligne est plus récente que ce que
+     cet appareil avait lu, on l'archive d'abord, puis on écrit. Le dernier
+     envoi gagne — ce que tout le monde attend — et l'écrasé reste récupérable
+     dans l'historique. */
   function envoyer(){
     if (!etat.session || etat.enCours) return Promise.resolve();
     etat.enCours = true;
     var corps = pont.lire();
     return sb.from(TABLE)
-      .select("maj")
+      .select("donnees, maj")
       .eq("user_id", etat.session.user.id)
       .maybeSingle()
       .then(function(r){
-        /* Quelqu'un d'autre — ou le même appareil ailleurs — a écrit après
-           notre dernière lecture : on ne recouvre pas en silence. */
-        if (r.data && etat.vuLe && r.data.maj > etat.vuLe){
-          etat.enCours = false;
-          peindre({conflit: r.data.maj});
-          return null;
-        }
-        var maj = new Date().toISOString();
-        return sb.from(TABLE).upsert({
-          user_id: etat.session.user.id,
-          donnees: corps,
-          maj: maj
-        }, {onConflict: "user_id"}).then(function(res){
-          etat.enCours = false;
-          if (res.error) { peindre({erreur: res.error.message}); return; }
-          etat.vuLe = maj;
-          peindre();
+        var ecrase = !!(r.data && etat.vuLe && r.data.maj > etat.vuLe);
+        var avant = ecrase ? archiver(r.data.donnees, r.data.maj, "remplacee")
+                           : Promise.resolve();
+        return avant.then(function(){
+          var maj = new Date().toISOString();
+          return sb.from(TABLE).upsert({
+            user_id: etat.session.user.id,
+            donnees: corps,
+            maj: maj
+          }, {onConflict: "user_id"}).then(function(res){
+            etat.enCours = false;
+            if (res.error) { peindre({erreur: res.error.message}); return; }
+            etat.vuLe = maj;
+            etat.sale = false;
+            etat.versionsSues = null;
+            peindre(ecrase ? {archive: r.data.maj} : undefined);
+          });
         });
       })
       .catch(function(e){
@@ -204,7 +238,7 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
       });
   }
 
-  function recevoir(){
+  function recevoir(archiverLocal){
     if (!etat.session) return Promise.resolve(false);
     return sb.from(TABLE)
       .select("donnees, maj")
@@ -212,8 +246,40 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
       .maybeSingle()
       .then(function(r){
         if (r.error || !r.data) return false;
-        etat.vuLe = r.data.maj;
-        return pont.ecrire(r.data.donnees);
+        /* Récupérer remplace ce qui est dans ce navigateur : on en garde
+           une copie avant, pour que ce geste soit lui aussi réversible. */
+        var avant = archiverLocal
+          ? archiver(pont.lire(), etat.vuLe || new Date().toISOString(), "avant_recuperation")
+          : Promise.resolve();
+        return avant.then(function(){
+          etat.vuLe = r.data.maj;
+          etat.sale = false;
+          return pont.ecrire(r.data.donnees);
+        });
+      })
+      .catch(function(){ return false; });
+  }
+
+  /* SYNCHRONISER — ce qui se passe à l'ouverture et au retour sur l'onglet.
+     L'artisane ne doit pas avoir à se demander si elle est à jour, ni à
+     cliquer sur un bouton dont elle ne peut pas deviner l'effet.
+       • du travail local pas encore envoyé  → on l'envoie ;
+       • sinon, une version plus récente en ligne → on la récupère.
+     Dans les deux cas, ce qui est remplacé est archivé avant. */
+  function synchroniser(){
+    if (!etat.session || etat.enCours) return Promise.resolve();
+    if (etat.sale) return envoyer();
+    return sb.from(TABLE)
+      .select("maj")
+      .eq("user_id", etat.session.user.id)
+      .maybeSingle()
+      .then(function(r){
+        if (r.error || !r.data) return false;
+        if (etat.vuLe && r.data.maj <= etat.vuLe) return false;
+        return recevoir(true).then(function(ok){
+          if (ok) pont.toast("Atelier mis à jour depuis ton autre appareil.");
+          return ok;
+        });
       })
       .catch(function(){ return false; });
   }
@@ -222,14 +288,23 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
      personne n'a besoin d'un aller-retour réseau par frappe au clavier. */
   function signaler(){
     if (!etat.session) return;
+    etat.sale = true;
     if (etat.minuteur) clearTimeout(etat.minuteur);
     etat.minuteur = setTimeout(envoyer, 2500);
   }
 
-  /* Un dernier envoi quand on ferme l'onglet : sinon les 2,5 dernières
-     secondes de travail seraient perdues pour les autres appareils. */
-  window.addEventListener("pagehide", function(){
-    if (etat.session && etat.minuteur) { clearTimeout(etat.minuteur); envoyer(); }
+  /* Un dernier envoi quand on quitte la page. Sur mobile, « pagehide » n'est
+     pas toujours déclenché — l'onglet peut être gelé puis tué en silence —,
+     alors on écoute aussi le passage en arrière-plan, qui l'est, lui. */
+  function envoiDeSortie(){
+    if (!etat.session || !etat.sale) return;
+    if (etat.minuteur) clearTimeout(etat.minuteur);
+    envoyer();
+  }
+  window.addEventListener("pagehide", envoiDeSortie);
+  document.addEventListener("visibilitychange", function(){
+    if (document.visibilityState === "hidden") envoiDeSortie();
+    else synchroniser();   /* de retour sur l'onglet : on se remet à jour */
   });
 
   /* ───────── photos ───────── */
@@ -350,12 +425,15 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
           'atelier sur ton téléphone comme sur ton ordinateur.') +
       '</p></header><div class="body">';
 
-    if (msg.conflit){
-      html += '<div class="banner" style="background:var(--warn-soft);border-color:var(--warn)">'+
-        '<p><b>Un autre appareil a enregistré du travail après toi</b>, le '+
-        echappe(dateLisible(msg.conflit)) + '. Je n\'ai rien écrasé. '+
-        'Récupère d\'abord cette version, ou force l\'envoi de celle-ci si tu es sûre '+
-        'qu\'elle est la bonne.</p></div>';
+    /* Plus de message de conflit : il bloquait l'enregistrement et proposait
+       un choix que personne ne pouvait faire en connaissance de cause. On
+       informe après coup, et on dit où retrouver ce qui a été remplacé. */
+    if (msg.archive){
+      html += '<div class="banner">'+
+        '<p><b>Ton autre appareil avait enregistré du travail de son côté</b>, le '+
+        echappe(dateLisible(msg.archive)) + '. C\'est ta version d\'ici qui est '+
+        'maintenant en ligne, et celle de l\'autre appareil a été rangée dans '+
+        'l\'historique juste en dessous — rien n\'est perdu.</p></div>';
     }
     if (msg.erreur){
       html += '<div class="banner" style="background:var(--bad-soft);border-color:var(--bad)">'+
@@ -484,15 +562,16 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
         '<p class="hint" style="margin:0">' +
         (etat.vuLe ? 'Dernier enregistrement en ligne : ' + echappe(dateLisible(etat.vuLe))
                    : 'Aucun enregistrement en ligne pour l\'instant.') + '</p>'+
+        '<p class="hint" style="margin:6px 0 0">Ton atelier part tout seul quelques secondes '+
+        'après chaque modification, et se remet à jour tout seul quand tu reviens sur '+
+        'l\'application. Tu n\'as rien à cliquer.</p>'+
         '<div class="et-act" style="margin-top:14px">'+
-          '<button type="button" class="btn primary" id="sy-push">Envoyer maintenant</button>'+
-          '<button type="button" class="btn" id="sy-pull">Récupérer depuis le serveur</button>'+
+          '<button type="button" class="btn" id="sy-push">Enregistrer en ligne maintenant</button>'+
           '<button type="button" class="btn" id="sy-photos">Synchroniser les photos</button>'+
+          '<button type="button" class="btn" id="sy-hist">Historique</button>'+
           '<button type="button" class="btn" id="sy-out">Se déconnecter</button>'+
         '</div>'+
-        '<p class="hint">« Récupérer » remplace ce qui est dans ce navigateur par la version '+
-        'en ligne. Fais-le en arrivant sur un nouvel appareil, pas au milieu d\'un travail '+
-        'en cours.</p>'+
+        '<div id="sy-hist-zone"></div>'+
 
         '<div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--rule)">'+
           '<p style="margin:0 0 10px"><b>Mes informations</b></p>'+
@@ -681,15 +760,12 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
                 return;
               }
               etat.brouillon.identifiantConnexion = "";
-              sb.auth.setSession({access_token: r.access_token, refresh_token: r.refresh_token})
-                .then(function(res){
-                  etat.session = (res.data && res.data.session) || null;
-                  return recupererProfil();
-                }).then(function(){
-                  pont.toast("Connectée. Si tu arrives d'un autre appareil, clique sur "+
-                             "« Récupérer depuis le serveur ».");
-                  peindre();
-                });
+              /* On ne fait rien de plus ici : setSession() déclenche lui-même
+                 onAuthStateChange (événement SIGNED_IN), qui s'occupe déjà de
+                 etat.session, du profil et du message de bienvenue. Dupliquer
+                 ce travail ici affichait le message « Connectée » deux fois
+                 et interrogeait le profil deux fois pour rien. */
+              sb.auth.setSession({access_token: r.access_token, refresh_token: r.refresh_token});
             });
         });
       }
@@ -697,17 +773,72 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
     } else {
       q("#sy-push").addEventListener("click", function(){
         var b = this; b.disabled = true; b.textContent = "Envoi…";
-        etat.vuLe = null;   /* envoi forcé, assumé */
+        etat.sale = true;
         envoyer().then(function(){ pont.toast("Atelier enregistré en ligne"); });
       });
-      q("#sy-pull").addEventListener("click", function(){
-        if (!confirm("Remplacer ce qui est dans ce navigateur par la version en ligne ?\n\n"+
-                     "Ce qui n'a pas été envoyé sera perdu.")) return;
-        var b = this; b.disabled = true; b.textContent = "Récupération…";
-        recevoir().then(function(ok){
-          peindre(ok ? {info:"Atelier récupéré."} : {erreur:"Rien à récupérer pour ce compte."});
-          if (ok) pont.toast("Atelier récupéré");
-        });
+      /* L'historique : la seule façon de revenir en arrière, et le filet qui
+         rend toute la synchronisation non destructrice. */
+      q("#sy-hist").addEventListener("click", function(){
+        var z = q("#sy-hist-zone");
+        if (z.getAttribute("data-ouvert") === "1"){
+          z.innerHTML = ""; z.setAttribute("data-ouvert","0"); return;
+        }
+        z.setAttribute("data-ouvert","1");
+        z.innerHTML = '<p class="hint" style="margin-top:12px">Chargement de l\'historique…</p>';
+        sb.from("ateliers_versions")
+          .select("id, maj, appareil, raison, cree")
+          .eq("user_id", etat.session.user.id)
+          .order("cree", {ascending:false})
+          .limit(20)
+          .then(function(r){
+            if (r.error){
+              z.innerHTML = '<p class="hint" style="margin-top:12px">Historique indisponible : '+
+                echappe(r.error.message) + '</p>';
+              return;
+            }
+            var l = r.data || [];
+            if (!l.length){
+              z.innerHTML = '<p class="hint" style="margin-top:12px">Aucune version archivée. '+
+                'Il n\'y en a que lorsqu\'un autre appareil a enregistré de son côté.</p>';
+              return;
+            }
+            var h = '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--rule)">'+
+              '<p style="margin:0 0 4px"><b>Versions précédentes de ton atelier</b></p>'+
+              '<p class="hint" style="margin:0 0 10px">Chaque fois qu\'une version en remplace une '+
+              'autre, l\'ancienne est rangée ici. Restaurer remplace ce que tu as dans ce navigateur '+
+              '— et la version d\'aujourd\'hui y sera rangée à son tour.</p>';
+            l.forEach(function(v){
+              h += '<div style="display:flex;gap:10px;align-items:center;justify-content:space-between;'+
+                'padding:8px 0;border-bottom:1px solid var(--rule)">'+
+                '<span>'+ echappe(dateLisible(v.cree)) +
+                (v.appareil ? ' · depuis ton ' + echappe(v.appareil) : '') +
+                (v.raison === "avant_recuperation" ? ' · avant une récupération' : '') + '</span>'+
+                '<button type="button" class="btn sm" data-restaurer="'+ v.id +'">Restaurer</button>'+
+                '</div>';
+            });
+            z.innerHTML = h + '</div>';
+            z.querySelectorAll("[data-restaurer]").forEach(function(b){
+              b.addEventListener("click", function(){
+                if (!confirm("Remettre ton atelier dans l'état de cette version ?\n\n"+
+                             "Ce que tu as maintenant sera rangé dans l'historique, "+
+                             "tu pourras y revenir.")) return;
+                b.disabled = true; b.textContent = "…";
+                sb.from("ateliers_versions").select("donnees")
+                  .eq("id", Number(b.getAttribute("data-restaurer"))).maybeSingle()
+                  .then(function(rr){
+                    if (rr.error || !rr.data) { pont.toast("Version introuvable"); return; }
+                    return archiver(pont.lire(), etat.vuLe, "avant_recuperation").then(function(){
+                      pont.ecrire(rr.data.donnees);
+                      etat.sale = true;
+                      return envoyer();
+                    }).then(function(){
+                      pont.toast("Atelier restauré");
+                      pont.redessiner();
+                    });
+                  });
+              });
+            });
+          });
       });
       q("#sy-photos").addEventListener("click", function(){
         var b = this; b.disabled = true;
@@ -800,6 +931,86 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
     }
   });
 
+  /* ─────────────────────────────────────────────────────────────────────
+     Bibliothèque de patrons partagés
+     Tout passe par la table patrons_publics et ses règles : cette
+     application n'a aucun privilège particulier. Elle ne peut publier que
+     sous son propre compte, et ne modifier que ses propres lignes — non
+     parce que le code s'en abstient, mais parce que le serveur refuse.
+     Voir schema-patrons-publics.sql.
+     ───────────────────────────────────────────────────────────────────── */
+  var BIBLIO = {
+    disponible: function(){ return !!etat.session; },
+    /* Les patrons visibles par toutes, les plus récents d'abord. */
+    lister: function(recherche){
+      var q = sb.from("patrons_publics")
+        .select("id,titre,auteur_affiche,famille,niveau,materiel,texte,notes,licence,cree,user_id")
+        .eq("retire", false)
+        .order("cree", {ascending:false})
+        .limit(200);
+      return q.then(function(r){
+        if (r.error) return {erreur: r.error.message, liste: []};
+        var l = r.data || [];
+        if (recherche){
+          var s = String(recherche).toLowerCase();
+          l = l.filter(function(p){
+            return (p.titre + " " + p.auteur_affiche + " " + (p.materiel||"")).toLowerCase().indexOf(s) !== -1;
+          });
+        }
+        return {liste: l, moi: etat.session ? etat.session.user.id : null};
+      });
+    },
+    /* Publier : la déclaration de droits est exigée ici ET par la base.
+       Le texte seul part ; les pages scannées ne quittent jamais l'appareil. */
+    publier: function(p){
+      if (!etat.session) return Promise.resolve({erreur:"Connecte-toi d'abord."});
+      if (!p.droits) return Promise.resolve({erreur:"La déclaration de droits est obligatoire."});
+      return sb.from("patrons_publics").insert({
+        user_id: etat.session.user.id,
+        titre: String(p.titre||"").trim(),
+        auteur_affiche: String(p.auteur||etat.pseudo||"").trim(),
+        famille: p.famille || null,
+        niveau: p.niveau || null,
+        materiel: String(p.materiel||"").trim() || null,
+        texte: String(p.texte||"").trim(),
+        notes: String(p.notes||"").trim() || null,
+        licence: p.licence || "CC BY-NC-SA 4.0",
+        droits_declares: true
+      }).select("id").then(function(r){
+        if (r.error) return {erreur: messagePublication(r.error.message)};
+        return {ok:true, id: r.data && r.data[0] && r.data[0].id};
+      });
+    },
+    /* Retirer un patron qu'on a publié. La règle de la base fait le reste :
+       une tentative sur la ligne d'une autre ne supprime simplement rien. */
+    retirer: function(id){
+      return sb.from("patrons_publics").delete().eq("id", id).then(function(r){
+        return r.error ? {erreur:r.error.message} : {ok:true};
+      });
+    },
+    signaler: function(id){
+      return sb.rpc("signaler_patron", {p_id:id}).then(function(r){
+        return r.error ? {erreur:r.error.message} : {ok:true};
+      });
+    }
+  };
+  /* Les messages du serveur sont techniques ; ceux-ci disent quoi corriger. */
+  function messagePublication(brut){
+    var m = String(brut||"");
+    if (m.indexOf("patrons_publics_contenu") !== -1)
+      return "Il manque quelque chose : un titre de 2 à 120 caractères, "+
+             "un nom d'autrice, et un patron d'au moins 80 caractères.";
+    if (m.indexOf("patrons_publics_droits") !== -1)
+      return "La déclaration de droits est obligatoire.";
+    if (m.indexOf("patrons_publics_licence") !== -1)
+      return "Choisis une des licences proposées.";
+    if (m.indexOf("relation") !== -1 && m.indexOf("does not exist") !== -1)
+      return "La bibliothèque partagée n'est pas encore installée sur le serveur "+
+             "(schema-patrons-publics.sql à exécuter dans Supabase).";
+    return m;
+  }
+  if (pont.definirBibliotheque) pont.definirBibliotheque(BIBLIO);
+
   sb.auth.onAuthStateChange(function(ev, session){
     if (ev === "PASSWORD_RECOVERY"){
       /* La personne vient de cliquer sur un lien « mot de passe oublié ».
@@ -815,8 +1026,13 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
     etat.session = session || null;
     if (!etaitConnectee && session && !etat.recuperation){
       recupererProfil().then(function(){
-        pont.toast("Connectée. Si tu arrives d'un autre appareil, clique sur "+
-                   "« Récupérer depuis le serveur ».");
+        peindre();
+        /* Se mettre à jour fait partie de la connexion : arriver depuis un
+           autre appareil et devoir cliquer quelque part pour voir son travail
+           est un piège, pas une fonctionnalité. */
+        return synchroniser();
+      }).then(function(){
+        pont.toast("Connectée. Ton atelier est à jour.");
         peindre();
       });
     } else if (!session){
