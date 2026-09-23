@@ -130,7 +130,12 @@
   .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px;}
   .tile{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:14px 16px;}
   .tile .k{font-size:12px;color:var(--muted);font-weight:500;}
-  .tile .v{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;font-size:24px;line-height:1.2;margin-top:6px;letter-spacing:-.02em;}
+  .tile .v{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;font-size:24px;line-height:1.2;margin-top:6px;letter-spacing:-.02em;white-space:nowrap;}
+  /* Un chiffre d'affaires à cinq chiffres ne doit pas renvoyer le « € » à la
+     ligne suivante : la valeur rétrécit au lieu de se casser. */
+  .tile .v.long{font-size:19px;}
+  .tile .v.plus-long{font-size:16.5px;}
+  .tile .v.tres-long{font-size:14.5px;}
   .tile .v.good{color:var(--good);} .tile .v.bad{color:var(--bad);} .tile .v.warn{color:var(--warn);}
   .tile .s{font-size:12px;color:var(--muted);margin-top:4px;}
   .sechead{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:26px 0 12px;}
@@ -258,8 +263,19 @@
   .lignestock{display:flex;flex-direction:column;gap:0;}
   /* Liseré de couleur sur la ligne : l'état se voit avant même de lire. */
   tbody tr[data-etat] td:first-child{box-shadow:inset 3px 0 0 var(--etat-c);}
-  @media (max-width:720px){
+    /* Ce qui change vraiment sur un écran étroit. */
+@media (max-width:720px){
     .planche{border-radius:10px;}
+    .resp tbody tr[data-etat]{border-left:3px solid var(--etat-c);}
+    .resp tbody tr[data-etat] td:first-child{box-shadow:none;}
+  }
+  /* ─────────────────────────────────────────────────────────────────
+     Ces règles étaient enfermées par erreur dans la requête « écran
+     étroit » ci-dessus : une accolade mal placée. Résultat, sur un
+     ordinateur, la mise en route, le catalogue en liste, les cartes de
+     patrons et le compteur de rangs s'affichaient entièrement sans
+     style. Elles sont désormais au bon niveau, donc actives partout.
+     ───────────────────────────────────────────────────────────────── */
     .brefs{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:2px 18px;margin:0;}
     .brefs > div{display:grid;grid-template-columns:1fr auto;gap:14px;align-items:baseline;
       padding:9px 0;border-bottom:1px solid var(--rule);}
@@ -337,9 +353,6 @@
     .impc .b{padding:10px;display:grid;gap:8px;}
     .impc select{width:100%;}
     .impc .fn{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-    .resp tbody tr[data-etat]{border-left:3px solid var(--etat-c);}
-    .resp tbody tr[data-etat] td:first-child{box-shadow:none;}
-  }
   /* Niveau de difficulté : trois segments, pas trois points façon menu. */
   .niv{display:inline-flex;gap:2px;vertical-align:1px;margin-right:5px;}
   .niv i{width:7px;height:4px;border-radius:1px;background:var(--rule-strong);display:block;}
@@ -980,9 +993,37 @@ function sauver(){
     try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){}
   }, 250);
 }
+/* ═════ MÉMOIRE DE SESSION ET FILE D'ATTENTE ═════
+   Deux petites marques posées dans ce navigateur, lues au démarrage suivant.
+
+   « session » : cet appareil a déjà ouvert un compte ici. Elle autorise
+   l'atelier à s'ouvrir quand le module de connexion ne se charge pas — sur un
+   marché sans réseau, l'artisane doit pouvoir noter sa vente. Les données sont
+   déjà dans ce navigateur : ne pas les montrer ne protège personne, ça bloque
+   seulement leur propriétaire.
+
+   « aEnvoyer » : du travail fait ici n'est pas encore parti sur le serveur.
+   Sans elle, une modification faite hors ligne puis un rechargement faisaient
+   descendre la version du serveur par-dessus (elle était archivée, donc
+   récupérable — mais il fallait le savoir). Avec elle, le module sait qu'il
+   doit envoyer avant de regarder ailleurs. */
+var CLE_SESSION  = KEY + ".session";
+var CLE_AENVOYER = KEY + ".aEnvoyer";
+function marquer(cle, valeur){
+  try{
+    if (valeur === null) localStorage.removeItem(cle);
+    else localStorage.setItem(cle, JSON.stringify(valeur));
+  }catch(e){}
+}
+function marque(cle){
+  try{ var v = localStorage.getItem(cle); return v ? JSON.parse(v) : null; }catch(e){ return null; }
+}
+/* Le compte qui a ouvert l'atelier dans ce navigateur la dernière fois. */
+function uidSession(){ var m = marque(CLE_SESSION); return m && m.uid || null; }
 function sauverTout(){
   try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){}
   if (window.CrochompteSync && window.CrochompteSync.signaler) window.CrochompteSync.signaler();
+  else if (modeHorsLigne) marquer(CLE_AENVOYER, {depuis: Date.now(), uid: uidSession()});
 }
 
 /* ═════ PONT DE SYNCHRONISATION ═════
@@ -1215,9 +1256,24 @@ function alertesStock(){
 
 /* ═════ 5. FORMATS ═════ */
 
+/* Séparateur de milliers : l'espace fine insécable, comme l'exige la typographie
+   française (72 000,00 € et non 72000,00 €). Insécable pour que le nombre ne se
+   coupe jamais en fin de ligne, fine pour ne pas écarter les chiffres. */
+var FINE = " ";
+function grouperMilliers(s){
+  var p = s.split(","), e = p[0];
+  if (e.length > 3) e = e.replace(/\B(?=(\d{3})+(?!\d))/g, FINE);
+  return p.length > 1 ? e + "," + p[1] : e;
+}
 function eur(n){
   if (!isFinite(n)) n = 0;
-  return (n<0?"−":"") + Math.abs(n).toFixed(2).replace(".",",") + " €";
+  return (n<0?"−":"") + grouperMilliers(Math.abs(n).toFixed(2).replace(".",",")) + " €";
+}
+/* Pour les montants ronds par nature — un plafond légal, un seuil. « 85 000 € »
+   se lit d'un coup d'œil ; « 85 000,00 € » fait croire à un calcul. */
+function eurRond(n){
+  if (!isFinite(n)) n = 0;
+  return grouperMilliers(Math.round(n).toString()) + " €";
 }
 function qte(n, unite){
   if (!isFinite(n)) n = 0;
@@ -1297,8 +1353,18 @@ function onglets(){
   });
 }
 
+/* Changer d'onglet, c'est arriver sur son écran d'accueil — pas reprendre là
+   où on avait laissé une fiche ouverte la dernière fois. On referme donc les
+   sous-vues, sauf si l'appelant demande explicitement le contraire (par
+   exemple « ouvre CETTE commande », depuis un autre écran). */
 function aller(tab, opts){
   opts = opts || {};
+  if (!opts.garderVue){
+    if (tab !== "catalogue") view.modeleVu = null;
+    if (tab !== "commandes") view.cmdVue = null;
+    if (tab !== "patrons")   { view.patronVu = null; view.sousPatrons = null; }
+    if (tab !== "fiche")     view.ficheId = null;
+  }
   if (opts.sub) view.sub = opts.sub;
   view.tab = tab;
   render();
@@ -1317,11 +1383,89 @@ function renderNav(){
   });
 }
 
+/* ───────────────────────────────────────────────────────────────────────
+   Garder sa place pendant qu'on écrit
+   L'application redessine l'écran entier à chaque frappe. Sans précaution,
+   le champ en cours de saisie est détruit puis recréé : le curseur saute au
+   début, et la page remonte en haut. C'était le défaut le plus agaçant de
+   l'outil — on effaçait un caractère au milieu d'un mot et on se retrouvait
+   ailleurs.
+   Plutôt que de corriger écran par écran, on note ici où était le curseur
+   avant de redessiner, et on l'y remet après. Une seule fois, pour tous les
+   champs de l'application.
+   ─────────────────────────────────────────────────────────────────────── */
+function repererChamp(){
+  var a = document.activeElement;
+  if (!a || a === document.body || !a.tagName) return null;
+  var t = a.tagName.toLowerCase();
+  if (t !== "input" && t !== "textarea" && t !== "select") return null;
+
+  /* Un sélecteur qui survivra à la reconstruction : l'identifiant s'il y en
+     a un, sinon la combinaison d'attributs qui désigne ce champ-là et pas
+     un autre (la ligne de matière, le poste de temps, le champ de commande). */
+  var sel = null;
+  if (a.id){
+    sel = "#" + a.id.replace(/([^\w-])/g, "\\$1");
+  } else {
+    var attrs = ["data-role","data-c","data-p","data-r","data-r2f","data-poste"];
+    for (var i=0;i<attrs.length;i++){
+      var v = a.getAttribute(attrs[i]);
+      if (!v) continue;
+      var morceau = "[" + attrs[i] + '="' + v + '"]';
+      var ligne = a.closest("[data-mid],[data-idx],[data-cid]");
+      if (ligne){
+        var cle = ligne.hasAttribute("data-mid") ? "data-mid"
+                : ligne.hasAttribute("data-cid") ? "data-cid" : "data-idx";
+        sel = '[' + cle + '="' + ligne.getAttribute(cle) + '"] ' + morceau;
+      } else {
+        sel = morceau;
+      }
+      break;
+    }
+  }
+  if (!sel) return null;
+  var d = null, f = null;
+  /* selectionStart n'existe pas sur tous les types de champs (date, number
+     selon le navigateur) : on tente, sans en faire une condition. */
+  try{ d = a.selectionStart; f = a.selectionEnd; }catch(e){}
+  return {sel:sel, debut:d, fin:f, defilement:window.scrollY};
+}
+function remettreChamp(p){
+  if (!p) return;
+  var e;
+  try{ e = document.querySelector(p.sel); }catch(x){ return; }
+  if (!e) return;
+  try{
+    e.focus({preventScroll:true});
+    if (p.debut !== null && p.debut !== undefined && e.setSelectionRange)
+      e.setSelectionRange(p.debut, p.fin);
+  }catch(x){}
+  /* Le défilement se restaure même si le champ a disparu : la page ne doit
+     jamais sauter toute seule pendant qu'on travaille. */
+  if (typeof p.defilement === "number") window.scrollTo(0, p.defilement);
+}
+
+/* Les tuiles d'indicateurs ont une largeur fixe et un chiffre de taille très
+   variable : 0,00 € chez l'une, 72 000,00 € chez l'autre. Plutôt que de choisir
+   une taille qui va mal aux deux, on l'ajuste à ce qu'il y a à lire. */
+function ajusterValeurs(racine){
+  var vs = racine.querySelectorAll(".tile .v");
+  for (var i=0;i<vs.length;i++){
+    var n = (vs[i].textContent||"").length;
+    vs[i].classList.remove("long","plus-long","tres-long");
+    if (n >= 15)      vs[i].classList.add("tres-long");
+    else if (n >= 13) vs[i].classList.add("plus-long");
+    else if (n >= 10) vs[i].classList.add("long");
+  }
+}
+
 function render(){
+  var place = repererChamp();
   arreterVoix();
   renderNav();
   var main = document.getElementById("main");
   main.innerHTML = "";
+  if (modeHorsLigne) main.appendChild(bandeauHorsLigne());
   if (view.tab === "accueil")        renderAccueil(main);
   else if (view.tab === "patrons")   renderPatrons(main);
   else if (view.tab === "commandes") renderCommandes(main);
@@ -1334,9 +1478,22 @@ function render(){
   else if (view.tab === "stock")     renderStock(main);
   else                               renderReglages(main);
   hydraterPhotos(main);
+  ajusterValeurs(main);
   majBarreChrono();
-  window.scrollTo(0,0);
+  /* Remonter en haut n'a de sens qu'en arrivant sur un écran : en pleine
+     saisie, c'était la page qui sautait sous les doigts. On ne remonte donc
+     que si on a réellement changé de vue. */
+  var vueMaintenant = view.tab + "|" + (view.sub||"") + "|" + (view.modeleVu||"") +
+                      "|" + (view.ficheId||"") + "|" + (view.cmdVue||"") +
+                      "|" + (view.patronVu||"");
+  if (vueMaintenant !== derniereVue){
+    derniereVue = vueMaintenant;
+    window.scrollTo(0,0);
+  } else {
+    remettreChamp(place);
+  }
 }
+var derniereVue = null;
 
 /* ═════ 6 bis. ÉCRAN DE CONNEXION OBLIGATOIRE ═════
    Seulement quand config.js déclare une installation avec comptes. Sans lui,
@@ -1350,6 +1507,7 @@ function render(){
    sûr que la personne a le droit d'y être. */
 var etatAcces = {recu:false, exige:false, connecte:false};
 var minuteurChargement = null;
+var modeHorsLigne = false;
 
 function definirEtatConnexion(info){
   info = info || {};
@@ -1357,12 +1515,35 @@ function definirEtatConnexion(info){
   etatAcces.recu = true;
   etatAcces.exige = !!info.exige;
   etatAcces.connecte = !!info.connecte;
+  modeHorsLigne = false;
+  /* On se souvient qu'un compte a été ouvert ici, et on l'oublie à la
+     déconnexion : la porte de secours ne doit s'ouvrir que pour quelqu'un
+     qui est déjà entré par la grande. */
+  if (etatAcces.exige){
+    marquer(CLE_SESSION, etatAcces.connecte ? {quand: Date.now(), uid: info.uid || null} : null);
+  }
   renderRacine();
 }
 
 function renderRacine(){
   if (etatAcces.exige && !etatAcces.connecte) renderPortail();
   else render();
+}
+
+/* Bandeau permanent du mode hors ligne. Il dit trois choses, dans cet ordre :
+   ce qui marche, ce qui ne marche pas, et que rien n'est perdu. */
+function bandeauHorsLigne(){
+  var b = el('<div class="card" style="margin-bottom:18px;border-left:4px solid var(--warn)">'+
+    '<div class="body">'+
+    '<p style="margin:0 0 6px"><b>Tu travailles hors ligne.</b> Tout fonctionne : '+
+    'tu peux noter tes pièces, tes ventes et tes commandes comme d\'habitude.</p>'+
+    '<p class="hint" style="margin:0 0 10px">Tes modifications restent sur cet appareil et '+
+    'partiront sur ton compte dès que la connexion sera revenue. En attendant, l\'atelier de '+
+    'tes autres appareils n\'est pas à jour, et la bibliothèque partagée est indisponible.</p>'+
+    '<div class="et-act"><button type="button" class="btn" id="hl-reessayer">Réessayer la connexion</button></div>'+
+    '</div></div>');
+  b.querySelector("#hl-reessayer").addEventListener("click", function(){ window.location.reload(); });
+  return b;
 }
 
 function renderChargement(){
@@ -1377,6 +1558,15 @@ function renderChargement(){
 }
 
 function renderErreurChargement(){
+  /* Le module ne s'est pas chargé. Si un compte a déjà été ouvert dans ce
+     navigateur, on ouvre l'atelier en mode hors ligne plutôt que de laisser
+     l'artisane devant une porte close avec ses données juste derrière. */
+  if (marque(CLE_SESSION)){
+    modeHorsLigne = true;
+    etatAcces.recu = true;
+    render();
+    return;
+  }
   arreterVoix();
   document.getElementById("nav").innerHTML = "";
   var main = document.getElementById("main");
@@ -1508,7 +1698,7 @@ function renderAccueil(main){
       '<h2>En quatre étapes</h2>'+
       '<div class="steps">'+
         '<div class="step"><h3>Choisis un modèle</h3><p>Trente-sept modèles de crochet classés par famille, avec leurs matières et leurs temps déjà renseignés.</p></div>'+
-        '<div class="step"><h3>Corrige avec tes chiffres</h3><p>Tes vrais grammages, tes vrais temps, tes vrais prix d\'achat. C\'est là que le calcul devient le tien.</p></div>'+
+        '<div class="step"><h3>Corrige avec tes chiffres</h3><p>Tes vrais poids de fil, tes vrais temps, tes vrais prix d\'achat. C\'est là que le calcul devient le tien.</p></div>'+
         '<div class="step"><h3>Dis où tu vends</h3><p>Main propre, marché, Instagram, Etsy, dépôt-vente. Les frais s\'appliquent tout seuls.</p></div>'+
         '<div class="step"><h3>Lis ton taux horaire</h3><p>Puis suis tes pièces dans l\'Atelier et regarde tes indicateurs se remplir tout seuls.</p></div>'+
       '</div>'+
@@ -1558,7 +1748,12 @@ function fourchette(f){
    celle du livret d'origine, ou celle prise par l'artisane. Sans photo, il n'y
    a rien à regarder et rien sur quoi se projeter — c'est un type d'ouvrage,
    pas un modèle. */
-function aVraiePhoto(mid){ return !!epoque(mid) || aPhotoModele(mid); }
+/* Un modèle « a un visuel » s'il a la photo de la réalisation de
+   l'utilisatrice, la photo d'origine de son livret, ou une photo
+   d'illustration sous licence libre. Les trois se valent pour répondre à
+   la question « à quoi ça ressemble ? » — elles diffèrent par ce qu'elles
+   promettent, et chaque carte le dit en toutes lettres. */
+function aVraiePhoto(mid){ return !!epoque(mid) || aPhotoModele(mid) || !!illustration(mid); }
 
 function renderCatalogue(main){
   var total = MODELES.length - 1;
@@ -1569,13 +1764,14 @@ function renderCatalogue(main){
   main.appendChild(enTete(
     modeM ? "Modèles" : "Types d'ouvrage",
     modeM
-      ? "Des pièces réelles : la photo de l'ouvrage, son patron complet et son coût. "+
-        "Rien n'est ici sans sa photo — tu dois pouvoir voir ce que tu vas faire."
+      ? "Les ouvrages que tu peux voir avant de te lancer : photo d'origine du livret "+
+        "quand elle existe, sinon une photo d'illustration sous licence libre — "+
+        "chaque carte dit laquelle, et ce qu'elle promet."
       : "Les "+total+" entrées qui servent à démarrer une fiche de coût : matières et temps "+
         "habituels. Ce ne sont pas des modèles précis, et c'est pour ça qu'ils n'ont pas de photo."));
 
   var segs = el('<div class="segs" role="group" aria-label="Affichage du catalogue"></div>');
-  [["modeles","Modèles avec photo ("+avecPhoto+")"],["types","Tous les types d'ouvrage ("+total+")"]]
+  [["modeles","Avec visuel ("+avecPhoto+")"],["types","Tous les types d'ouvrage ("+total+")"]]
   .forEach(function(o){
     var b = el('<button type="button">'+esc(o[1])+'</button>');
     b.setAttribute("aria-pressed", view.catMode === o[0] ? "true" : "false");
@@ -1707,7 +1903,7 @@ function renderCatalogue(main){
   if (!modeM) main.appendChild(el(
     '<p class="hint" style="margin-top:20px;max-width:75ch">Les <b>fourchettes indicatives</b> sont des ordres de grandeur destinés à te donner un repère '+
     'face au prix que l\'outil calcule. Ce ne sont pas des relevés de marché : vérifie toi-même ce qui se pratique dans ta région et sur ton canal de vente. '+
-    'Les temps et les grammages sont des moyennes — les tiens seront différents, et c\'est eux qui comptent.</p>'
+    'Les temps et les quantités de fil sont des moyennes — les tiens seront différents, et c\'est eux qui comptent.</p>'
   ));
 }
 
@@ -1763,7 +1959,8 @@ function renderModeleDetail(main){
   if (ep && !aPhotoModele(m[0])){
     main.appendChild(el('<div class="card" style="margin-bottom:18px;overflow:hidden">'+
       '<img src="'+esc(ep.photo)+'" alt="Photo d\'origine du modèle '+esc(ep.nom)+'" '+
-      'style="width:100%;max-height:420px;object-fit:contain;display:block;background:var(--surface-2)" loading="lazy">'+
+      'style="width:100%;max-height:420px;object-fit:contain;display:block;background:var(--surface-2)" '+
+      'loading="lazy" referrerpolicy="no-referrer">'+
       (ep.photo2 ? '<img src="'+esc(ep.photo2)+'" alt="Le point de près, '+esc(ep.nom)+'" '+
         'style="width:100%;max-height:300px;object-fit:cover;display:block;border-top:1px solid var(--rule)" '+
         'loading="lazy">' : '')+
@@ -1799,11 +1996,11 @@ function renderModeleDetail(main){
 
   /* matières du modèle */
   var wrap = el('<div class="tablewrap resp" style="margin-bottom:18px"></div>');
-  var t = el('<table><thead><tr><th>Matière du modèle</th><th class="n">Quantité</th><th class="n">Coût unitaire</th><th class="n">Coût dans la pièce</th></tr></thead><tbody></tbody></table>');
+  var t = el('<table><thead><tr><th>Matière du modèle</th><th class="n">Quantité</th><th class="n">Prix du fil</th><th class="n">Coût dans la pièce</th></tr></thead><tbody></tbody></table>');
   var tb = t.querySelector("tbody");
   cr.lignes.forEach(function(l){
     var mm = matiere(l.mid); if (!mm) return;
-    tb.appendChild(el('<tr><td>'+esc(mm.nom)+'</td><td class="n" data-l="Quantité">'+esc(qte(l.qte, mm.unite))+'</td><td class="n" data-l="Coût unitaire">'+
+    tb.appendChild(el('<tr><td>'+esc(mm.nom)+'</td><td class="n" data-l="Quantité">'+esc(qte(l.qte, mm.unite))+'</td><td class="n" data-l="Prix du fil">'+
       esc(eur(pu(mm)))+' / '+esc(mm.unite)+'</td><td class="n" data-l="Dans la pièce">'+esc(eur(pu(mm)*l.qte))+'</td></tr>'));
   });
   tb.appendChild(el('<tr><td colspan="3" style="font-weight:600">Total matières et emballage, pertes comprises</td><td class="n" data-l="Total" style="font-weight:600">'+esc(eur(r.matieres))+'</td></tr>'));
@@ -1966,6 +2163,11 @@ function renderFiche(main){
   var d = view.draft;
   if (!d){ nouvelleFiche(); return; }
 
+  /* Ce que des clientes attendent déjà sur cette création : c'est la première
+     chose à savoir en ouvrant la fiche, avant même le prix de revient. */
+  var cmdLiees = carteCommandesLiees(view.ficheId);
+  if (cmdLiees) main.appendChild(cmdLiees);
+
   var wrap = el('<div style="display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px;align-items:start" id="fiche-grid"></div>');
   var left = el('<div style="display:flex;flex-direction:column;gap:16px;min-width:0"></div>');
   var right = el('<div style="position:sticky;top:calc(env(safe-area-inset-top,0px) + 108px)" id="fiche-right"></div>');
@@ -2112,7 +2314,7 @@ function renderFiche(main){
           '<label class="f"><span>Combien de pièces</span><input id="p-n" type="number" min="1" step="1" value="1"></label>'+
           '<label class="f"><span>État au départ</span><select id="p-prod"></select></label>'+
           '<label class="f"><span>Destination</span><select id="p-com"></select></label>'+
-          '<label class="f"><span>Client (si commande)</span><input id="p-client" type="text" placeholder="Prénom, pseudo Insta…"></label>'+
+          '<label class="f"><span>Cliente (si commande)</span><input id="p-client" type="text" placeholder="Prénom, pseudo Insta…"></label>'+
           '<label class="f"><span>Stock de sécurité (pièces)</span><input id="p-seuil" type="number" min="0" step="1" value="'+(Number(d.seuilFini)||0)+'"></label>'+
           '<div><button type="button" class="btn primary" id="p-add">Ajouter au suivi</button></div>'+
         '</div>'+
@@ -2711,10 +2913,31 @@ function renderStockMatieres(main){
 
 /* ═════ 12. CATALOGUE DES MATIÈRES ═════ */
 
+/* Le prix d'un fil se lit comme en mercerie : à la pelote.
+   Vérifié le 21 septembre 2026 sur Sperenza, Créa Magic, Laines du Monde,
+   Bergère de France et DMC — aucun de ces marchands n'affiche de prix au
+   100 g. C'est le prix du ticket de caisse, celui qu'une artisane reconnaît.
+   Le coût au gramme reste affiché juste en dessous : c'est lui qui sert au
+   calcul (on consomme 38 g d'une pelote de 50 g, jamais 0,76 pelote) et
+   c'est la seule unité de comparaison entre deux conditionnements. */
+function conditionnementTexte(m){
+  var u = m.unite || "unité";
+  if (u === "g" || u === "m") return nb(m.contenance) + " " + u;
+  return nb(m.contenance) + " " + u + (m.contenance > 1 ? "s" : "");
+}
+function motConditionnement(m){
+  if (m.cat === "fil") return "la pelote";
+  if (m.unite === "pièce" || m.unite === "paire") return "le lot";
+  return "l'unité";
+}
 function coutUnitaireTexte(m){
-  var p = m.contenance ? m.prix/m.contenance : 0;
-  if (m.unite === "g") return (p*100).toFixed(2).replace(".",",") + " € / 100 g";
-  return p.toFixed(3).replace(".",",") + " € / " + m.unite;
+  var pu = m.contenance ? m.prix/m.contenance : 0;
+  return eur(m.prix) + " " + motConditionnement(m);
+}
+function coutDetailTexte(m){
+  var pu = m.contenance ? m.prix/m.contenance : 0;
+  if (!pu) return conditionnementTexte(m);
+  return conditionnementTexte(m) + " · " + eurU(pu, m.unite);
 }
 
 function renderMesMatieres(main){
@@ -2750,7 +2973,7 @@ function renderMesMatieres(main){
   }
 
   var card = el('<div class="card"><header><h2>Ma bibliothèque de matières</h2>'+
-    '<p>Prix payé pour le conditionnement, et ce qu\'il contient. Le coût unitaire se calcule tout seul.</p></header>'+
+    '<p>Le prix payé pour une pelote, et ce qu\'elle pèse. Le coût au gramme se calcule tout seul.</p></header>'+
     '<div class="body" style="padding-top:14px"></div></div>');
   var body = card.querySelector(".body");
 
@@ -2809,9 +3032,9 @@ function renderMesMatieres(main){
 
   var wrap = el('<div class="tablewrap resp"></div>');
   var t = el('<table><thead><tr><th style="min-width:170px">Matière</th><th style="width:105px">Prix payé</th>'+
-    '<th style="width:95px">Contenance</th><th style="width:95px">Unité</th>'+
-    '<th style="width:120px">Crochet</th>'+
-    '<th class="n" style="width:125px">Coût unitaire</th><th style="width:44px"></th></tr></thead><tbody></tbody></table>');
+    '<th style="width:95px">Poids</th><th style="width:95px">Unité</th>'+
+    '<th style="width:125px">Crochet</th>'+
+    '<th class="n" style="width:150px">Prix payé</th><th style="width:44px"></th></tr></thead><tbody></tbody></table>');
   var tb = t.querySelector("tbody");
   var nVisibles = 0;
   CATS.forEach(function(cat){
@@ -2828,7 +3051,7 @@ function renderMesMatieres(main){
             }).join("")+
           '</select>'+
           (!m.crochetMin && m.grosseur
-            ? '<div class="hint" style="margin:2px 0 0;font-size:11px">d\'après « '+esc(m.grosseur)+' » : '+esc(crochetTexte(m))+'</div>'
+            ? '<div class="hint" style="margin:2px 0 0;font-size:11px">épaisseur « '+esc(m.grosseur)+' » : '+esc(crochetTexte(m))+'</div>'
             : '')
         : '<span class="hint">—</span>';
       tb.appendChild(el(
@@ -2841,10 +3064,11 @@ function renderMesMatieres(main){
           '<td data-l="Contenance"><input type="number" inputmode="decimal" data-role="contenance" aria-label="Contenance" min="0.01" step="1" value="'+m.contenance+'"></td>'+
           '<td data-l="Unité"><input type="text" data-role="unite" aria-label="Unité" value="'+esc(m.unite)+'"></td>'+
           '<td data-l="Crochet">'+cellCrochet+'</td>'+
-          '<td class="n" data-l="Coût unitaire" data-role="pu">'+esc(coutUnitaireTexte(m))+
+          '<td class="n" data-l="Prix payé" data-role="pu">'+esc(coutUnitaireTexte(m))+
+            '<div class="hint" style="margin:2px 0 0;font-size:11px">'+esc(coutDetailTexte(m))+'</div>'+
             (m.prixSource
-               ? ' <span class="chip">prix '+esc(m.prixSource.src)+' · '+esc(m.prixSource.date)+'</span>'
-               : m.prixIndicatif ? ' <span class="hypo">INDICATIF</span>' : '')+'</td>'+
+               ? '<div style="margin-top:3px"><span class="chip">prix '+esc(m.prixSource.src)+' · '+esc(m.prixSource.date)+'</span></div>'
+               : m.prixIndicatif ? '<div style="margin-top:3px"><span class="hypo">INDICATIF</span></div>' : '')+'</td>'+
           '<td><button type="button" class="btn ghost" data-role="del" aria-label="Supprimer">✕</button></td>'+
         '</tr>'
       ));
@@ -2874,9 +3098,10 @@ function renderMesMatieres(main){
     if (role === "contenance") m.contenance = Math.max(0.01, Number(e.target.value)||1);
     if (role === "unite") m.unite = e.target.value;
     tr.querySelector('[data-role=pu]').innerHTML = esc(coutUnitaireTexte(m)) +
+      '<div class="hint" style="margin:2px 0 0;font-size:11px">'+esc(coutDetailTexte(m))+'</div>' +
       (m.prixSource
-         ? ' <span class="chip">prix '+esc(m.prixSource.src)+' · '+esc(m.prixSource.date)+'</span>'
-         : m.prixIndicatif ? ' <span class="hypo">INDICATIF</span>' : '');
+         ? '<div style="margin-top:3px"><span class="chip">prix '+esc(m.prixSource.src)+' · '+esc(m.prixSource.date)+'</span></div>'
+         : m.prixIndicatif ? '<div style="margin-top:3px"><span class="hypo">INDICATIF</span></div>' : '');
     sauver();
   });
   /* Supprimer une matière ne doit jamais être un mur : si elle sert quelque
@@ -2929,7 +3154,7 @@ function renderMesMatieres(main){
       '<label class="f"><span>Nom</span><input id="nm-nom" type="text" placeholder="Coton bio écru 50 g"></label>'+
       '<label class="f"><span>Catégorie</span><select id="nm-cat"></select></label>'+
       '<label class="f"><span>Prix payé (€)</span><input id="nm-prix" type="number" min="0" step="0.05" value="0"></label>'+
-      '<label class="f"><span>Contenance</span><input id="nm-cont" type="number" min="0.01" step="1" value="50"></label>'+
+      '<label class="f"><span>Poids d\'une pelote</span><input id="nm-cont" type="number" min="0.01" step="1" value="50"></label>'+
       '<label class="f"><span>Unité</span><input id="nm-unite" type="text" value="g"></label>'+
       '<label class="f"><span>Crochet (mm)</span><select id="nm-cro"></select></label>'+
       '<label class="f"><span>Composition</span><input id="nm-comp" type="text" placeholder="100 % coton"></label>'+
@@ -3492,7 +3717,7 @@ function renderAtelier(main){
       '<label class="f"><span>Combien</span><input id="a-n" type="number" min="1" step="1" value="1"></label>'+
       '<label class="f"><span>État</span><select id="a-prod"></select></label>'+
       '<label class="f"><span>Destination</span><select id="a-com"></select></label>'+
-      '<label class="f"><span>Client (facultatif)</span><input id="a-client" type="text"></label>'+
+      '<label class="f"><span>Cliente (facultatif)</span><input id="a-client" type="text"></label>'+
       '<div><button type="button" class="btn primary" id="a-go">Ajouter</button></div>'+
     '</div></div></div>');
   var selCid = cAdd.querySelector("#a-cid");
@@ -3736,6 +3961,62 @@ function legende(series){
 
 /* ═════ 19. PAGE INDICATEURS ═════ */
 
+/* La carte des seuils. Elle prévient AVANT, parce qu'un seuil franchi ne se
+   rattrape pas : on l'apprend en général au moment de la déclaration, quand
+   il est trop tard pour ajuster ses prix ou étaler ses ventes. */
+function carteSeuils(){
+  var ca = caAnnuel();
+  var sl = seuilsDuStatut();
+  if (!state.reglages.statut){
+    return el('<div class="card" style="margin-bottom:18px"><header><h2>Tes seuils</h2>'+
+      '<p>Choisis ton statut dans Réglages pour que l\'outil surveille tes plafonds '+
+      'de TVA et de régime micro.</p></header></div>');
+  }
+  /* Deux paliers de vigilance : on alerte à 80 % du seuil, et on signale le
+     dépassement. Entre les deux, on informe sans dramatiser. */
+  function jaugeSeuil(titre, montant, seuil, majore, aide){
+    var pct = seuil > 0 ? Math.min(100, montant / seuil * 100) : 0;
+    var etat = montant >= seuil ? "depasse" : (pct >= 80 ? "proche" : "ok");
+    var coul = etat === "depasse" ? "var(--bad)" : etat === "proche" ? "var(--warn)" : "var(--good)";
+    var reste = seuil - montant;
+    return '<div style="margin-bottom:18px">'+
+      '<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:baseline">'+
+        '<b>'+esc(titre)+'</b>'+
+        '<span style="font-variant-numeric:tabular-nums">'+esc(eur(montant))+
+        ' <span class="hint">sur '+esc(eurRond(seuil))+'</span></span>'+
+      '</div>'+
+      '<div class="jauge" style="margin:6px 0 4px"><i style="width:'+nb(pct)+'%;background:'+coul+'"></i></div>'+
+      '<p class="hint" style="margin:0">'+
+        (etat === "depasse"
+          ? '<b style="color:var(--bad)">Seuil franchi.</b> '
+          : etat === "proche"
+            ? '<b style="color:var(--warn)">Il te reste '+esc(eur(reste))+'.</b> '
+            : 'Il te reste '+esc(eur(reste))+' avant ce seuil. ')+
+        esc(aide)+
+        (majore ? ' Tolérance jusqu\'à '+esc(eurRond(majore))+' sur une année.' : '')+
+      '</p></div>';
+  }
+
+  var c = el('<div class="card" style="margin-bottom:18px"><header>'+
+    '<h2>Tes seuils '+ca.annee+'</h2>'+
+    '<p>Ce que tu as encaissé cette année, face aux plafonds de ton statut '+
+    '('+esc(sl.nom)+').</p></header><div class="body">'+
+    jaugeSeuil("Franchise de TVA", ca.total, sl.tva, sl.tvaMajore,
+      "Au-delà, tu dois facturer la TVA : ton prix de vente change, et la mention "+
+      "« TVA non applicable » disparaît de tes factures.")+
+    jaugeSeuil("Plafond du régime micro", ca.total, sl.micro, null,
+      "Au-delà, tu sors du régime micro-entreprise et passes au régime réel.")+
+    '<p class="hint" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--rule)">'+
+    '<b>Ce total vient de :</b> '+esc(eur(ca.pieces))+' de pièces vendues dans l\'Atelier'+
+    (ca.commandes > 0 ? ' et '+esc(eur(ca.commandes))+' encaissés sur des commandes livrées' : '')+
+    '. Si tu notes une même vente aux deux endroits, elle compte deux fois — '+
+    'vérifie avant de t\'y fier.</p>'+
+    '<p class="hint">Seuils relevés le '+esc(SEUILS_DATE)+' sur service-public.gouv.fr. '+
+    'Ils changent : en cas de doute au moment de la déclaration, vérifie-les.</p>'+
+    '</div></div>');
+  return c;
+}
+
 function renderIndicateurs(main){
   var vend = state.reglages.profil !== "passion";
   var st = statsPieces();
@@ -3758,6 +4039,10 @@ function renderIndicateurs(main){
     barre.appendChild(b);
   });
   main.appendChild(barre);
+
+  /* Les seuils passent avant les courbes : c'est l'information qui a des
+     conséquences, et la seule que personne d'autre ne surveille pour elle. */
+  if (vend){ var cS = carteSeuils(); if (cS) main.appendChild(cS); }
 
   var per = PERIODES[0];
   PERIODES.forEach(function(pp){ if (pp.k === view.periode) per = pp; });
@@ -4633,7 +4918,7 @@ function renderCatalogueMatieres(main){
   main.appendChild(compte);
   var wrap = el('<div class="tablewrap resp"></div>');
   var t = el('<table style="min-width:860px"><thead><tr>'+
-    '<th style="min-width:200px">Matière</th><th>Composition</th><th>Grosseur</th>'+
+    '<th style="min-width:200px">Matière</th><th>Composition</th><th>Épaisseur</th>'+
     '<th class="n">Conditionnement</th><th class="n">Prix indicatif</th><th class="n">Au détail</th>'+
     '<th style="width:190px"></th></tr></thead><tbody></tbody></table>');
   var tb = t.querySelector("tbody");
@@ -4669,12 +4954,12 @@ function renderCatalogueMatieres(main){
       var pu2 = o.contenance ? o.prix / o.contenance : 0;
       var tr = el('<tr data-cid="'+esc(o.id)+'">'+
         '<td><b>'+esc(o.nom)+'</b>'+
-          (o.metrage ? '<div class="hint" style="margin:2px 0 0">environ '+o.metrage+' m par conditionnement</div>' : '')+'</td>'+
+          (o.metrage ? '<div class="hint" style="margin:2px 0 0">environ '+o.metrage+' m '+(o.cat==="fil"?'par pelote':'par unité')+'</div>' : '')+'</td>'+
         '<td data-l="Composition">'+esc(o.composition || o.fibre || "—")+'</td>'+
-        '<td data-l="Grosseur">'+esc(o.grosseur || "—")+'</td>'+
+        '<td data-l="Épaisseur">'+esc(o.grosseur || "—")+'</td>'+
         '<td class="n" data-l="Conditionnement">'+esc(qte(o.contenance, o.unite))+'</td>'+
         '<td class="n" data-l="Prix indicatif">'+esc(eur(o.prix))+' <span class="hypo">INDICATIF</span></td>'+
-        '<td class="n" data-l="Au détail">'+esc(eur(pu2))+' / '+esc(o.unite)+'</td>'+
+        '<td class="n" data-l="Au détail">'+esc(eurU(pu2, o.unite))+'</td>'+
         '<td data-role="act"></td></tr>');
       var act = tr.querySelector('[data-role=act]');
       if (dejaRef[o.id]){
@@ -4730,8 +5015,12 @@ function bandeauModele(m){
   }
   var ep = epoque(m[0]);
   if (ep){   /* photo d'origine du livret : elle montre CE patron-là */
+    /* Si le fichier manque, on ne laisse pas une image cassée : la carte
+       retombe sur le dessin fait d'après le patron, qui est toujours là. */
     return '<span class="band a-photo">'+
-      '<img src="'+esc(ep.photo)+'" alt="Photo d\'origine du modèle '+esc(ep.nom)+'" loading="lazy" decoding="async">'+
+      '<img src="'+esc(ep.photo)+'" alt="Photo d\'origine du modèle '+esc(ep.nom)+'" loading="lazy" decoding="async" referrerpolicy="no-referrer" '+
+      'onerror="var b=this.closest(\'.band\'); if(b){b.className=\'band dessin\'; '+
+      'b.innerHTML='+JSON.stringify(planche(m[0], 0) + '<span class="credit">dessin d\'après le patron</span>')+';}">'+
       '<span class="credit">photo d\'origine · '+esc(ep.source.annee)+'</span></span>';
   }
   /* À défaut, une photo d'illustration sous licence libre — d'un ouvrage
@@ -6094,6 +6383,56 @@ function statutCotis(id){
   return null;
 }
 
+/* ═════ SEUILS FISCAUX ═════
+   Deux plafonds décident du cadre dans lequel une artisane travaille, et on
+   ne les voit pas venir : on les franchit en vendant, puis on l'apprend.
+     • La FRANCHISE DE TVA. Tant qu'on est dessous, on facture sans TVA et on
+       porte la mention « TVA non applicable, art. 293 B ». Au-dessus, il faut
+       facturer la TVA — et le prix affiché change du jour au lendemain.
+     • Le PLAFOND DU RÉGIME MICRO. Au-dessus, on quitte le régime simplifié.
+
+   Chiffres relevés le 21 septembre 2026 sur service-public.gouv.fr (F23566,
+   F23267) et economie.gouv.fr. Ils sont datés et affichés comme tels, parce
+   qu'ils bougent : la réforme qui devait ramener la franchise à 25 000 € a
+   été annoncée, reportée, puis supprimée par une loi du 3 novembre 2025.
+   Ne jamais les traiter comme des constantes définitives.
+   ═══════════════════════════════════════════════════════════════════════ */
+var SEUILS_DATE = "21 septembre 2026";
+var SEUILS = {
+  /* Vendre des créations qu'on a fabriquées, c'est de la vente de biens. */
+  biens:    {nom:"vente de marchandises", tva:85000, tvaMajore:93500, micro:203100},
+  services: {nom:"prestation de services", tva:37500, tvaMajore:41250, micro:83600}
+};
+/* Quelle famille de seuils s'applique, d'après le statut choisi en réglages. */
+function seuilsDuStatut(){
+  var id = state.reglages.statut || "";
+  if (id.indexOf("services") === 0 || id === "bnc" || id === "cipav") return SEUILS.services;
+  return SEUILS.biens;
+}
+/* Le chiffre d'affaires d'une année civile. On distingue ce qui vient du
+   suivi des pièces et ce qui vient des commandes, pour que l'artisane voie
+   d'où sort le total — et repère un éventuel double comptage si elle note
+   la même vente aux deux endroits. */
+function caAnnuel(annee){
+  annee = annee || new Date().getFullYear();
+  var debut = new Date(annee, 0, 1).getTime();
+  var fin   = new Date(annee + 1, 0, 1).getTime();
+  var pieces = 0, commandes = 0;
+  (state.pieces||[]).forEach(function(p){
+    if (p.com !== "vendu" || !p.venduLe) return;
+    if (p.venduLe < debut || p.venduLe >= fin) return;
+    pieces += Number(p.prix) || 0;
+  });
+  (state.commandes||[]).forEach(function(c){
+    if (c.statut !== "livree") return;
+    var d = c.factureLe ? new Date(c.factureLe).getTime()
+          : (c.datePromise ? new Date(c.datePromise).getTime() : null);
+    if (d === null || isNaN(d) || d < debut || d >= fin) return;
+    commandes += encaisse(c);
+  });
+  return {annee:annee, pieces:pieces, commandes:commandes, total:pieces + commandes};
+}
+
 /* ═════ 35. PRIX MARCHÉ VÉRIFIÉS ═════
    Prix réellement affichés en boutique, relevés le 16 septembre 2026, avec
    leur source. Ce ne sont pas tes prix d'achat : ce sont des prix constatés,
@@ -6314,7 +6653,7 @@ var EPOQUE = [
   id:"dp_echarpe_beret",
   nom:"Écharpe et béret assortis",
   fam:"mode", objet:"Cou et tête", difficulte:1,
-  photo:"dp/echarpe_beret.jpg",
+  photo:"https://www.gutenberg.org/files/62882/62882-h/images/p04.jpg",
   source:{livre:"Knitted and Crocheted Boutique", editeur:"American Thread Company",
           annee:"vers 1970", pg:62882, plate:"planche p. 8"},
   crochet:"6 mm (taille J américaine)",
@@ -6363,7 +6702,7 @@ var EPOQUE = [
   id:"dp_etole_coquille",
   nom:"Étole au point de coquille",
   fam:"mode", objet:"Cou", difficulte:1,
-  photo:"dp/etole_coquille.jpg",
+  photo:"https://www.gutenberg.org/files/62882/62882-h/images/p10a.jpg",
   source:{livre:"Knitted and Crocheted Boutique", editeur:"American Thread Company",
           annee:"vers 1970", pg:62882, plate:"planche p. 20"},
   crochet:"6 mm (taille J américaine)",
@@ -6395,7 +6734,7 @@ var EPOQUE = [
   id:"dp_ceinture_pompons",
   nom:"Ceinture à pompons",
   fam:"mode", objet:"Taille", difficulte:1,
-  photo:"dp/ceinture_pompons.jpg",
+  photo:"https://www.gutenberg.org/files/62882/62882-h/images/p09.jpg",
   source:{livre:"Knitted and Crocheted Boutique", editeur:"American Thread Company",
           annee:"vers 1970", pg:62882, plate:"planche p. 18"},
   crochet:"5 mm (taille H américaine)",
@@ -6433,7 +6772,7 @@ var EPOQUE = [
   id:"dp_bas_resille",
   nom:"Bas et chaussettes au point résille",
   fam:"mode", objet:"Jambes", difficulte:3,
-  photo:"dp/bas_resille.jpg",
+  photo:"https://www.gutenberg.org/files/62882/62882-h/images/p03.jpg",
   source:{livre:"Knitted and Crocheted Boutique", editeur:"American Thread Company",
           annee:"vers 1970", pg:62882, plate:"planche p. 12"},
   crochet:"5 mm (taille H américaine)",
@@ -6475,7 +6814,7 @@ var EPOQUE = [
   id:"dp_damier",
   nom:"Écharpe et bonnet en damier tissé",
   fam:"mode", objet:"Cou et tête", difficulte:2,
-  photo:"dp/damier.jpg",
+  photo:"https://www.gutenberg.org/files/62882/62882-h/images/p06.jpg",
   source:{livre:"Knitted and Crocheted Boutique", editeur:"American Thread Company",
           annee:"vers 1970", pg:62882, plate:"planche p. 15"},
   crochet:"6 mm (taille J américaine)",
@@ -6514,7 +6853,7 @@ var EPOQUE = [
   id:"dp_plaid_fleurs",
   nom:"Plaid Jardin fleuri, 266 motifs",
   fam:"maison", objet:"Textile", difficulte:2,
-  photo:"dp/plaid_fleurs.jpg",
+  photo:"https://www.gutenberg.org/files/66111/66111-h/images/p05g.jpg",
   source:{livre:"Afghans, Book No. 289", editeur:"The Spool Cotton Company",
           annee:"vers 1952", pg:66111, plate:"planche p. 14"},
   crochet:"5 mm",
@@ -6557,7 +6896,7 @@ var EPOQUE = [
   id:"dp_etole_etoile",
   nom:"Étole au point d'étoile",
   fam:"mode", objet:"Cou", difficulte:2,
-  photo:"dp/etole_etoile.jpg", photo2:"dp/etole_etoile_point.jpg",
+  photo:"https://www.gutenberg.org/files/67839/67839-h/images/021.jpg", photo2:"dp/etole_etoile_point.jpg",
   source:{livre:"Stoles : Knitted, Crocheted, Hairpin Lace", editeur:"American Thread Company",
           annee:"vers 1955", pg:67839, plate:"modèle « Fantasy »"},
   crochet:"4,5 mm (taille G ou H américaine)",
@@ -6597,7 +6936,7 @@ var EPOQUE = [
   id:"dp_etole_popcorn",
   nom:"Étole aux coquilles et popcorns",
   fam:"mode", objet:"Cou", difficulte:3,
-  photo:"dp/etole_popcorn.jpg", photo2:"dp/etole_popcorn_point.jpg",
+  photo:"https://www.gutenberg.org/files/67839/67839-h/images/017.jpg", photo2:"dp/etole_popcorn_point.jpg",
   source:{livre:"Stoles : Knitted, Crocheted, Hairpin Lace", editeur:"American Thread Company",
           annee:"vers 1955", pg:67839, plate:"modèle « Concerto »"},
   crochet:"3,5 mm (taille E américaine)",
@@ -6639,7 +6978,7 @@ var EPOQUE = [
   id:"dp_etole_festons",
   nom:"Étole en bandes festonnées",
   fam:"mode", objet:"Cou", difficulte:3,
-  photo:"dp/etole_festons.jpg", photo2:"dp/etole_festons_point.jpg",
+  photo:"https://www.gutenberg.org/files/67839/67839-h/images/025.jpg", photo2:"dp/etole_festons_point.jpg",
   source:{livre:"Stoles : Knitted, Crocheted, Hairpin Lace", editeur:"American Thread Company",
           annee:"vers 1955", pg:67839, plate:"modèle « Lyric »"},
   crochet:"3 mm (crochet acier n° 0)",
@@ -6736,7 +7075,7 @@ function nouvelleCommande(){
   var c = {
     id:"cmd_"+uid(), num:null,
     client:{nom:"", contact:"", note:""},
-    cid:null, libelle:"", variantes:"", personnalisee:false,
+    cid:null, libelle:"", variantes:"", personnalisee:false, clientePro:false,
     prixConvenu:0, fraisLivraison:0,
     versement:{montant:0, date:null, type:"acompte"},
     paiements:[],
@@ -6882,6 +7221,38 @@ function cartePatronPerso(cr){
   return c;
 }
 
+/* Les commandes ouvertes qui portent sur cette création. Affiché en tête de
+   sa fiche : savoir que trois clientes attendent cette pièce change la façon
+   de lire son prix de revient. */
+function carteCommandesLiees(cid){
+  if (!cid) return null;
+  var liees = commandesOuvertes().filter(function(c){ return c.cid === cid; });
+  if (!liees.length) return null;
+  var h = 0, du = 0;
+  liees.forEach(function(c){ h += heuresCommande(c); du += soldeDu(c); });
+  var carte = el('<div class="card" style="margin-bottom:16px"><header>'+
+    '<h2>'+liees.length+' commande'+(liees.length>1?'s':'')+' en cours sur cette création</h2>'+
+    '<p>'+esc(dureeTexte(h*60))+' de travail promis'+
+    (du > 0 ? ' · '+esc(eur(du))+' encore à encaisser' : '')+'</p></header>'+
+    '<div class="body"></div></div>');
+  var b = carte.querySelector(".body");
+  liees.forEach(function(c){
+    var j = joursRestants(c);
+    var ligne = el('<button type="button" class="trow" style="margin-bottom:8px">'+
+      '<span class="mot f-mode"></span>'+
+      '<span><h3>'+esc((c.client && c.client.nom) || "Sans nom")+'</h3>'+
+      '<p class="m">'+esc(statutCmd(c.statut).nom)+
+        (j !== null ? ' · ' + (j < 0 ? 'en retard de '+Math.abs(j)+' j' : 'dans '+j+' j') : ' · sans date')+
+      '</p></span>'+
+      '<span class="c"><b>'+esc(eur(totalDu(c)))+'</b><span>convenu</span></span></button>');
+    ligne.addEventListener("click", function(){
+      view.cmdVue = c.id; aller("commandes", {garderVue:true});
+    });
+    b.appendChild(ligne);
+  });
+  return carte;
+}
+
 function renderCommandes(main){
   if (view.cmdVue){
     var c0 = commande(view.cmdVue);
@@ -6890,7 +7261,8 @@ function renderCommandes(main){
   }
 
   main.appendChild(enTete("Commandes",
-    "Ce qui est promis, à qui, pour quand, et ce qui reste à encaisser.",
+    "Ton suivi administratif : ce que tu as promis, à qui, pour quand, et ce qui reste à encaisser. "+
+    "Tu continues à traiter avec tes clientes comme tu veux — ici, tu notes.",
     [bouton("+ Nouvelle commande", function(){
       var c = nouvelleCommande(); view.cmdVue = c.id; render();
     }, true)]));
@@ -6929,8 +7301,9 @@ function renderCommandes(main){
   var liste = commandes();
   if (!liste.length){
     main.appendChild(etatVide("Aucune commande pour l'instant",
-      "Dès qu'une cliente te commande quelque chose, note-le ici : ce qui est convenu, pour quand, "+
-      "et combien elle a versé. C'est ce qui évite de fabriquer pour quelqu'un qui ne paiera pas.",
+      "Dès qu'une cliente te commande quelque chose — par message, sur un marché, en boutique — "+
+      "note-le ici : ce qui est convenu, pour quand, et combien elle a versé. "+
+      "C'est ce qui évite de fabriquer pour quelqu'un qui ne paiera pas.",
       [bouton("+ Nouvelle commande", function(){
         var c = nouvelleCommande(); view.cmdVue = c.id; render();
       }, true)]));
@@ -6991,7 +7364,8 @@ function renderCommandeDetail(main, c){
 
   /* --- la cliente et ce qui est convenu --- */
   var cId = el('<div class="card" style="margin-bottom:16px"><header><h2>Ce qui est convenu</h2>'+
-    '<p>Écris-le au moment où c\'est décidé. C\'est ce qui reste si la cliente change d\'avis.</p></header>'+
+    '<p>Tu t\'es mise d\'accord avec ta cliente — par message, sur un marché, en boutique. '+
+    'Note-le ici au moment où c\'est décidé : c\'est ce qui te restera si elle change d\'avis.</p></header>'+
     '<div class="body"><div class="grid2">'+
       '<label class="f"><span>Cliente</span><input data-c="nom" type="text" placeholder="Prénom et nom"></label>'+
       '<label class="f"><span>Comment la joindre</span><input data-c="contact" type="text" placeholder="téléphone, courriel, Instagram…"></label>'+
@@ -7001,6 +7375,10 @@ function renderCommandeDetail(main, c){
       '<label class="f"><span>Libellé sur la facture</span><input data-c="libelle" type="text" placeholder="Lapin Céleste, 25 cm"></label>'+
       '<label class="f"><span>Ce qui a été demandé en plus</span><input data-c="variantes" type="text" placeholder="coton bleu, prénom Léa brodé"></label>'+
     '</div>'+
+    '<label style="display:flex;gap:10px;align-items:flex-start;margin-top:12px;cursor:pointer">'+
+      '<input type="checkbox" data-c="clientePro" style="margin-top:3px;width:18px;height:18px;flex:none">'+
+      '<span><b>Cliente professionnelle</b> — une boutique, une entreprise, une association, '+
+      'et non une particulière. Change les mentions obligatoires de la facture.</span></label>'+
     '<label style="display:flex;gap:10px;align-items:flex-start;margin-top:12px;cursor:pointer">'+
       '<input type="checkbox" data-c="personnalisee" style="margin-top:3px;width:18px;height:18px;flex:none">'+
       '<span><b>Pièce personnalisée</b> — faite selon les demandes de la cliente '+
@@ -7041,6 +7419,7 @@ function renderCommandeDetail(main, c){
   cId.querySelector('[data-c="datePromise"]').value = c.datePromise || "";
   cId.querySelector('[data-c="note"]').value     = c.note || "";
   cId.querySelector('[data-c="personnalisee"]').checked = !!c.personnalisee;
+  cId.querySelector('[data-c="clientePro"]').checked = !!c.clientePro;
 
   /* Le droit de rétractation est le piège le plus coûteux de la vente à
      distance : 14 jours pendant lesquels la cliente peut rendre la pièce sans
@@ -7048,6 +7427,12 @@ function renderCommandeDetail(main, c){
      case est cochée, pas dans des conditions générales que personne ne lit. */
   function majRetract(){
     var z = cId.querySelector("#cmd-retract");
+    if (c.clientePro){
+      z.innerHTML = 'Vente à une professionnelle : le droit de rétractation du code de la '+
+        'consommation ne s\'applique pas — il protège les particuliers. C\'est ce que '+
+        'vous avez convenu ensemble qui fait foi.';
+      return;
+    }
     z.innerHTML = c.personnalisee
       ? 'Une pièce faite selon les demandes de la cliente <b>n\'ouvre pas de droit de '+
         'rétractation</b> (article L221-28 du code de la consommation). La mention sera '+
@@ -7067,17 +7452,37 @@ function renderCommandeDetail(main, c){
       c[k] = Math.max(0, Number(e.target.value)||0);
     } else if (k === "personnalisee"){
       c.personnalisee = e.target.checked; majRetract();
+    } else if (k === "clientePro"){
+      c.clientePro = e.target.checked; majRetract();
     } else {
       c[k] = e.target.value;
     }
     maj();
   });
+  /* Seuls ces trois choix changent ce que l'écran doit afficher (le bilan
+     dépend de la création et du canal, la liste dépend du statut) : eux seuls
+     justifient de redessiner. Redessiner sur n'importe quel champ, comme on
+     le faisait, reconstruisait la page dès qu'on passait au champ suivant —
+     et pouvait emporter une saisie en cours. */
   cId.addEventListener("change", function(e){
     var k = e.target.getAttribute("data-c"); if (!k) return;
-    if (k === "cid"){ c.cid = e.target.value || null; }
-    if (k === "statut" || k === "canal"){ c[k] = e.target.value; }
+    if (k !== "cid" && k !== "statut" && k !== "canal") return;
+    if (k === "cid") c.cid = e.target.value || null;
+    else c[k] = e.target.value;
     maj(); render();
   });
+
+  /* Un lien vers la fiche de la création : c'est là que se trouvent les
+     matières, le temps et le prix de revient de cette pièce. Sans ce
+     passage, il fallait retraverser l'application à la main. */
+  if (c.cid && creation(c.cid)){
+    var lienCr = bouton("Ouvrir la fiche de « " + creation(c.cid).nom + " »", function(){
+      ouvrirFiche(c.cid);
+    });
+    lienCr.classList.add("sm");
+    lienCr.style.marginTop = "10px";
+    cId.querySelector(".body").insertBefore(lienCr, cId.querySelector(".savebar"));
+  }
 
   /* Figer l'accord : un horodatage, et le rappel de ce qui a été convenu. */
   var barAccord = cId.querySelector(".savebar");
@@ -7251,56 +7656,165 @@ function renderCommandeDetail(main, c){
 
 /* La facture s'ouvre dans une fenêtre imprimable : pas de dépendance, pas de
    bibliothèque PDF, et « Imprimer → Enregistrer en PDF » fait le reste. */
+/* La facture est le seul document de l'application qui sorte de l'atelier :
+   c'est elle que la cliente garde, et elle dit le sérieux de l'artisane.
+   Elle s'ouvre dans une fenêtre imprimable — « Imprimer » puis « Enregistrer
+   en PDF » suffit, sans bibliothèque ni dépendance. La mise en page est
+   pensée pour le papier : une page A4, des marges franches, et les mentions
+   obligatoires lisibles sans être envahissantes. */
 function ouvrirFacture(c){
   var r = state.reglages;
+  var dateFr = function(d){ return d ? new Date(d).toLocaleDateString("fr-FR") : ""; };
   var lignes = [
-    {d:(c.libelle || (c.cid && creation(c.cid) ? creation(c.cid).nom : "Création au crochet")) +
-       (c.variantes ? " — " + c.variantes : ""), m:Number(c.prixConvenu)||0}
+    {d:(c.libelle || (c.cid && creation(c.cid) ? creation(c.cid).nom : "Création au crochet")),
+     s:(c.variantes || ""), m:Number(c.prixConvenu)||0}
   ];
-  if (Number(c.fraisLivraison) > 0) lignes.push({d:"Livraison", m:Number(c.fraisLivraison)});
+  if (Number(c.fraisLivraison) > 0) lignes.push({d:"Livraison", s:"", m:Number(c.fraisLivraison)});
   var enc = encaisse(c), solde = soldeDu(c);
-  var typeVers = (c.versement && c.versement.type === "arrhes") ? "Arrhes" : "Acompte";
+  var arrhes = !!(c.versement && c.versement.type === "arrhes");
+  var typeVers = arrhes ? "Arrhes" : "Acompte";
+  /* Un vendeur non identifiable rend la facture invalide : tant que les
+     réglages ne sont pas remplis, on le signale au lieu de l'imprimer en
+     silence avec des crochets. */
+  var manque = !r.raisonSociale || !r.adresse;
+
   var h = '<!doctype html><html lang="fr"><head><meta charset="utf-8">'+
-    '<title>Facture '+esc(c.factureNum)+'</title><style>'+
-    'body{font:14px/1.6 system-ui,sans-serif;max-width:760px;margin:32px auto;padding:0 20px;color:#15181a}'+
-    'h1{font-size:22px;margin:0 0 4px} table{width:100%;border-collapse:collapse;margin:22px 0}'+
-    'th,td{text-align:left;padding:8px 6px;border-bottom:1px solid #ddd} td.n,th.n{text-align:right}'+
-    '.tot{font-weight:700;font-size:16px} .ment{font-size:12px;color:#555;margin-top:26px}'+
-    '.head{display:flex;justify-content:space-between;gap:30px;flex-wrap:wrap}'+
-    '@media print{body{margin:0}.noprint{display:none}}</style></head><body>'+
-    '<div class="head"><div><h1>Facture '+esc(c.factureNum)+'</h1>'+
-    '<p>Émise le '+esc(new Date(c.factureLe).toLocaleDateString("fr-FR"))+'</p></div>'+
-    '<div><b>'+esc(r.raisonSociale || "[Ton nom ou ta raison sociale]")+'</b><br>'+
-    esc(r.adresse || "[Ton adresse]")+'<br>'+
-    (r.siret ? "SIRET " + esc(r.siret) : "[Ton SIRET]")+'<br>'+
-    esc(r.contact || "")+'</div></div>'+
-    '<p style="margin-top:20px"><b>Cliente :</b> '+esc(c.client && c.client.nom || "")+
-    (c.client && c.client.contact ? '<br>'+esc(c.client.contact) : '')+'</p>'+
-    '<table><thead><tr><th>Désignation</th><th class="n">Montant</th></tr></thead><tbody>';
-  lignes.forEach(function(l){ h += '<tr><td>'+esc(l.d)+'</td><td class="n">'+esc(eur(l.m))+'</td></tr>'; });
-  h += '<tr class="tot"><td>Total</td><td class="n">'+esc(eur(totalDu(c)))+'</td></tr>';
-  if (enc > 0){
-    h += '<tr><td>'+esc(typeVers)+' déjà versé'+
-      ((c.versement && c.versement.date) ? ' le '+esc(new Date(c.versement.date).toLocaleDateString("fr-FR")) : '')+
-      '</td><td class="n">− '+esc(eur(enc))+'</td></tr>'+
-      '<tr class="tot"><td>Reste à régler</td><td class="n">'+esc(eur(solde))+'</td></tr>';
+  '<meta name="viewport" content="width=device-width, initial-scale=1">'+
+  '<title>Facture '+esc(c.factureNum)+'</title><style>'+
+  '*{box-sizing:border-box}'+
+  'body{font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;'+
+    'color:#15181a;background:#f4f6f3;margin:0;padding:28px 16px 60px}'+
+  '.page{max-width:780px;margin:0 auto;background:#fff;padding:44px 48px 40px;'+
+    'border-radius:4px;box-shadow:0 1px 3px rgba(0,0,0,.09)}'+
+  '.alerte{max-width:780px;margin:0 auto 14px;background:#fbf1dc;border:1px solid #e0c188;'+
+    'border-radius:8px;padding:12px 16px;font-size:13.5px;color:#7a4e00}'+
+  '.ent{display:flex;justify-content:space-between;gap:36px;flex-wrap:wrap;'+
+    'padding-bottom:26px;border-bottom:2px solid #15181a}'+
+  '.ent h1{font-size:15px;letter-spacing:.14em;text-transform:uppercase;margin:0 0 6px;'+
+    'font-weight:600;color:#5b6560}'+
+  '.num{font-size:27px;font-weight:700;letter-spacing:-.01em;margin:0 0 10px;'+
+    'font-variant-numeric:tabular-nums}'+
+  '.dates{font-size:13px;color:#5b6560;margin:0;line-height:1.75}'+
+  '.moi{text-align:right;font-size:13.5px;line-height:1.7;max-width:280px}'+
+  '.moi .nom{font-size:16px;font-weight:700;display:block;margin-bottom:3px}'+
+  '.moi .vide{color:#b23}'+
+  '.parties{display:flex;gap:36px;flex-wrap:wrap;margin:26px 0 6px}'+
+  '.bloc{flex:1;min-width:210px}'+
+  '.bloc .lab{font-size:11px;letter-spacing:.1em;text-transform:uppercase;'+
+    'color:#5b6560;font-weight:600;margin:0 0 5px}'+
+  '.bloc .val{font-size:15px;font-weight:600;margin:0}'+
+  '.bloc .sec{font-size:13.5px;color:#5b6560;margin:2px 0 0}'+
+  'table{width:100%;border-collapse:collapse;margin:26px 0 0}'+
+  'th{text-align:left;font-size:11px;letter-spacing:.09em;text-transform:uppercase;'+
+    'color:#5b6560;font-weight:600;padding:0 0 9px;border-bottom:1px solid #15181a}'+
+  'th.n,td.n{text-align:right;font-variant-numeric:tabular-nums}'+
+  'td{padding:13px 0;border-bottom:1px solid #e4e8e2;vertical-align:top}'+
+  'td .det{display:block;font-size:13px;color:#5b6560;margin-top:3px}'+
+  'tr.sous td{border-bottom:none;padding:9px 0 3px;color:#5b6560}'+
+  'tr.total td{border-top:2px solid #15181a;border-bottom:none;padding-top:13px;'+
+    'font-size:17px;font-weight:700}'+
+  'tr.du td{border-bottom:none;padding-top:4px;font-size:19px;font-weight:700;color:#0f5132}'+
+  '.ment{margin-top:34px;padding-top:20px;border-top:1px solid #e4e8e2;'+
+    'font-size:12px;line-height:1.7;color:#4d5651}'+
+  '.ment p{margin:0 0 7px}'+
+  '.ment .cle{font-weight:600;color:#15181a}'+
+  '.pied{margin-top:26px;font-size:11.5px;color:#8a938d;text-align:center}'+
+  '.barre{max-width:780px;margin:18px auto 0;text-align:center}'+
+  '.barre button{font:inherit;font-size:15px;font-weight:600;padding:12px 26px;'+
+    'border:0;border-radius:8px;background:#0f5132;color:#fff;cursor:pointer}'+
+  '@media print{'+
+    'body{background:#fff;padding:0;font-size:12.5px}'+
+    '.page{box-shadow:none;max-width:none;padding:0;border-radius:0}'+
+    '.noprint{display:none!important}'+
+    '@page{margin:18mm 16mm}'+
+  '}'+
+  '@media (max-width:560px){'+
+    '.page{padding:26px 20px}.ent{gap:18px}.moi{text-align:left}'+
+  '}'+
+  '</style></head><body>';
+
+  if (manque){
+    h += '<div class="alerte noprint"><b>Cette facture n\'est pas encore valable.</b> '+
+      'Une facture doit permettre d\'identifier le vendeur. Complète ton nom et ton '+
+      'adresse dans Réglages → Tes mentions de facture, puis rouvre-la.</div>';
   }
-  h += '</tbody></table><div class="ment">'+
-    '<p>TVA non applicable, article 293 B du CGI.</p>'+
-    (c.personnalisee
-      ? '<p>Article confectionné selon les spécifications de la cliente : conformément à '+
-        'l\'article L221-28 du code de la consommation, il n\'ouvre pas de droit de rétractation.</p>'
-      : '')+
-    (c.versement && c.versement.type === "arrhes"
-      ? '<p>Les sommes versées à la commande ont la nature d\'arrhes au sens de l\'article L214-1 '+
-        'du code de la consommation.</p>'
-      : (enc > 0 ? '<p>Les sommes versées à la commande ont la nature d\'acompte : la vente est '+
-                   'ferme et définitive pour les deux parties.</p>' : ''))+
-    '<p>Pénalités de retard : trois fois le taux d\'intérêt légal. Pas d\'escompte pour paiement anticipé.</p>'+
+
+  h += '<div class="page">'+
+    '<div class="ent">'+
+      '<div>'+
+        '<h1>Facture</h1>'+
+        '<p class="num">'+esc(c.factureNum)+'</p>'+
+        '<p class="dates">Émise le '+esc(dateFr(c.factureLe))+
+          (c.datePromise ? '<br>Vente du '+esc(dateFr(c.datePromise)) : '')+'</p>'+
+      '</div>'+
+      '<div class="moi">'+
+        '<span class="nom'+(r.raisonSociale?'':' vide')+'">'+
+          esc(r.raisonSociale || "[ Ton nom ou ta raison sociale ]")+'</span>'+
+        (r.adresse ? esc(r.adresse) : '<span class="vide">[ Ton adresse ]</span>')+'<br>'+
+        (r.siret ? 'SIRET '+esc(r.siret) : '')+
+        (r.siret && r.contact ? '<br>' : '')+
+        esc(r.contact || "")+
+      '</div>'+
     '</div>'+
-    '<p class="noprint" style="margin-top:24px"><button onclick="window.print()" '+
-    'style="padding:10px 18px;font-size:15px;cursor:pointer">Imprimer / enregistrer en PDF</button></p>'+
-    '</body></html>';
+
+    '<div class="parties">'+
+      '<div class="bloc">'+
+        '<p class="lab">Facturé à</p>'+
+        '<p class="val">'+esc((c.client && c.client.nom) || "—")+'</p>'+
+        ((c.client && c.client.contact) ? '<p class="sec">'+esc(c.client.contact)+'</p>' : '')+
+      '</div>'+
+      '<div class="bloc">'+
+        '<p class="lab">Règlement</p>'+
+        '<p class="val">'+(solde > 0 ? esc(eur(solde))+' à régler' : 'Soldée')+'</p>'+
+        '<p class="sec">'+(solde > 0
+          ? 'à réception de la facture'
+          : 'Merci, tout est réglé.')+'</p>'+
+      '</div>'+
+    '</div>'+
+
+    '<table><thead><tr><th>Désignation</th><th class="n">Montant</th></tr></thead><tbody>';
+
+  lignes.forEach(function(l){
+    h += '<tr><td>'+esc(l.d)+
+      (l.s ? '<span class="det">'+esc(l.s)+'</span>' : '')+
+      '</td><td class="n">'+esc(eur(l.m))+'</td></tr>';
+  });
+  h += '<tr class="total"><td>Total</td><td class="n">'+esc(eur(totalDu(c)))+'</td></tr>';
+  if (enc > 0){
+    h += '<tr class="sous"><td>'+esc(typeVers)+' déjà versé'+
+      ((c.versement && c.versement.date) ? ' le '+esc(dateFr(c.versement.date)) : '')+
+      '</td><td class="n">− '+esc(eur(enc))+'</td></tr>'+
+      '<tr class="du"><td>Reste à régler</td><td class="n">'+esc(eur(solde))+'</td></tr>';
+  }
+  h += '</tbody></table>'+
+
+    '<div class="ment">'+
+      '<p><span class="cle">TVA non applicable</span>, article 293 B du code général des impôts.</p>'+
+      ((c.personnalisee && !c.clientePro)
+        ? '<p><span class="cle">Pas de droit de rétractation.</span> Article confectionné selon '+
+          'les spécifications de la cliente : conformément à l\'article L221-28 du code de la '+
+          'consommation, il n\'ouvre pas de droit de rétractation.</p>'
+        : '')+
+      (arrhes
+        ? '<p><span class="cle">Arrhes.</span> Les sommes versées à la commande ont la nature '+
+          'd\'arrhes au sens de l\'article L214-1 du code de la consommation : la cliente peut '+
+          'se dédire en les perdant, le vendeur en en restituant le double.</p>'
+        : (enc > 0
+          ? '<p><span class="cle">Acompte.</span> Les sommes versées à la commande ont la nature '+
+            'd\'acompte : la vente est ferme et définitive pour les deux parties.</p>'
+          : ''))+
+      (c.clientePro
+        ? '<p><span class="cle">Retard de paiement.</span> Pénalités au taux de trois fois '+
+          'l\'intérêt légal en vigueur. Indemnité forfaitaire pour frais de recouvrement : 40 €. '+
+          'Pas d\'escompte pour paiement anticipé.</p>'
+        : '')+
+    '</div>'+
+    '<p class="pied">Facture à conserver dix ans.</p>'+
+  '</div>'+
+  '<div class="barre noprint"><button onclick="window.print()">'+
+    'Imprimer ou enregistrer en PDF</button></div>'+
+  '</body></html>';
+
   var w = window.open("", "_blank");
   if (!w){ toast("Autorise les fenêtres pour voir la facture"); return; }
   w.document.write(h); w.document.close();
@@ -7572,7 +8086,7 @@ function renderPatronDetail(main, p){
   var cId = el('<div class="card" style="margin-bottom:16px"><div class="body">'+
     '<div class="grid2">'+
       '<label class="f"><span>Titre du patron</span><input data-p="titre" type="text" placeholder="Lapin Pompon, bonnet torsadé…"></label>'+
-      '<label class="f"><span>Créatrice ou auteur</span><input data-p="auteur" type="text" placeholder="Le nom qui figure sur le patron"></label>'+
+      '<label class="f"><span>Qui l\'a créé</span><input data-p="auteur" type="text" placeholder="Le nom qui figure sur le patron"></label>'+
       '<label class="f"><span>Où tu l\'as eu</span><input data-p="origine" type="text" placeholder="Acheté sur…, offert par…, magazine…"></label>'+
       '<label class="f"><span>Notes</span><input data-p="notes" type="text" placeholder="Crochet 3 mm, j\'ai changé les oreilles…"></label>'+
     '</div>'+
@@ -7849,7 +8363,11 @@ document.documentElement.lang = "fr";
 window.addEventListener("beforeunload", sauverTout);
 window.addEventListener("pagehide", sauverTout);
 document.addEventListener("visibilitychange", function(){ if (document.hidden) sauverTout(); });
-document.getElementById("brand").addEventListener("click", function(){ view.modeleVu = null; aller("accueil"); });
+document.getElementById("brand").addEventListener("click", function(){
+  view.modeleVu = null; view.cmdVue = null; view.patronVu = null;
+  view.sousPatrons = null; view.biblioVu = null;
+  aller("accueil");
+});
 view.tab = state.vuAccueil ? "creations" : "accueil";
 
 /* Avec une installation « comptes » (config.js rempli), rien ne s'affiche

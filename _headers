@@ -1,0 +1,43 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# En-têtes de sécurité — lus automatiquement par Cloudflare Pages
+#
+# Ce fichier ne sert QUE sur Cloudflare Pages (et Netlify). GitHub Pages
+# l'ignore : c'est précisément l'une des raisons de la migration.
+# Il n'y a rien à installer, rien à configurer : il suffit qu'il soit à la
+# racine du dépôt, à côté de index.html.
+# ═══════════════════════════════════════════════════════════════════════════
+
+/*
+  # Ce que la page a le droit de charger. Tout ce qui n'est pas listé ici est
+  # refusé par le navigateur — y compris un script qu'on aurait réussi à
+  # injecter. C'est la protection la plus utile de ce fichier.
+  #
+  # 'unsafe-inline' est nécessaire parce que l'application porte ses styles et
+  # son script dans la page elle-même. Ce n'est pas idéal en théorie ; en
+  # pratique aucun contenu de tiers n'est jamais inséré comme du HTML (tout
+  # passe par esc()), ce qui est la condition pour que ce soit acceptable.
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://upload.wikimedia.org https://www.gutenberg.org; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+
+  # Empêche d'afficher Crochompte dans un cadre sur un autre site — la façon
+  # classique de faire cliquer quelqu'un sur un bouton qu'il ne voit pas.
+  X-Frame-Options: DENY
+
+  # Le navigateur s'en tient au type de fichier annoncé, au lieu de deviner.
+  X-Content-Type-Options: nosniff
+
+  # En quittant le site, on ne transmet que le domaine, jamais la page exacte.
+  Referrer-Policy: strict-origin-when-cross-origin
+
+  # Interdit au site de demander la caméra, le micro ou la position :
+  # l'application n'en a aucun usage, autant fermer la porte.
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()
+
+  # Impose HTTPS pour les deux prochaines années, y compris aux sous-domaines.
+  # À n'activer qu'une fois le site bien servi en HTTPS : tant que cet en-tête
+  # est envoyé, un navigateur qui l'a vu refusera toute connexion non chiffrée.
+  Strict-Transport-Security: max-age=63072000; includeSubDomains
+
+# Les fichiers de configuration ne doivent jamais être mis en cache : sinon
+# une clé changée mettrait des heures à être prise en compte.
+/config.js
+  Cache-Control: no-store

@@ -70,6 +70,37 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
     return {prenom:"", nom:"", dateNaissance:"", ville:"", pays:"", typeActivite:""};
   };
 
+  /* ───────── file d'attente durable ─────────
+     « Il reste du travail à envoyer » doit survivre à la fermeture de l'onglet.
+     Sinon, une modification faite hors ligne puis un redémarrage laissaient le
+     module croire qu'il n'avait rien à envoyer : il allait chercher la version
+     du serveur et la posait par-dessus. Elle était archivée, donc récupérable,
+     mais il fallait le deviner. index.html pose la même marque quand ce module
+     n'a pas pu se charger du tout. */
+  var CLE_AENVOYER = "crochompte-v1.aEnvoyer";
+  function marquerAEnvoyer(oui){
+    try{
+      if (!oui){ localStorage.removeItem(CLE_AENVOYER); return; }
+      localStorage.setItem(CLE_AENVOYER, JSON.stringify({
+        depuis: Date.now(),
+        uid: etat.session ? etat.session.user.id : null
+      }));
+    }catch(e){}
+  }
+  /* La marque porte le compte auquel ce travail appartient — index.html
+     inscrit le même. Sur un ordinateur partagé, du travail non envoyé laissé
+     par quelqu'un d'autre ne doit surtout pas repartir dans le compte de la
+     personne suivante : on n'envoie que si c'est bien le même compte qui
+     rouvre l'atelier. */
+  function resteAEnvoyer(uid){
+    try{
+      var v = localStorage.getItem(CLE_AENVOYER);
+      if (!v) return false;
+      var m = JSON.parse(v);
+      return m.uid === uid;
+    }catch(e){ return false; }
+  }
+
   var etat = {
     session: null,
     pseudo: null,
@@ -227,6 +258,7 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
             if (res.error) { peindre({erreur: res.error.message}); return; }
             etat.vuLe = maj;
             etat.sale = false;
+            marquerAEnvoyer(false);
             etat.versionsSues = null;
             peindre(ecrase ? {archive: r.data.maj} : undefined);
           });
@@ -289,6 +321,7 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
   function signaler(){
     if (!etat.session) return;
     etat.sale = true;
+    marquerAEnvoyer(true);
     if (etat.minuteur) clearTimeout(etat.minuteur);
     etat.minuteur = setTimeout(envoyer, 2500);
   }
@@ -407,7 +440,13 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
     if (!pont.definirEtatConnexion) return;
     var connecte = !!etat.session && !etat.recuperation;
     if (dernierEtatAnnonce && dernierEtatAnnonce.connecte === connecte) return;
-    dernierEtatAnnonce = {exige: true, connecte: connecte};
+    dernierEtatAnnonce = {
+      exige: true,
+      connecte: connecte,
+      /* index.html le retient pour n'ouvrir sa porte de secours hors ligne
+         qu'au compte qui l'a déjà ouverte normalement ici. */
+      uid: connecte ? etat.session.user.id : null
+    };
     pont.definirEtatConnexion(dernierEtatAnnonce);
   }
 
@@ -900,12 +939,17 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
       });
 
       q("#sy-out").addEventListener("click", function(){
-        sb.auth.signOut().then(function(){
+        /* Partir sans envoyer perdrait le travail des dernières secondes, et
+           laisserait une marque qui ne concerne plus personne. */
+        var dernier = etat.sale ? envoyer() : Promise.resolve();
+        dernier.then(function(){ marquerAEnvoyer(false); }).then(function(){
+        return sb.auth.signOut().then(function(){
           etat.session = null; etat.vuLe = null; etat.pseudo = null; etat.mode = "connexion";
           etat.brouillon = Object.assign(brouillonInscriptionVide(), {identifiantOubli:"", identifiantConnexion:""});
           etat.brouillonProfil = brouillonProfilVide();
           pont.toast("Déconnectée.");
           peindre();
+        });
         });
       });
     }
@@ -925,7 +969,19 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
   sb.auth.getSession().then(function(r){
     etat.session = (r.data && r.data.session) || null;
     if (etat.session){
-      recupererProfil().then(peindre);
+      /* Du travail fait hors ligne attend peut-être depuis la dernière fois. */
+      etat.sale = resteAEnvoyer(etat.session.user.id);
+      if (etat.sale) marquerAEnvoyer(true);   /* on y inscrit le compte */
+      recupererProfil().then(function(){
+        peindre();
+        /* Au rechargement aussi : soit on envoie ce qui attendait, soit on va
+           chercher ce qui a été fait sur l'autre appareil. Jusqu'ici rien ne
+           se passait avant que l'onglet soit quitté puis retrouvé — l'artisane
+           pouvait travailler une heure sur une version périmée. */
+        return synchroniser();
+      }).then(function(){
+        if (etat.sale === false) peindre();
+      });
     } else {
       peindre();
     }
