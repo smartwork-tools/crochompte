@@ -450,8 +450,49 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
     pont.definirEtatConnexion(dernierEtatAnnonce);
   }
 
+  /* Se déconnecter, d'où qu'on le demande : le bouton de Réglages, l'en-tête
+     sur ordinateur, le menu sur téléphone. Partir sans envoyer perdrait le
+     travail des dernières secondes, et laisserait une marque « à envoyer »
+     qui ne concerne plus personne. */
+  var deconnexionEnCours = false;
+  function deconnecter(){
+    if (deconnexionEnCours || !etat.session) return Promise.resolve();
+    deconnexionEnCours = true;
+    var dernier = etat.sale ? envoyer() : Promise.resolve();
+    return dernier.then(function(){ marquerAEnvoyer(false); }).then(function(){
+      return sb.auth.signOut();
+    }).then(function(){
+      etat.session = null; etat.vuLe = null; etat.pseudo = null; etat.mode = "connexion";
+      etat.brouillon = Object.assign(brouillonInscriptionVide(), {identifiantOubli:"", identifiantConnexion:""});
+      etat.brouillonProfil = brouillonProfilVide();
+      deconnexionEnCours = false;
+      pont.toast("Déconnectée.");
+      peindre();
+    }, function(){
+      deconnexionEnCours = false;
+      pont.toast("La déconnexion n'a pas abouti. Vérifie ta connexion et réessaie.");
+    });
+  }
+
+  /* L'en-tête de l'application affiche qui est connectée et le bouton pour
+     se déconnecter : on lui dit qui, à chaque changement. */
+  var dernierCompteAnnonce = "";
+  function annoncerCompte(){
+    if (!pont.definirCompte) return;
+    var connecte = !!etat.session && !etat.recuperation;
+    var info = {
+      connecte: connecte,
+      pseudo: connecte ? (etat.pseudo || (etat.session.user && etat.session.user.email) || "") : ""
+    };
+    var cle = JSON.stringify(info);
+    if (cle === dernierCompteAnnonce) return;
+    dernierCompteAnnonce = cle;
+    pont.definirCompte(info);
+  }
+
   function peindre(msg){
     declarerEtat();
+    annoncerCompte();
     var zone = etat.zone;
     if (!zone) return;
     msg = msg || {};
@@ -938,20 +979,7 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
         });
       });
 
-      q("#sy-out").addEventListener("click", function(){
-        /* Partir sans envoyer perdrait le travail des dernières secondes, et
-           laisserait une marque qui ne concerne plus personne. */
-        var dernier = etat.sale ? envoyer() : Promise.resolve();
-        dernier.then(function(){ marquerAEnvoyer(false); }).then(function(){
-        return sb.auth.signOut().then(function(){
-          etat.session = null; etat.vuLe = null; etat.pseudo = null; etat.mode = "connexion";
-          etat.brouillon = Object.assign(brouillonInscriptionVide(), {identifiantOubli:"", identifiantConnexion:""});
-          etat.brouillonProfil = brouillonProfilVide();
-          pont.toast("Déconnectée.");
-          peindre();
-        });
-        });
-      });
+      q("#sy-out").addEventListener("click", deconnecter);
     }
   }
 
@@ -964,7 +992,7 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 
   /* On expose le signal d'enregistrement pour que l'application prévienne
      ce module à chaque sauvegarde. */
-  window.CrochompteSync = {signaler: signaler};
+  window.CrochompteSync = {signaler: signaler, deconnecter: deconnecter};
 
   sb.auth.getSession().then(function(r){
     etat.session = (r.data && r.data.session) || null;

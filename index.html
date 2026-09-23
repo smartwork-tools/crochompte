@@ -69,6 +69,7 @@
   }
 
   *{box-sizing:border-box;}
+  [hidden]{display:none!important;}
   body{background:var(--ground);color:var(--ink);font-family:"Public Sans",system-ui,-apple-system,Segoe UI,sans-serif;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;}
   h1,h2,h3,h4{font-family:"Bricolage Grotesque","Public Sans",system-ui,sans-serif;font-weight:600;margin:0;text-wrap:balance;}
   .num{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums;}
@@ -81,12 +82,91 @@
   .brand{font-family:"Bricolage Grotesque",sans-serif;font-weight:700;font-size:19px;letter-spacing:-.02em;cursor:pointer;background:none;border:none;color:inherit;padding:0;}
   .brand span{color:var(--primary-ink);}
   .brandnote{font-size:12.5px;color:var(--muted);}
-  nav{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none;}
-  nav::-webkit-scrollbar{display:none;}
-  nav button{appearance:none;background:none;border:none;font:inherit;font-weight:500;font-size:14px;color:var(--muted);cursor:pointer;padding:9px 13px 11px;border-bottom:2px solid transparent;white-space:nowrap;}
-  nav button[aria-current="true"]{color:var(--ink);border-bottom-color:var(--primary);}
-  nav button:hover{color:var(--ink);}
+  #nav{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none;}
+  #nav::-webkit-scrollbar{display:none;}
+  #nav button{appearance:none;background:none;border:none;font:inherit;font-weight:500;font-size:14px;color:var(--muted);cursor:pointer;padding:9px 13px 11px;border-bottom:2px solid transparent;white-space:nowrap;}
+  #nav button[aria-current="true"]{color:var(--ink);border-bottom-color:var(--primary);}
+  #nav button:hover{color:var(--ink);}
+
+  /* Compte dans l'en-tête (ordinateur) : qui est connectée, et de quoi partir.
+     Toujours au même endroit, comme sur tous les sites qu'on connaît. */
+  .compte-entete{display:flex;align-items:center;gap:10px;margin-left:auto;}
+  .compte-nom{display:flex;align-items:center;gap:8px;appearance:none;background:none;border:1px solid transparent;
+    border-radius:99px;padding:3px 10px 3px 3px;font:inherit;font-size:14px;font-weight:500;color:var(--ink);cursor:pointer;max-width:220px;}
+  .compte-nom:hover{border-color:var(--rule-strong);background:var(--surface-2);}
+  .compte-nom .pseudo{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .avatar{width:28px;height:28px;border-radius:50%;flex:none;display:grid;place-items:center;
+    background:var(--primary-soft);color:var(--primary-ink);font-weight:700;font-size:13px;text-transform:uppercase;}
+  .hl-badge{font-size:12.5px;font-weight:600;color:var(--warn);background:var(--warn-soft);border-radius:99px;padding:4px 10px;}
+  .menu-btn{display:none;align-items:center;gap:7px;appearance:none;background:var(--surface);border:1px solid var(--rule-strong);
+    border-radius:8px;padding:7px 12px;font:inherit;font-size:14px;font-weight:600;color:var(--ink);cursor:pointer;min-height:42px;}
+  .menu-btn:hover{background:var(--surface-2);}
+
+  /* Menu du téléphone */
+  .menu-mobile{position:fixed;inset:0;z-index:60;}
+  .mm-fond{position:absolute;inset:0;background:rgba(10,14,12,.45);}
+  .mm-panneau{position:absolute;top:0;right:0;bottom:0;width:min(340px,88vw);background:var(--surface);
+    display:flex;flex-direction:column;box-shadow:-8px 0 30px rgba(0,0,0,.18);
+    padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);}
+  .mm-tete{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--rule);}
+  .mm-fermer{appearance:none;background:none;border:none;color:var(--ink);cursor:pointer;width:42px;height:42px;
+    display:grid;place-items:center;border-radius:8px;}
+  .mm-fermer:hover{background:var(--surface-2);}
+  .mm-liste{flex:1;overflow-y:auto;padding:8px;}
+  .mm-liste button{display:flex;align-items:center;width:100%;appearance:none;background:none;border:none;
+    font:inherit;font-size:16px;font-weight:500;color:var(--ink);text-align:left;cursor:pointer;
+    padding:13px 14px;border-radius:9px;min-height:48px;}
+  .mm-liste button:hover{background:var(--surface-2);}
+  .mm-liste button[aria-current="true"]{background:var(--primary-soft);color:var(--primary-ink);font-weight:600;}
+  .mm-compte{border-top:1px solid var(--rule);padding:14px 16px 18px;display:flex;flex-direction:column;gap:10px;}
+  .mm-compte .qui{display:flex;align-items:center;gap:10px;font-weight:600;}
+  .mm-compte .qui small{display:block;font-weight:400;color:var(--muted);font-size:12.5px;}
+  .mm-compte .btn{width:100%;justify-content:center;min-height:46px;}
+  body.menu-ouvert{overflow:hidden;}
+
+  @media (max-width:720px){
+    body.app-ouverte .menu-btn{display:inline-flex;}
+    body.app-ouverte #nav{display:none;}
+    body.app-ouverte .brandnote, body.app-ouverte .compte-entete{display:none!important;}
+    .topbar-in{padding-bottom:12px;}
+    .brandrow{flex-wrap:nowrap;}
+  }
   main{max-width:1100px;margin:0 auto;padding:22px 20px 80px;}
+
+  /* Réglages rangés par rubrique : la liste à gauche, la rubrique ouverte à
+     droite (ordinateur) ; la liste d'abord, puis la rubrique (téléphone). */
+  .reg{display:grid;grid-template-columns:250px minmax(0,1fr);gap:28px;align-items:start;}
+  .reg-nav{position:sticky;top:112px;display:flex;flex-direction:column;gap:2px;}
+  .reg-item{display:flex;flex-direction:column;gap:2px;width:100%;text-align:left;appearance:none;background:none;
+    border:none;border-left:3px solid transparent;font:inherit;color:var(--ink);cursor:pointer;
+    padding:10px 12px;border-radius:0 8px 8px 0;}
+  .reg-item:hover{background:var(--surface-2);}
+  .reg-item[aria-current="true"]{background:var(--primary-soft);border-left-color:var(--primary);}
+  .ri-t{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14.5px;}
+  .ri-a{font-size:12.5px;color:var(--muted);line-height:1.35;}
+  .ri-badge{font-size:11px;font-weight:600;letter-spacing:.01em;color:var(--warn);background:var(--warn-soft);
+    border-radius:99px;padding:1px 8px;}
+  .reg-tete{margin:0 0 16px;}
+  .reg-tete h2{font-size:21px;margin:0 0 4px;}
+  .reg-tete p{margin:0;color:var(--muted);max-width:65ch;}
+  .reg-retour{appearance:none;background:none;border:none;font:inherit;font-weight:600;font-size:15px;
+    color:var(--primary-ink);cursor:pointer;padding:8px 0;margin:0 0 8px;min-height:44px;}
+  .card.zone-sensible{border-color:var(--bad);}
+  .card.zone-sensible > header h2{color:var(--bad);}
+  button.btn.danger{color:var(--bad);border-color:var(--bad);}
+  button.btn.danger:hover{background:var(--bad-soft);}
+  @media (max-width:720px){
+    .reg{display:block;}
+    .reg-liste .reg-nav{position:static;background:var(--surface);border:1px solid var(--rule);
+      border-radius:12px;overflow:hidden;gap:0;}
+    .reg-liste .reg-item{border-left:none;border-radius:0;border-bottom:1px solid var(--rule);
+      padding:14px 44px 14px 16px;position:relative;min-height:62px;justify-content:center;}
+    .reg-liste .reg-item::after{content:"›";position:absolute;right:18px;top:50%;transform:translateY(-50%);
+      font-size:24px;line-height:1;color:var(--muted);}
+    .reg-liste .reg-item:last-child{border-bottom:none;}
+    .reg-liste .reg-item[aria-current="true"]{background:none;}
+    .reg-detail .reg-nav{display:none;}
+  }
   main.wide{max-width:1100px;}
 
   /* buttons + fields */
@@ -128,6 +208,20 @@
   .chip.neutral{background:var(--surface-2);color:var(--muted);border:1px solid var(--rule);}
   .hypo{display:inline-block;font-size:10px;font-weight:600;letter-spacing:.06em;background:var(--warn-soft);color:var(--warn);padding:2px 6px;border-radius:3px;vertical-align:1px;}
   .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px;}
+  /* Indicateurs : deux groupes nommés plutôt qu'un mur de chiffres */
+  .ind-groupe{font-family:"Public Sans",system-ui,sans-serif;font-size:12px;font-weight:600;text-transform:uppercase;
+    letter-spacing:.07em;color:var(--muted);margin:22px 0 10px;}
+  .ind-guide{margin:0;padding:0;list-style:none;counter-reset:etape;display:grid;gap:12px;}
+  .ind-guide li{counter-increment:etape;display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:12px;align-items:center;
+    padding:12px 0;border-top:1px solid var(--rule);}
+  .ind-guide li:first-child{border-top:none;padding-top:0;}
+  .ind-guide li::before{content:counter(etape);width:28px;height:28px;border-radius:50%;display:grid;place-items:center;
+    background:var(--primary-soft);color:var(--primary-ink);font-weight:700;font-size:13px;}
+  .ind-guide li p{margin:2px 0 0;font-size:13.5px;color:var(--muted);}
+  .ind-source{margin-top:22px;padding:14px 16px;border-radius:10px;background:var(--surface-2);border:1px solid var(--rule);
+    font-size:13px;color:var(--muted);max-width:85ch;}
+  .ind-source p{margin:0 0 6px;} .ind-source p:last-child{margin:0;}
+  @media (max-width:560px){ .ind-guide li{grid-template-columns:32px minmax(0,1fr);align-items:start;} .ind-guide li .btn{grid-column:2;justify-self:start;} }
   .tile{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:14px 16px;}
   .tile .k{font-size:12px;color:var(--muted);font-weight:500;}
   .tile .v{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;font-size:24px;line-height:1.2;margin-top:6px;letter-spacing:-.02em;white-space:nowrap;}
@@ -520,7 +614,7 @@
     button.btn.ghost{min-height:42px;min-width:42px;}
     input, select{min-height:44px;}
     td input, td select{min-height:42px;font-size:14px;}
-    nav button{padding:12px 13px 13px;}
+    #nav button{padding:12px 13px 13px;}
     a.src{min-height:64px;}
   }
   @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
@@ -532,9 +626,28 @@
   <div class="topbar-in">
     <div class="brandrow">
       <button class="brand" id="brand" type="button">Croch<span>ompte</span></button>
-      <div class="brandnote">Combien tu gagnes vraiment, à l'heure, sur chaque création</div>
+      <div class="brandnote" id="brandnote">Combien tu gagnes vraiment, à l'heure, sur chaque création</div>
+      <div class="compte-entete" id="compte-entete" hidden></div>
+      <button class="menu-btn" id="menu-btn" type="button" aria-expanded="false" aria-controls="menu-mobile">
+        <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5.5h14M3 10h14M3 14.5h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <span>Menu</span>
+      </button>
     </div>
-    <nav id="nav"></nav>
+    <nav id="nav" aria-label="Rubriques"></nav>
+  </div>
+</div>
+<!-- Menu du téléphone : les rubriques en liste, puis le compte. -->
+<div class="menu-mobile" id="menu-mobile" hidden>
+  <div class="mm-fond" data-mm-fermer></div>
+  <div class="mm-panneau" role="dialog" aria-modal="true" aria-label="Menu">
+    <div class="mm-tete">
+      <span class="brand" style="pointer-events:none">Croch<span>ompte</span></span>
+      <button type="button" class="mm-fermer" data-mm-fermer aria-label="Fermer le menu">
+        <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="mm-liste" id="mm-liste"></div>
+    <div class="mm-compte" id="mm-compte"></div>
   </div>
 </div>
 <main id="main"></main>
@@ -1068,6 +1181,8 @@ window.CrochomptePont = {
      n'a jamais été annoncé, l'application attend (renderChargement) au lieu
      de montrer quoi que ce soit. */
   definirEtatConnexion: function(info){ definirEtatConnexion(info); },
+  /* sync.js dit qui est connectée, pour l'en-tête ({connecte, pseudo}). */
+  definirCompte: function(info){ definirCompte(info); },
   /* sync.js dépose ici de quoi lire et publier la bibliothèque partagée.
      Tant qu'il ne l'a pas fait — installation sans compte, module non chargé —
      la bibliothèque n'existe simplement pas dans l'interface, plutôt que
@@ -1336,7 +1451,7 @@ var TABS = [
   {id:"atelier",     nom:"Atelier"},
   {id:"patrons",     nom:"Mes patrons",    base:true},
   {id:"stock",       nom:"Matières",       base:true},
-  {id:"indicateurs", nom:"Indicateurs"},
+  {id:"indicateurs", nom:"Indicateurs",    base:true},
   {id:"reglages",    nom:"Réglages",       base:true}
 ];
 /* Les onglets visibles dépendent du mode choisi. Un brouillon non enregistré
@@ -1364,24 +1479,142 @@ function aller(tab, opts){
     if (tab !== "commandes") view.cmdVue = null;
     if (tab !== "patrons")   { view.patronVu = null; view.sousPatrons = null; }
     if (tab !== "fiche")     view.ficheId = null;
+    if (tab !== "reglages")  view.regSection = null;
   }
   if (opts.sub) view.sub = opts.sub;
   view.tab = tab;
   render();
 }
 
+/* Toucher le nom d'un onglet ramène toujours à son début : dans Réglages, à
+   la liste des rubriques plutôt qu'à la dernière rubrique ouverte. */
+function allerOnglet(id){
+  if (id === "reglages") view.regSection = null;
+  aller(id);
+}
 function renderNav(){
   var nav = document.getElementById("nav");
+  var liste = document.getElementById("mm-liste");
   nav.innerHTML = "";
+  liste.innerHTML = "";
+  document.body.classList.add("app-ouverte");
   onglets().forEach(function(t){
     var b = el('<button type="button">'+esc(t.nom)+'</button>');
     if (view.tab === t.id) b.setAttribute("aria-current","true");
-    b.addEventListener("click", function(){
-      aller(t.id);
-    });
+    b.addEventListener("click", function(){ allerOnglet(t.id); });
     nav.appendChild(b);
+    /* Même liste, en colonne, pour le menu du téléphone. */
+    var m = el('<button type="button">'+esc(t.nom)+'</button>');
+    if (view.tab === t.id) m.setAttribute("aria-current","true");
+    m.addEventListener("click", function(){ fermerMenuMobile(); allerOnglet(t.id); });
+    liste.appendChild(m);
   });
+  renderEntete();
 }
+
+/* ═════ EN-TÊTE : COMPTE ET MENU DU TÉLÉPHONE ═════
+   Sur ordinateur, qui est connectée et le bouton pour se déconnecter restent
+   en haut à droite, sur tous les écrans. Sur téléphone, les rubriques passent
+   dans un menu en liste, et le compte en bas de ce menu — la disposition que
+   tout le monde connaît déjà. */
+var compteInfo = {connecte:false, pseudo:""};
+function definirCompte(info){
+  info = info || {};
+  compteInfo = {connecte: !!info.connecte, pseudo: String(info.pseudo || "")};
+  renderEntete();
+}
+function initiale(p){ var t = String(p||"").trim(); return t ? t.charAt(0) : "?"; }
+function seDeconnecter(){
+  fermerMenuMobile();
+  if (window.CrochompteSync && window.CrochompteSync.deconnecter) window.CrochompteSync.deconnecter();
+}
+function ouvrirMonCompte(){
+  fermerMenuMobile();
+  view.regSection = "compte";
+  aller("reglages");
+}
+function renderEntete(){
+  var ouverte = document.body.classList.contains("app-ouverte");
+  var zone = document.getElementById("compte-entete");
+  var mm = document.getElementById("mm-compte");
+  var note = document.getElementById("brandnote");
+  zone.innerHTML = ""; mm.innerHTML = "";
+  zone.hidden = true; mm.hidden = true; note.hidden = false;
+  if (!ouverte) return;
+
+  if (modeHorsLigne){
+    note.hidden = true; zone.hidden = false; mm.hidden = false;
+    zone.appendChild(el('<span class="hl-badge" title="Tes modifications partiront au retour du réseau">Hors ligne</span>'));
+    mm.appendChild(el('<p class="hint" style="margin:0"><span class="hl-badge">Hors ligne</span> '+
+      'Tes modifications restent sur cet appareil et partiront au retour du réseau.</p>'));
+    return;
+  }
+  if (!compteInfo.connecte) return;
+
+  note.hidden = true; zone.hidden = false; mm.hidden = false;
+  var nom = compteInfo.pseudo || "Mon compte";
+  var bNom = el('<button type="button" class="compte-nom" title="Mon compte">'+
+    '<span class="avatar" aria-hidden="true">'+esc(initiale(nom))+'</span>'+
+    '<span class="pseudo">'+esc(nom)+'</span></button>');
+  bNom.addEventListener("click", ouvrirMonCompte);
+  var bOut = el('<button type="button" class="btn sm" id="entete-deconnexion">Se déconnecter</button>');
+  bOut.addEventListener("click", seDeconnecter);
+  zone.appendChild(bNom); zone.appendChild(bOut);
+
+  mm.appendChild(el('<div class="qui"><span class="avatar" aria-hidden="true">'+esc(initiale(nom))+'</span>'+
+    '<span>'+esc(nom)+'<small>Connectée</small></span></div>'));
+  var mCompte = el('<button type="button" class="btn">Mon compte</button>');
+  mCompte.addEventListener("click", ouvrirMonCompte);
+  var mOut = el('<button type="button" class="btn" id="menu-deconnexion">Se déconnecter</button>');
+  mOut.addEventListener("click", seDeconnecter);
+  mm.appendChild(mCompte); mm.appendChild(mOut);
+}
+function viderEntete(){
+  document.getElementById("nav").innerHTML = "";
+  document.getElementById("mm-liste").innerHTML = "";
+  document.body.classList.remove("app-ouverte");
+  fermerMenuMobile();
+  renderEntete();
+}
+function ouvrirMenuMobile(){
+  var m = document.getElementById("menu-mobile");
+  m.hidden = false;
+  document.body.classList.add("menu-ouvert");
+  document.getElementById("menu-btn").setAttribute("aria-expanded","true");
+  var cible = m.querySelector('.mm-liste [aria-current="true"]') || m.querySelector(".mm-liste button");
+  if (cible) cible.focus();
+}
+function fermerMenuMobile(){
+  var m = document.getElementById("menu-mobile");
+  if (!m || m.hidden) return;
+  m.hidden = true;
+  document.body.classList.remove("menu-ouvert");
+  var b = document.getElementById("menu-btn");
+  b.setAttribute("aria-expanded","false");
+}
+(function(){
+  document.getElementById("menu-btn").addEventListener("click", ouvrirMenuMobile);
+  document.getElementById("menu-mobile").addEventListener("click", function(e){
+    if (e.target.closest("[data-mm-fermer]")){
+      fermerMenuMobile(); document.getElementById("menu-btn").focus();
+    }
+  });
+  document.addEventListener("keydown", function(e){
+    if (e.key === "Escape" && !document.getElementById("menu-mobile").hidden){
+      fermerMenuMobile(); document.getElementById("menu-btn").focus();
+    }
+  });
+  /* Le menu n'a pas de sens au-delà de la largeur téléphone : s'il reste
+     ouvert quand on élargit la fenêtre, on le referme. */
+  if (window.matchMedia){
+    var mqMenu = window.matchMedia("(max-width:720px)");
+    var surChange = function(){
+      if (!mqMenu.matches) fermerMenuMobile();
+      if (view.tab === "reglages") render();
+    };
+    if (mqMenu.addEventListener) mqMenu.addEventListener("change", surChange);
+  }
+})();
 
 /* ───────────────────────────────────────────────────────────────────────
    Garder sa place pendant qu'on écrit
@@ -1485,7 +1718,7 @@ function render(){
      que si on a réellement changé de vue. */
   var vueMaintenant = view.tab + "|" + (view.sub||"") + "|" + (view.modeleVu||"") +
                       "|" + (view.ficheId||"") + "|" + (view.cmdVue||"") +
-                      "|" + (view.patronVu||"");
+                      "|" + (view.patronVu||"") + "|" + (view.regSection||"");
   if (vueMaintenant !== derniereVue){
     derniereVue = vueMaintenant;
     window.scrollTo(0,0);
@@ -1548,7 +1781,7 @@ function bandeauHorsLigne(){
 
 function renderChargement(){
   arreterVoix();
-  document.getElementById("nav").innerHTML = "";
+  viderEntete();
   var main = document.getElementById("main");
   main.innerHTML = "";
   main.appendChild(el(
@@ -1568,7 +1801,7 @@ function renderErreurChargement(){
     return;
   }
   arreterVoix();
-  document.getElementById("nav").innerHTML = "";
+  viderEntete();
   var main = document.getElementById("main");
   main.innerHTML = "";
   var box = el(
@@ -1592,7 +1825,7 @@ function renderErreurChargement(){
    change par rapport à l'ancien emplacement, dans Réglages. */
 function renderPortail(){
   arreterVoix();
-  document.getElementById("nav").innerHTML = "";
+  viderEntete();
   var main = document.getElementById("main");
   main.innerHTML = "";
   var enveloppe = el(
@@ -2073,7 +2306,7 @@ function renderCreations(main){
   tiles.appendChild(el('<div class="tile"><div class="k">Sous-payées</div><div class="v '+(sousPayees?"warn":"good")+'">'+sousPayees+'</div><div class="s">en dessous de ton objectif</div></div>'));
   main.appendChild(tiles);
 
-  var inv = inviteComplet("Suivre tes pièces une par une, gérer les commandes de tes clientes et voir tes indicateurs de production.");
+  var inv = inviteComplet("Suivre chaque pièce une par une, de la fabrication à la vente, dans un onglet Atelier.");
   if (inv && calculs.length) main.appendChild(inv);
 
   main.appendChild(el('<div class="sechead" style="margin-top:0"><h2>Le détail, création par création</h2></div>'));
@@ -3200,10 +3433,34 @@ function renderMesMatieres(main){
 
 /* ═════ 13. RÉGLAGES ═════ */
 
+/* Les rubriques de Réglages. « aide » s'affiche dans la liste, « intro » en
+   tête de la rubrique ouverte. */
+var SECTIONS_REG = [
+  {id:"compte",      nom:"Mon compte",      siCompte:true,
+   aide:"Identité, synchronisation, déconnexion",
+   intro:"Qui tu es, où sont enregistrées tes données, et de quoi te déconnecter."},
+  {id:"activite",    nom:"Mon activité",
+   aide:"Ce que tu fais, ton statut, ton taux horaire",
+   intro:"Ce qui décide de tous les calculs : si tu vends, sous quel statut, et ce que tu veux gagner de l'heure."},
+  {id:"charges",     nom:"Mes charges",
+   aide:"Cotisations, frais fixes, coût des matières",
+   intro:"Ce qui part avant que tu sois payée : cotisations, frais fixes, et la façon de compter le prix de tes matières."},
+  {id:"canaux",      nom:"Canaux de vente",   siVend:true,
+   aide:"Frais des plateformes et des marchés",
+   intro:"Ce que chaque plateforme, boutique ou marché prélève sur une vente."},
+  {id:"facturation", nom:"Facturation",       siVend:true,
+   aide:"Mentions obligatoires de tes factures",
+   intro:"Ce qui s'imprime en haut de chaque facture. Sans ces mentions, une facture n'est pas valable."},
+  {id:"donnees",     nom:"Mes données",
+   aide:"Copie de côté, restauration, remise à zéro",
+   intro:"Une copie de ton atelier, à garder de côté ou à restaurer."}
+];
+
 function renderReglages(main){
   var r = state.reglages;
+  var vend = r.profil !== "passion";
   main.appendChild(enTete("Réglages",
-    "Quelques chiffres personnels qui rendent tous les calculs justes. Tu peux y revenir à tout moment.",
+    "Tes chiffres, ton activité et ton compte, rangés par rubrique. Tu peux y revenir à tout moment.",
     [bouton("Revoir la mise en route", function(){ view.sub = null; aller("demarrage"); })]));
 
   var c1 = el('<div class="card" style="margin-bottom:16px"><header><h2>Ce que tu veux gagner</h2>'+
@@ -3228,7 +3485,7 @@ function renderReglages(main){
     '<p class="hint" style="margin-top:14px">Taux en vigueur au 1er janvier 2026 (décret 2024-484), '+
     'relevés le 16 septembre 2026 sur economie.gouv.fr et portail-autoentrepreneur.fr. '+
     '<b>Si tu bénéficies de l\'ACRE</b>, ton taux est réduit la première année : il figure sur ton '+
-    'compte URSSAF, et le champ ci-dessous reste modifiable à la main.</p>'+
+    'compte URSSAF, et le champ « Cotisations » de la rubrique Mes charges reste modifiable à la main.</p>'+
     '</div></div>');
   var selSt = cStat.querySelector("#r-statut");
   var o0 = document.createElement("option");
@@ -3246,7 +3503,7 @@ function renderReglages(main){
       ? '<div class="banner"><p><b>' + esc(pct(st.taux/100)) + '</b> — ' + esc(st.detail) + '.<br>' +
         esc(st.quand) + '</p></div>'
       : '<p class="hint" style="margin:0">Tant que tu n\'as pas choisi, l\'outil garde le taux ' +
-        'saisi plus bas comme une hypothèse.</p>';
+        'saisi dans « Mes charges » comme une hypothèse.</p>';
   }
   selSt.addEventListener("change", function(){
     var st = statutCotis(selSt.value);
@@ -3286,7 +3543,7 @@ function renderReglages(main){
       '<label class="f"><span>Heures de crochet par jour</span><input type="number" min="0" max="16" step="0.5" data-r="heuresParJour" value="'+(r.heuresParJour||3)+'"></label>'+
     '</div>'+
     '<p class="hint">Les frais fixes, ce sont l\'abonnement boutique, l\'assurance, la comptabilité, le site — répartis sur le nombre de pièces vendues dans le mois. '+
-    'Le <b>taux de cotisations</b> est rempli par le statut choisi juste au-dessus : tu n\'as pas à le calculer. '+
+    'Le <b>taux de cotisations</b> est rempli par ton statut, choisi dans la rubrique « Mon activité » : tu n\'as pas à le calculer. '+
     'Tu peux le corriger à la main si ta situation est particulière — ACRE, exonération, taux transitoire.</p>'+
     '<p class="hint">Volontairement absents : l\'amortissement de tes crochets, l\'électricité et le mètre carré de ton salon. '+
     'Répartis sur un amigurumi, ça se chiffre en centimes et ça ajoute surtout du bruit.</p>'+
@@ -3334,38 +3591,32 @@ function renderReglages(main){
       sauver();
     });
   });
-  var cM = el('<div class="card" style="margin-bottom:16px"><header><h2>Ce que l\'application affiche</h2></header><div class="body">'+
-    '<label class="f" style="max-width:520px"><span>Mode d\'affichage</span><select data-r2="mode">'+
-    '<option value="simple">Simple — calculer mes prix et gérer mes matières</option>'+
-    '<option value="complet">Complet — ajouter le suivi des pièces et les indicateurs</option></select></label>'+
-    '<p class="hint">En mode simple, l\'application se limite à l\'essentiel : le catalogue, tes fiches de création et tes matières. '+
-    'Le mode complet ajoute l\'<b>Atelier</b> (suivi pièce par pièce, commandes clients) et les <b>Indicateurs</b> (production, dépenses, rentabilité). '+
-    'Rien n\'est perdu en repassant en simple : les données restent, seuls les onglets disparaissent.</p></div></div>');
+  var cM = el('<div class="card" style="margin-bottom:16px"><header><h2>Suivi pièce par pièce</h2>'+
+    '<p>Pour celles qui ont du stock, des séries ou des marchés.</p></header><div class="body">'+
+    '<label class="f" style="max-width:520px"><span>Onglet Atelier</span><select data-r2="mode">'+
+    '<option value="simple">Non — je calcule mes prix et je gère mes matières</option>'+
+    '<option value="complet">Oui — suivre chaque pièce, de la fabrication à la vente</option></select></label>'+
+    '<p class="hint">L\'<b>Atelier</b> suit chaque pièce une par une : à faire, en cours, terminée, en vente, vendue. '+
+    'Les <b>Indicateurs</b> restent toujours disponibles : ils se remplissent avec tes commandes, tes achats de matières '+
+    'et, si tu l\'actives, le suivi de l\'Atelier. Rien n\'est perdu en le désactivant : les pièces restent, seul l\'onglet disparaît.</p></div></div>');
   cM.querySelector("[data-r2]").value = r.mode || "simple";
   cM.querySelector("[data-r2]").addEventListener("change", function(e){
     state.reglages.mode = e.target.value; sauverTout(); render();
-    toast(e.target.value === "complet" ? "Mode complet activé" : "Mode simple activé");
+    toast(e.target.value === "complet" ? "Onglet Atelier ajouté" : "Onglet Atelier retiré");
   });
-  main.appendChild(cM);
 
   var c0 = el('<div class="card" style="margin-bottom:16px"><header><h2>Comment tu utilises l\'outil</h2></header><div class="body">'+
     '<label class="f" style="max-width:460px"><span>Je crée…</span><select data-r2="profil">'+
     '<option value="vend">pour vendre (micro-entreprise, marchés, boutique en ligne)</option>'+
     '<option value="passion">pour le plaisir, sans vendre ou presque</option></select></label>'+
     '<p class="hint">En mode « pour le plaisir », l\'Atelier et les Indicateurs masquent tout ce qui touche à la vente '+
-    'et ne gardent que le suivi de tes pièces, tes stocks et ce que ton loisir te coûte.</p></div></div>');
+    'et ne gardent que le suivi de tes pièces, tes stocks et ce que ton loisir te coûte. Les rubriques '+
+    '« Canaux de vente » et « Facturation » disparaissent aussi des réglages.</p></div></div>');
   c0.querySelector("[data-r2]").value = r.profil || "vend";
   c0.querySelector("[data-r2]").addEventListener("change", function(e){
     state.reglages.profil = e.target.value; sauverTout(); render();
     toast(e.target.value === "passion" ? "Mode loisir activé" : "Mode vente activé");
   });
-  main.appendChild(c0); main.appendChild(c1); main.appendChild(cStat); main.appendChild(c2); main.appendChild(cConf); main.appendChild(cFact); main.appendChild(c3);
-  /* Emplacement du module de comptes, quand il est branché. */
-  if (pontCompte){
-    var zc = el('<div id="zone-compte" style="margin-bottom:16px"></div>');
-    main.appendChild(zc);
-    try{ pontCompte(zc); }catch(e){}
-  }
 
   /* --- plateformes --- */
   var cP = el('<div class="card" style="margin-bottom:16px"><header><h2>Frais des plateformes et canaux de vente</h2>'+
@@ -3414,28 +3665,29 @@ function renderReglages(main){
     state.canaux = clone(CANAUX_DEFAUT); sauverTout(); render(); toast("Frais réinitialisés");
   });
   cP.querySelector(".body").appendChild(bReset);
-  main.appendChild(cP);
 
   /* --- données --- */
   var cfgCompte = window.CROCHOMPTE_CONFIG || {};
-  var texteDonnees = (cfgCompte.supabaseUrl && cfgCompte.supabaseAnonKey)
-    ? 'Ton atelier est déjà sauvegardé automatiquement sur ton compte. Cette sauvegarde manuelle '
-      + 'reste utile pour garder une copie de côté, changer d\'appareil sans attendre, ou revenir en arrière.'
-    : 'Elles vivent dans ce navigateur, sur cet appareil. Rien n\'est envoyé ailleurs.';
-  var cD = el('<div class="card"><header><h2>Tes données</h2>'+
-    '<p>' + texteDonnees + '</p></header><div class="body"></div></div>');
-  var bd = cD.querySelector(".body");
-  var bar = el('<div class="savebar" style="margin-bottom:14px"></div>');
+  var avecCompte = !!(cfgCompte.supabaseUrl && cfgCompte.supabaseAnonKey);
+  var texteDonnees = avecCompte
+    ? 'Ton atelier est déjà sauvegardé automatiquement sur ton compte. Une copie de côté reste utile '
+      + 'pour changer d\'appareil sans attendre, ou revenir en arrière.'
+    : 'Tes données vivent dans ce navigateur, sur cet appareil. Rien n\'est envoyé ailleurs : '
+      + 'une copie de côté est ta seule sauvegarde.';
   var zone = document.createElement("textarea");
+  zone.id = "reg-restaurer";
   zone.placeholder = '{"reglages":…}';
 
-  var bCopy = el('<button type="button" class="btn">Copier ma sauvegarde</button>');
+  var cSauv = el('<div class="card" style="margin-bottom:16px"><header><h2>Faire une copie de côté</h2>'+
+    '<p>' + esc(texteDonnees) + '</p></header><div class="body"></div></div>');
+  var bar = el('<div class="savebar"></div>');
+  var bCopy = el('<button type="button" class="btn primary">Copier ma sauvegarde</button>');
   bCopy.addEventListener("click", function(){
     var txt = JSON.stringify(state);
     if (navigator.clipboard && navigator.clipboard.writeText){
       navigator.clipboard.writeText(txt).then(function(){ marquerSauvegarde(); toast("Sauvegarde copiée"); },
-        function(){ zone.value = txt; toast("Copie-la depuis la zone ci-dessous"); });
-    } else { zone.value = txt; toast("Copie-la depuis la zone ci-dessous"); }
+        function(){ zone.value = txt; toast("Copie-la depuis la zone « Restaurer » ci-dessous"); });
+    } else { zone.value = txt; toast("Copie-la depuis la zone « Restaurer » ci-dessous"); }
   });
   bar.appendChild(bCopy);
   var bDl = el('<button type="button" class="btn">Télécharger un fichier</button>');
@@ -3447,21 +3699,19 @@ function renderReglages(main){
       .catch(function(){ toast("Téléchargement refusé"); });
   });
   bar.appendChild(bDl);
-  var bZero = el('<button type="button" class="btn ghost">Tout remettre à zéro</button>');
-  var arme = false;
-  bZero.addEventListener("click", function(){
-    if (!arme){ arme = true; bZero.textContent = "Confirmer : tout effacer";
-      setTimeout(function(){ arme = false; bZero.textContent = "Tout remettre à zéro"; }, 4000); return; }
-    state = etatInitial(); sauverTout();
-    view = {tab:"creations", sub:"matieres", ficheId:null, draft:null, modeleVu:null,
-            filtre:"tous", recherche:"", tri:"famille", fProd:"tous", fCom:"tous", periode:"mois"};
-    render(); toast("Remis à zéro");
-  });
-  bar.appendChild(bZero);
-  bd.appendChild(bar);
-  bd.appendChild(el('<label class="f"><span>Coller une sauvegarde pour la restaurer</span></label>'));
-  bd.appendChild(zone);
-  var bRest = el('<button type="button" class="btn" style="margin-top:10px">Restaurer</button>');
+  cSauv.querySelector(".body").appendChild(bar);
+  cSauv.querySelector(".body").appendChild(el('<p class="hint" style="margin:12px 0 0">'+
+    (r.sauvegardeLe ? 'Dernière copie faite le ' + esc(dateLisible(r.sauvegardeLe)) + '.'
+                    : 'Aucune copie faite pour l\'instant.') +
+    ' Colle-la dans un courriel à toi-même ou dans une note : c\'est un simple texte.</p>'));
+
+  var cRest = el('<div class="card" style="margin-bottom:16px"><header><h2>Restaurer une sauvegarde</h2>'+
+    '<p>Colle une copie faite plus tôt : elle <b>remplace</b> tout ce qui est actuellement dans ton atelier.</p>'+
+    '</header><div class="body"></div></div>');
+  var bdR = cRest.querySelector(".body");
+  bdR.appendChild(el('<label class="f" for="reg-restaurer"><span>Contenu de la sauvegarde</span></label>'));
+  bdR.appendChild(zone);
+  var bRest = el('<button type="button" class="btn" style="margin-top:10px">Restaurer cette sauvegarde</button>');
   bRest.addEventListener("click", function(){
     try{
       var p = JSON.parse(zone.value);
@@ -3472,15 +3722,94 @@ function renderReglages(main){
       render(); toast("Sauvegarde restaurée");
     }catch(e){ toast("Cette sauvegarde n'est pas lisible"); }
   });
-  bd.appendChild(bRest);
-  main.appendChild(cD);
+  bdR.appendChild(bRest);
+
+  /* L'action irréversible à part, en bas, en rouge — jamais à côté d'un
+     bouton qu'on clique tous les jours. */
+  var cZero = el('<div class="card zone-sensible"><header><h2>Tout remettre à zéro</h2>'+
+    '<p>Efface tes créations, tes matières, tes pièces, tes commandes et tes réglages. C\'est irréversible'+
+    (avecCompte ? ' — et ton compte en ligne sera vidé lui aussi à la synchronisation suivante' : '') +
+    '. Fais une copie de côté avant.</p></header><div class="body"></div></div>');
+  var bZero = el('<button type="button" class="btn danger">Tout remettre à zéro</button>');
+  var arme = false;
+  bZero.addEventListener("click", function(){
+    if (!arme){ arme = true; bZero.textContent = "Confirmer : tout effacer";
+      setTimeout(function(){ arme = false; bZero.textContent = "Tout remettre à zéro"; }, 4000); return; }
+    state = etatInitial(); sauverTout();
+    view = {tab:"creations", sub:"matieres", ficheId:null, draft:null, modeleVu:null,
+            filtre:"tous", recherche:"", tri:"famille", fProd:"tous", fCom:"tous", periode:"mois"};
+    render(); toast("Remis à zéro");
+  });
+  cZero.querySelector(".body").appendChild(bZero);
 
   if (window.claude && window.claude.use){
     window.claude.use("downloads").then(function(x){ if (x){ dlCap = x; bDl.hidden = false; } }).catch(function(){});
   }
 
-  main.appendChild(el('<p class="hint" style="margin-top:20px;max-width:75ch">Cet outil ne fait pas de comptabilité et ne remplace aucun conseil. '+
-    'Il additionne ce que tu lui donnes et te montre ce qu\'il te reste par heure.</p>'));
+  /* ─── Assemblage : une rubrique à la fois ───
+     Tout sur une seule page, c'était onze cartes à faire défiler sans savoir
+     où chercher. On range par ce que la personne vient faire, et on dit en
+     face de chaque rubrique ce qui reste à compléter. */
+  var sections = SECTIONS_REG.filter(function(sc){
+    if (sc.siCompte && !pontCompte) return false;
+    if (sc.siVend && !vend) return false;
+    return true;
+  });
+  var aFaire = {
+    activite: (vend && !r.statut) ? "à compléter" : "",
+    charges: !r.confirmeLe ? "à vérifier" : "",
+    facturation: (!r.raisonSociale || !r.adresse) ? "à compléter" : ""
+  };
+  var mobile = !!(window.matchMedia && window.matchMedia("(max-width:720px)").matches);
+  var ids = sections.map(function(sc){ return sc.id; });
+  if (view.regSection && ids.indexOf(view.regSection) === -1) view.regSection = null;
+  var courante = view.regSection || (mobile ? null : ids[0]);
+
+  var wrap = el('<div class="reg' + (mobile ? (courante ? ' reg-detail' : ' reg-liste') : '') + '"></div>');
+  var navR = el('<nav class="reg-nav" aria-label="Rubriques des réglages"></nav>');
+  sections.forEach(function(sc){
+    var b = el('<button type="button" class="reg-item" data-section="'+esc(sc.id)+'">'+
+      '<span class="ri-t"><b>'+esc(sc.nom)+'</b>'+
+      (aFaire[sc.id] ? '<span class="ri-badge">'+esc(aFaire[sc.id])+'</span>' : '')+'</span>'+
+      '<span class="ri-a">'+esc(sc.aide)+'</span></button>');
+    if (sc.id === courante) b.setAttribute("aria-current","true");
+    b.addEventListener("click", function(){ view.regSection = sc.id; render(); });
+    navR.appendChild(b);
+  });
+  wrap.appendChild(navR);
+
+  if (courante){
+    var sc = SECTIONS_REG.filter(function(x){ return x.id === courante; })[0];
+    var cont = el('<div class="reg-contenu"></div>');
+    if (mobile){
+      var bRet = el('<button type="button" class="reg-retour">‹ Tous les réglages</button>');
+      bRet.addEventListener("click", function(){ view.regSection = null; render(); });
+      cont.appendChild(bRet);
+    }
+    cont.appendChild(el('<div class="reg-tete"><h2>'+esc(sc.nom)+'</h2><p>'+esc(sc.intro)+'</p></div>'));
+    var cartes = {
+      activite:    [c0, cStat, c1, cM],
+      charges:     [c2, c3, cConf],
+      canaux:      [cP],
+      facturation: [cFact],
+      donnees:     [cSauv, cRest, cZero]
+    };
+    if (courante === "compte"){
+      /* La zone n'est créée que quand elle est visible : le module de compte
+         y peint ses formulaires, et doit peindre là où on regarde. */
+      var zc = el('<div id="zone-compte" style="margin-bottom:16px"></div>');
+      cont.appendChild(zc);
+      try{ pontCompte(zc); }catch(e){}
+    } else {
+      (cartes[courante] || []).forEach(function(c){ cont.appendChild(c); });
+    }
+    if (courante === "activite" || courante === "charges"){
+      cont.appendChild(el('<p class="hint" style="margin-top:18px;max-width:75ch">Cet outil ne fait pas de comptabilité '+
+        'et ne remplace aucun conseil. Il additionne ce que tu lui donnes et te montre ce qu\'il te reste par heure.</p>'));
+    }
+    wrap.appendChild(cont);
+  }
+  main.appendChild(wrap);
 }
 var dlCap = null;
 
@@ -3964,6 +4293,12 @@ function legende(series){
 /* La carte des seuils. Elle prévient AVANT, parce qu'un seuil franchi ne se
    rattrape pas : on l'apprend en général au moment de la déclaration, quand
    il est trop tard pour ajuster ses prix ou étaler ses ventes. */
+function origineCA(ca){
+  var parts = [];
+  if (ca.pieces > 0) parts.push(esc(eur(ca.pieces)) + " de pièces vendues dans l'Atelier");
+  if (ca.commandes > 0) parts.push(esc(eur(ca.commandes)) + " encaissés sur tes commandes (arrhes, acomptes, soldes)");
+  return parts.length ? parts.join(" et ") : "rien d'encaissé pour l'instant cette année";
+}
 function carteSeuils(){
   var ca = caAnnuel();
   var sl = seuilsDuStatut();
@@ -4007,193 +4342,350 @@ function carteSeuils(){
     jaugeSeuil("Plafond du régime micro", ca.total, sl.micro, null,
       "Au-delà, tu sors du régime micro-entreprise et passes au régime réel.")+
     '<p class="hint" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--rule)">'+
-    '<b>Ce total vient de :</b> '+esc(eur(ca.pieces))+' de pièces vendues dans l\'Atelier'+
-    (ca.commandes > 0 ? ' et '+esc(eur(ca.commandes))+' encaissés sur des commandes livrées' : '')+
-    '. Si tu notes une même vente aux deux endroits, elle compte deux fois — '+
-    'vérifie avant de t\'y fier.</p>'+
+    '<b>Ce total vient de :</b> '+origineCA(ca)+'.'+
+    (ca.pieces > 0 && ca.commandes > 0 ? ' Si tu notes une même vente aux deux endroits, elle compte deux fois — '+
+      'vérifie avant de t\'y fier.' : '')+'</p>'+
     '<p class="hint">Seuils relevés le '+esc(SEUILS_DATE)+' sur service-public.gouv.fr. '+
     'Ils changent : en cas de doute au moment de la déclaration, vérifie-les.</p>'+
     '</div></div>');
   return c;
 }
 
+/* Une seule source de vérité pour l'argent : ce qui a réellement été reçu, à
+   sa date, qu'il vienne d'une pièce vendue dans l'Atelier ou d'un règlement de
+   commande (arrhes, acompte, solde). Jusqu'ici, seules les ventes de l'Atelier
+   étaient comptées : une artisane qui ne travaille qu'à la commande voyait
+   « 0 € encaissé ». Les données d'exemple ne sont jamais comptées — ce serait
+   montrer à quelqu'un de l'argent qu'elle n'a pas gagné. */
+
+function dateVersTs(v){
+  if (v === null || v === undefined || v === "") return null;
+  if (typeof v === "number") return v;
+  var s = String(v);
+  var t = /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(s + "T12:00:00").getTime() : Date.parse(s);
+  return isNaN(t) ? null : t;
+}
+function encaissements(){
+  var l = [];
+  (state.pieces||[]).forEach(function(p){
+    if (p.exemple || p.com !== "vendu" || !p.venduLe) return;
+    var m = Number(p.prix)||0; if (m <= 0) return;
+    l.push({t:p.venduLe, montant:m, source:"atelier", cid:p.cid});
+  });
+  commandes().forEach(function(c){
+    var v = c.versement || {};
+    var mv = Number(v.montant)||0;
+    if (mv > 0) l.push({t: dateVersTs(v.date) || dateVersTs(c.dateCommande), montant:mv,
+                        source:"commande", cid:c.cid, cmd:c.id});
+    (c.paiements||[]).forEach(function(pp){
+      var m = Number(pp.montant)||0; if (m <= 0) return;
+      l.push({t: dateVersTs(pp.date) || pp.saisiLe || null, montant:m, source:"commande", cid:c.cid, cmd:c.id});
+    });
+  });
+  return l.filter(function(x){ return !!x.t; });
+}
+function achatsMatieres(){
+  var l = [];
+  state.matieres.forEach(function(m){
+    (m.mouv||[]).forEach(function(mv){
+      if (mv.t !== "entree" || !(Number(mv.p) > 0) || !mv.d) return;
+      if (mv.n === "Achat d'exemple") return;
+      l.push({t:mv.d, montant:Number(mv.p), mid:m.id});
+    });
+  });
+  return l;
+}
+function sommeEntre(l, a, b){ var t = 0; l.forEach(function(x){ if (x.t >= a && x.t < b) t += x.montant; }); return t; }
+function compteEntre(l, a, b){ var n = 0; l.forEach(function(x){ if (x.t >= a && x.t < b) n++; }); return n; }
+
+/* La période se lit comme on en parle : « ce mois-ci », « cette année ». La
+   comparaison se fait toujours à durée égale — le 23 du mois contre le 23 du
+   mois dernier, jamais un mois entamé contre un mois entier. */
+var PER_IND = [
+  {k:"mois",      nom:"Ce mois-ci",       comp:"au mois dernier à la même date"},
+  {k:"trimestre", nom:"Ce trimestre",     comp:"au trimestre dernier à la même date"},
+  {k:"annee",     nom:"Cette année",      comp:"à l'an dernier à la même date"},
+  {k:"12m",       nom:"12 derniers mois", comp:"aux 12 mois d'avant"}
+];
+function bornesIndicateur(k){
+  var now = Date.now(), d = new Date(); d.setHours(0,0,0,0);
+  var a, ap;
+  if (k === "trimestre"){ var q = Math.floor(d.getMonth()/3)*3;
+    a = new Date(d.getFullYear(), q, 1); ap = new Date(d.getFullYear(), q-3, 1); }
+  else if (k === "annee"){ a = new Date(d.getFullYear(), 0, 1); ap = new Date(d.getFullYear()-1, 0, 1); }
+  else if (k === "12m"){ a = new Date(d.getFullYear(), d.getMonth()-12, d.getDate());
+    ap = new Date(d.getFullYear(), d.getMonth()-24, d.getDate()); }
+  else { a = new Date(d.getFullYear(), d.getMonth(), 1); ap = new Date(d.getFullYear(), d.getMonth()-1, 1); }
+  var debut = a.getTime(), precDebut = ap.getTime();
+  return {debut:debut, fin:now + 1, precDebut:precDebut,
+          precFin: Math.min(debut, precDebut + (now - debut))};
+}
+function texteVariation(actuel, avant, comp){
+  if (!(avant > 0)) return actuel > 0 ? "rien à comparer " + comp : "";
+  var v = (actuel - avant) / avant;
+  if (Math.abs(v) < 0.005) return "stable par rapport " + comp;
+  return (v > 0 ? "+" : "−") + pct(Math.abs(v)) + " par rapport " + comp;
+}
+function tuile(cle, valeur, sous, acc, classeV){
+  return el('<div class="tile acc '+(acc||'')+'"><div class="k">'+esc(cle)+'</div>'+
+    '<div class="v '+(classeV||'')+'">'+esc(valeur)+'</div>'+
+    (sous ? '<div class="s">'+esc(sous)+'</div>' : '')+'</div>');
+}
+
+/* Quand rien n'est encore enregistré : pas un tableau de zéros, qui
+   décourage, mais les trois gestes qui le remplissent. */
+function guideIndicateurs(vend){
+  var atelierActif = state.reglages.mode === "complet";
+  var g = el('<div class="card"><header><h2>Tes indicateurs se remplissent tout seuls</h2>'+
+    '<p>Il n\'y a rien à configurer. Chaque chose que tu enregistres dans l\'outil apparaît ici, à sa date.</p>'+
+    '</header><div class="body"><ol class="ind-guide"></ol>'+
+    '<p class="hint" style="margin:14px 0 0">Les données d\'exemple ne sont pas comptées : ici, tu ne vois que ce qui est à toi.</p>'+
+    '</div></div>');
+  var ol = g.querySelector("ol");
+  function etape(titre, texte, lib, action){
+    var li = el('<li><div><b>'+esc(titre)+'</b><p>'+esc(texte)+'</p></div></li>');
+    li.appendChild(bouton(lib, action));
+    ol.appendChild(li);
+  }
+  if (vend) etape("Tes commandes et leurs règlements",
+    "Arrhes, acompte, solde : chaque montant reçu compte dans « Encaissé », à la date où tu l'as reçu.",
+    "Ouvrir les commandes", function(){ aller("commandes"); });
+  etape("Tes achats de matières",
+    "Une entrée de stock saisie avec son prix compte dans tes achats du mois.",
+    "Ouvrir les matières", function(){ view.sub = "stock"; aller("stock"); });
+  etape(vend ? "Tes pièces vendues, une par une" : "Tes pièces terminées",
+    atelierActif ? "Chaque pièce passée en « terminée » ou « vendue » dans l'Atelier est comptée."
+                 : "Facultatif : l'Atelier suit chaque pièce de la fabrication à la vente.",
+    atelierActif ? "Ouvrir l'Atelier" : "Activer l'Atelier",
+    function(){
+      if (!atelierActif){ state.reglages.mode = "complet"; sauverTout(); toast("L'onglet Atelier est apparu"); }
+      aller("atelier");
+    });
+  return g;
+}
+
+function origineEncaisse(nbAt, nbCmd){
+  var parts = [];
+  if (nbAt) parts.push(nbAt + ' vente' + (nbAt > 1 ? 's notées' : ' notée') + ' dans l\'Atelier');
+  if (nbCmd) parts.push(nbCmd + ' règlement' + (nbCmd > 1 ? 's' : '') + ' de commandes (arrhes, acomptes, soldes)');
+  if (!parts.length) return '« Encaissé » est vide pour l\'instant : il additionnera tes ventes et les règlements de tes commandes, à leur date de paiement.';
+  return '« Encaissé » additionne ' + parts.join(' et ') + ', chacun à sa date de paiement — c\'est aussi la base de ce que tu déclares en micro-entreprise.';
+}
 function renderIndicateurs(main){
-  var vend = state.reglages.profil !== "passion";
-  var st = statsPieces();
+  var r = state.reglages;
+  var vend = r.profil !== "passion";
+  var enc = vend ? encaissements() : [];
+  var ach = achatsMatieres();
+  var pieces = (state.pieces||[]).filter(function(p){ return !p.exemple; });
+  var cmds = commandes();
   main.appendChild(enTete("Indicateurs",
-    vend ? "Ce que tu as produit, ce que tu as dépensé, ce que tu as encaissé — et quelle création te paie le mieux."
-         : "Ce que tu as produit, ce que ton loisir te coûte, et l'état de tes stocks."));
-  if (!state.pieces.length){
-    main.appendChild(etatVide("Rien à mesurer pour l'instant",
-      "Les indicateurs se remplissent tout seuls à partir de l'Atelier : chaque pièce terminée alimente la production, chaque pièce vendue alimente le chiffre d'affaires.",
-      [bouton("Ouvrir l'Atelier", function(){ aller("atelier"); }, true)]));
+    vend ? "Ce qui rentre, ce qui sort, et ce que ton travail te rapporte — calculé à partir de ce que tu enregistres."
+         : "Ce que tu produis, ce que ton loisir te coûte, et l'état de tes stocks."));
+
+  if (!enc.length && !ach.length && !pieces.length && !(vend && cmds.length)){
+    main.appendChild(guideIndicateurs(vend));
     return;
   }
 
   /* --- période --- */
-  var barre = el('<div class="filters" style="margin-bottom:18px"></div>');
-  PERIODES.forEach(function(pp){
-    var b = el('<button type="button" class="fchip">'+esc(pp.nom)+'</button>');
-    b.setAttribute("aria-pressed", view.periode === pp.k ? "true" : "false");
-    b.addEventListener("click", function(){ view.periode = pp.k; render(); });
+  if (!view.indPer) view.indPer = "mois";
+  var per = PER_IND[0];
+  PER_IND.forEach(function(x){ if (x.k === view.indPer) per = x; });
+  var B = bornesIndicateur(per.k);
+  var barre = el('<div class="filters" role="group" aria-label="Période" style="margin-bottom:6px"></div>');
+  PER_IND.forEach(function(x){
+    var b = el('<button type="button" class="fchip">'+esc(x.nom)+'</button>');
+    b.setAttribute("aria-pressed", x.k === per.k ? "true" : "false");
+    b.addEventListener("click", function(){ view.indPer = x.k; render(); });
     barre.appendChild(b);
   });
   main.appendChild(barre);
 
-  /* Les seuils passent avant les courbes : c'est l'information qui a des
-     conséquences, et la seule que personne d'autre ne surveille pour elle. */
+  var nbAlertes = alertesStock().length + alertesFinis().length;
+  var valMat = valeurStockMatieres();
+  var termP = pieces.filter(function(p){ return p.termineLe && p.termineLe >= B.debut && p.termineLe < B.fin; }).length;
+  var stockFini = 0, valFini = 0;
+  pieces.forEach(function(p){
+    if (p.prod === "termine" && p.com !== "vendu" && p.com !== "offert"){ stockFini++; valFini += Number(p.coutFige)||0; }
+  });
+  var achP = sommeEntre(ach, B.debut, B.fin), nbAchP = compteEntre(ach, B.debut, B.fin);
+
+  /* --- ton argent --- */
+  if (vend){
+    var encP = sommeEntre(enc, B.debut, B.fin), encAv = sommeEntre(enc, B.precDebut, B.precFin);
+    var tx = Number(r.cotisations) || 0;
+    var resteDu = 0, nbDus = 0;
+    cmds.forEach(function(c){
+      if (c.statut === "annulee" || c.statut === "devis") return;
+      var sd = soldeDu(c); if (sd > 0){ resteDu += sd; nbDus++; }
+    });
+    main.appendChild(el('<h2 class="ind-groupe">Ton argent · '+esc(per.nom.toLowerCase())+'</h2>'));
+    var t1 = el('<div class="tiles"></div>');
+    t1.appendChild(tuile("Encaissé", eur(encP), texteVariation(encP, encAv, per.comp) || "aucun paiement reçu sur la période",
+      "acc-good", "good"));
+    t1.appendChild(tuile("Achats de matières", eur(achP),
+      nbAchP ? nbAchP + " achat" + (nbAchP > 1 ? "s" : "") + " enregistré" + (nbAchP > 1 ? "s" : "") : "aucun achat saisi sur la période",
+      "acc-2"));
+    t1.appendChild(tuile("À mettre de côté", eur(encP * tx / 100),
+      r.statut ? "pour tes cotisations : " + pct(tx/100) + " de l'encaissé"
+               : "à " + pct(tx/100) + " — choisis ton statut dans Réglages pour le taux exact",
+      "acc-warn"));
+    t1.appendChild(tuile("Reste à encaisser", eur(resteDu),
+      nbDus ? "sur " + nbDus + " commande" + (nbDus > 1 ? "s" : "") + " acceptée" + (nbDus > 1 ? "s" : "")
+            : "aucune commande en attente de paiement",
+      "acc-3"));
+    main.appendChild(t1);
+  }
+
+  /* --- ton activité --- */
+  main.appendChild(el('<h2 class="ind-groupe">Ton activité</h2>'));
+  var t2 = el('<div class="tiles"></div>');
+  if (!vend){
+    t2.appendChild(tuile("Achats de matières · " + per.nom.toLowerCase(), eur(achP),
+      nbAchP ? nbAchP + " achat" + (nbAchP > 1 ? "s" : "") : "aucun achat saisi", "acc-2"));
+  }
+  if (pieces.length){
+    t2.appendChild(tuile("Pièces terminées · " + per.nom.toLowerCase(), String(termP),
+      "passées en « terminée » dans l'Atelier", "acc-1"));
+  }
+  if (vend){
+    var plan = planDeCharge();
+    t2.appendChild(tuile("Commandes en cours", String(plan.n),
+      plan.n ? dureeTexte(plan.heures * 60) + " de travail promis" + (plan.enRetard ? " · " + plan.enRetard + " en retard" : "")
+             : "aucune commande ouverte",
+      plan.enRetard ? "acc-bad" : "acc-1"));
+  }
+  t2.appendChild(tuile("Matières en stock", eur(valMat),
+    nbAlertes ? nbAlertes + " à racheter bientôt" : "aucune alerte", nbAlertes ? "acc-warn" : "acc-good"));
+  if (stockFini){
+    t2.appendChild(tuile("Pièces finies en stock", String(stockFini),
+      "elles t'ont coûté " + eur(valFini), "acc-3"));
+  }
+  var minTot = 0;
+  pieces.forEach(function(x){ minTot += minutesMesurees(x); });
+  if (minTot > 0) t2.appendChild(tuile("Temps chronométré", dureeTexte(minTot), "mesuré, toutes pièces confondues", "acc-2"));
+  main.appendChild(t2);
+
+  /* --- seuils : annuels, quelle que soit la période affichée --- */
   if (vend){ var cS = carteSeuils(); if (cS) main.appendChild(cS); }
 
-  var per = PERIODES[0];
-  PERIODES.forEach(function(pp){ if (pp.k === view.periode) per = pp; });
-
-  /* --- séries --- */
-  var sxProd = seaux(per.k, per.n);
-  state.pieces.forEach(function(p){ if (p.termineLe) rangerDans(sxProd, p.termineLe, "v", 1); });
-
-  var sxArgent = seaux(per.k, per.n);
-  state.matieres.forEach(function(m){
-    (m.mouv||[]).forEach(function(mv){ if (mv.t === "entree" && mv.p) rangerDans(sxArgent, mv.d, "v", mv.p); });
+  /* --- évolution --- */
+  var gran = PERIODES[2];
+  PERIODES.forEach(function(pp){ if (pp.k === view.periode) gran = pp; });
+  var cE = el('<div class="card" style="margin-bottom:18px"><header><h2>'+
+    (vend ? 'Ce qui rentre, ce qui sort' : 'Ce que tu dépenses en matières')+'</h2>'+
+    '<p>'+(vend ? 'Encaissements et achats de matières, ' : 'Achats de matières, ')+esc(gran.nom.toLowerCase())+'.</p></header>'+
+    '<div class="body"><div class="filters" role="group" aria-label="Échelle du graphique" style="margin-bottom:12px"></div>'+
+    '<div id="lgE"></div><div style="overflow-x:auto" id="gE"></div><p class="hint" id="nE"></p></div></div>');
+  var fE = cE.querySelector(".filters");
+  PERIODES.forEach(function(pp){
+    var b = el('<button type="button" class="fchip">'+esc(pp.nom)+'</button>');
+    b.setAttribute("aria-pressed", pp.k === gran.k ? "true" : "false");
+    b.addEventListener("click", function(){ view.periode = pp.k; render(); });
+    fE.appendChild(b);
   });
-  state.pieces.forEach(function(p){ if (p.venduLe) rangerDans(sxArgent, p.venduLe, "v2", Number(p.prix)||0); });
+  var sx = seaux(gran.k, gran.n);
+  ach.forEach(function(x){ rangerDans(sx, x.t, "v", x.montant); });
+  enc.forEach(function(x){ rangerDans(sx, x.t, "v2", x.montant); });
+  var totDep = 0, totEnc = 0;
+  sx.forEach(function(q){ totDep += q.v; totEnc += q.v2; });
+  var series = vend
+    ? [{nom:"Encaissé", champ:"v2", couleur:"var(--s-3)"}, {nom:"Achats de matières", champ:"v", couleur:"var(--s-2)"}]
+    : [{nom:"Achats de matières", champ:"v", couleur:"var(--s-2)"}];
+  cE.querySelector("#lgE").innerHTML = legende(series);
+  cE.querySelector("#gE").innerHTML = (totDep || totEnc)
+    ? barTemporel(sx, series, function(v){ return eur(v); })
+    : '<p class="hint" style="margin:0">Rien d\'enregistré sur cette échelle de temps.</p>';
+  cE.querySelector("#nE").innerHTML = (vend ? "Sur le graphique : <b>" + esc(eur(totEnc)) + "</b> encaissés, " : "Sur le graphique : ") +
+    "<b>" + esc(eur(totDep)) + "</b> d'achats. Un achat de fil sert souvent plusieurs mois : ce n'est pas un résultat, c'est ce qui a bougé.";
+  main.appendChild(cE);
 
-  var totalProduit = 0; sxProd.forEach(function(s){ totalProduit += s.v; });
-  var totalDep = 0, totalEnc = 0;
-  sxArgent.forEach(function(s){ totalDep += s.v; totalEnc += s.v2; });
-
-  var valMat = valeurStockMatieres();
-  var marge = st.ca - st.coutVendu;
-
-  /* --- indicateurs clés --- */
-  var tiles = el('<div class="tiles"></div>');
-  var nbAlertes = alertesStock().length + alertesFinis().length;
-  var LIBPER = {jour:"sur les 14 derniers jours", semaine:"sur les 12 dernières semaines",
-                mois:"sur les 12 derniers mois", annee:"sur les 5 dernières années"};
-  var moisCourant = 0;
-  var debutMois = debutPeriode(Date.now(), "mois");
-  state.pieces.forEach(function(x){ if (x.termineLe && x.termineLe >= debutMois) moisCourant++; });
-  tiles.appendChild(el('<div class="tile acc acc-1"><div class="k">Pièces terminées ce mois-ci</div>'+
-    '<div class="v">'+moisCourant+'</div>'+
-    '<div class="s">'+totalProduit+' au total '+esc(LIBPER[per.k]||"")+'</div></div>'));
-  tiles.appendChild(el('<div class="tile acc '+(nbAlertes?'acc-warn':'acc-good')+'">'+
-    '<div class="k">Mes matières en stock</div><div class="v">'+esc(eur(valMat))+'</div>'+
-    '<div class="s">'+(nbAlertes ? nbAlertes+' à racheter bientôt' : 'aucune alerte')+'</div></div>'));
-  tiles.appendChild(el('<div class="tile acc acc-3">'+
-    '<div class="k">Mes pièces finies en stock</div><div class="v">'+esc(eur(st.valStock))+'</div>'+
-    '<div class="s">'+st.stock+' pièce'+(st.stock>1?'s':'')+', à ce qu\'elles t\'ont coûté</div></div>'));
-  if (vend) tiles.appendChild(el('<div class="tile acc acc-1">'+
-    '<div class="k">Ces pièces, si tout se vend</div><div class="v">'+esc(eur(st.valStockPrix))+'</div>'+
-    '<div class="s">aux prix que tu affiches</div></div>'));
-  if (vend){
-    tiles.appendChild(el('<div class="tile acc acc-good"><div class="k">Encaissé au total</div><div class="v good">'+esc(eur(st.ca))+'</div>'+
-      '<div class="s">'+st.vendues+' pièce'+(st.vendues>1?'s vendues':' vendue')+'</div></div>'));
-    tiles.appendChild(el('<div class="tile acc '+(marge<0?'acc-bad':'acc-good')+'"><div class="k">Marge sur les ventes</div>'+
-      '<div class="v '+(marge<0?"bad":"good")+'">'+esc(eur(marge))+'</div>'+
-      '<div class="s">encaissé moins le coût de revient figé</div></div>'));
-  }
-  main.appendChild(tiles);
-
-  var minTot = 0;
-  state.pieces.forEach(function(x){ minTot += minutesMesurees(x); });
-  if (minTot > 0){
-    tiles.appendChild(el('<div class="tile acc acc-2"><div class="k">Temps chronométré</div>'+
-      '<div class="v">'+esc(dureeTexte(minTot))+'</div>'+
-      '<div class="s">mesuré au chronomètre, toutes pièces confondues</div></div>'));
+  /* --- production --- */
+  if (pieces.length){
+    var sxP = seaux(gran.k, gran.n);
+    pieces.forEach(function(p){ if (p.termineLe) rangerDans(sxP, p.termineLe, "v", 1); });
+    var totP = 0; sxP.forEach(function(q){ totP += q.v; });
+    var cP = el('<div class="card" style="margin-bottom:18px"><header><h2>Ce que tu as produit</h2>'+
+      '<p>Pièces passées en « terminée », '+esc(gran.nom.toLowerCase())+'.</p></header>'+
+      '<div class="body"><div style="overflow-x:auto" id="gP"></div></div></div>');
+    cP.querySelector("#gP").innerHTML = totP
+      ? barTemporel(sxP, [{nom:"Pièces terminées", champ:"v", couleur:"var(--s-1)"}],
+          function(v, axe){ return axe ? String(Math.round(v)) : Math.round(v) + " pièce" + (v>1?"s":""); })
+      : '<p class="hint" style="margin:0">Aucune pièce terminée sur cette échelle de temps.</p>';
+    main.appendChild(cP);
   }
 
-  /* --- production dans le temps --- */
-  var c1 = el('<div class="card" style="margin-bottom:18px"><header><h2>Ce que tu as produit</h2>'+
-    '<p>Nombre de pièces passées en « terminée », '+esc(per.nom.toLowerCase())+'.</p></header>'+
-    '<div class="body"><div style="overflow-x:auto" id="g1"></div></div></div>');
-  c1.querySelector("#g1").innerHTML = totalProduit
-    ? barTemporel(sxProd, [{nom:"Pièces terminées", champ:"v", couleur:"var(--s-1)"}],
-        function(v, axe){ return axe ? String(Math.round(v)) : Math.round(v) + " pièce" + (v>1?"s":""); })
-    : '<p class="hint" style="margin:0">Aucune pièce terminée sur cette période. Passe une pièce en « terminée » dans l\'onglet Atelier.</p>';
-  main.appendChild(c1);
-
-  /* --- argent --- */
+  /* --- ce qui te rapporte le plus --- */
   if (vend){
-    var seriesArgent = [
-      {nom:"Achats de matières", champ:"v",  couleur:"var(--s-2)"},
-      {nom:"Ventes encaissées",  champ:"v2", couleur:"var(--s-3)"}
-    ];
-    var c2 = el('<div class="card" style="margin-bottom:18px"><header><h2>Ce qui sort, ce qui rentre</h2>'+
-      '<p>Achats de matières enregistrés en stock, et prix des pièces vendues, '+esc(per.nom.toLowerCase())+'.</p></header>'+
-      '<div class="body"><div id="lg2"></div><div style="overflow-x:auto" id="g2"></div>'+
-      '<p class="hint" id="n2"></p></div></div>');
-    c2.querySelector("#lg2").innerHTML = legende(seriesArgent);
-    c2.querySelector("#g2").innerHTML = (totalDep || totalEnc)
-      ? barTemporel(sxArgent, seriesArgent, function(v){ return eur(v); })
-      : '<p class="hint" style="margin:0">Rien d\'enregistré sur cette période. Les achats apparaissent quand tu saisis une entrée de stock avec son prix ; les ventes quand tu passes une pièce en « vendue ».</p>';
-    c2.querySelector("#n2").innerHTML = "Sur la période : <b>"+esc(eur(totalDep))+"</b> d'achats, <b>"+esc(eur(totalEnc))+
-      "</b> encaissés. Attention, ce n'est pas un résultat : un achat de fil sert souvent à plusieurs mois de production.";
-    main.appendChild(c2);
-  }
-
-  /* --- répartition des pièces --- */
-  var c3 = el('<div class="card" style="margin-bottom:18px"><header><h2>Où en sont tes pièces</h2></header>'+
-    '<div class="body"><div id="g3"></div></div></div>');
-  c3.querySelector("#g3").innerHTML = barreRepartition(PROD.map(function(x){
-    return {lib:x.nom, val:st.parProd[x.k], couleur:x.c};
-  }));
-  main.appendChild(c3);
-
-  /* --- stock par famille --- */
-  var parFam = {};
-  FAMILLES.forEach(function(f){ parFam[f.id] = {n:0, val:0}; });
-  parFam["autre"] = {n:0, val:0};
-  state.pieces.forEach(function(p){
-    if (p.prod !== "termine" || p.com === "vendu" || p.com === "offert") return;
-    var cr = creation(p.cid); if (!cr) return;
-    var fam = modele(cr.modele)[1] || "autre";
-    if (!parFam[fam]) parFam[fam] = {n:0, val:0};
-    parFam[fam].n++; parFam[fam].val += Number(p.coutFige)||0;
-  });
-  var itemsFam = [];
-  FAMILLES.concat([{id:"autre", nom:"Hors catalogue"}]).forEach(function(f){
-    if (parFam[f.id] && parFam[f.id].n > 0)
-      itemsFam.push({lib:f.nom, val:parFam[f.id].n,
-                     couleur:(f.id==="autre" ? "var(--s-neutre)" : "var(--f-"+f.id+")")});
-  });
-  var c4 = el('<div class="card" style="margin-bottom:18px"><header><h2>Ton stock par famille</h2>'+
-    '<p>Pièces terminées et encore disponibles.</p></header><div class="body"><div id="g4"></div></div></div>');
-  c4.querySelector("#g4").innerHTML = itemsFam.length
-    ? barHorizontal(itemsFam, function(v){ return Math.round(v) + " pièce" + (v>1?"s":""); })
-    : '<p class="hint" style="margin:0">Aucune pièce terminée en stock.</p>';
-  main.appendChild(c4);
-
-  /* --- rentabilité par création --- */
-  if (vend){
+    var parCid = {};
+    enc.forEach(function(x){ if (!x.cid) return; parCid[x.cid] = (parCid[x.cid]||0) + x.montant; });
+    /* « Ton heure » se calcule sur ce qui a réellement été vendu, au prix
+       réellement pratiqué — pas sur le prix affiché de la fiche, qui peut
+       n'avoir rien à voir avec ce qu'une commande a rapporté. */
     var lignes = state.creations.map(function(c){
-      var r = calculer(c), b = bilanCreation(c.id);
-      return {nom:c.nom, gain:r.gainHoraire, vendues:b.vendues, ca:b.ca, stock:b.stock, seuil:Number(c.seuilFini)||0};
-    }).filter(function(x){ return x.vendues > 0 || x.stock > 0; });
+      var gains = [];
+      pieces.forEach(function(p){
+        if (p.cid !== c.id || p.com !== "vendu" || !(Number(p.prix) > 0)) return;
+        var copie = clone(c); copie.prix = Number(p.prix); copie.canal = p.canal || c.canal;
+        gains.push(calculer(copie).gainHoraire);
+      });
+      var livrees = cmds.filter(function(k){ return k.cid === c.id && k.statut === "livree"; });
+      livrees.forEach(function(k){ var bk = bilanCommande(k); if (bk && bk.heures > 0) gains.push(bk.gainHoraire); });
+      var reel = gains.length > 0;
+      var gain = reel ? gains.reduce(function(a,b){ return a + b; }, 0) / gains.length : calculer(c).gainHoraire;
+      var vendues = pieces.filter(function(p){ return p.cid === c.id && p.com === "vendu"; }).length + livrees.length;
+      var enStk = pieces.filter(function(p){
+        return p.cid === c.id && p.prod === "termine" && p.com !== "vendu" && p.com !== "offert"; }).length;
+      return {nom:c.nom, gain:gain, reel:reel, vendues:vendues, ca:parCid[c.id]||0, stock:enStk};
+    }).filter(function(x){ return x.vendues > 0 || x.ca > 0; });
     if (lignes.length){
       lignes.sort(function(a,b){ return b.ca - a.ca; });
-      var c5 = el('<div class="card"><header><h2>Rentabilité par création</h2>'+
-        '<p>Ce que chaque modèle t\'a rapporté, et ce qu\'il te paie à l\'heure.</p></header>'+
-        '<div class="body" style="padding-top:14px"></div></div>');
-      var w5 = el('<div class="tablewrap"></div>');
-      var t5 = el('<table style="min-width:620px"><thead><tr><th>Création</th><th class="n">Vendues</th>'+
-        '<th class="n">Encaissé</th><th class="n">Par heure</th><th class="n">En stock</th><th class="n">Sécurité</th></tr></thead><tbody></tbody></table>');
-      var tb5 = t5.querySelector("tbody");
+      var cR = el('<div class="card" style="margin-bottom:18px"><header><h2>Ce qui te rapporte le plus</h2>'+
+        '<p>Tout ce que chaque création t\'a rapporté — ventes de l\'Atelier et commandes — et ce qu\'elle te paie de l\'heure.</p>'+
+        '</header><div class="body" style="padding-top:14px"></div></div>');
+      var wR = el('<div class="tablewrap"></div>');
+      var tR = el('<table style="min-width:560px"><thead><tr><th>Création</th><th class="n">Vendues</th>'+
+        '<th class="n">Encaissé</th><th class="n">Ton heure</th><th class="n">En stock</th></tr></thead><tbody></tbody></table>');
       lignes.forEach(function(x){
-        var s = statut(x.gain);
-        tb5.appendChild(el('<tr><td><b>'+esc(x.nom)+'</b></td><td class="n">'+x.vendues+'</td>'+
+        var stt = statut(x.gain);
+        tR.querySelector("tbody").appendChild(el('<tr><td><b>'+esc(x.nom)+'</b></td><td class="n">'+x.vendues+'</td>'+
           '<td class="n">'+esc(eur(x.ca))+'</td>'+
-          '<td class="n" style="color:'+(s.k==="good"?"var(--good)":s.k==="warn"?"var(--warn)":"var(--bad)")+'">'+esc(eur(x.gain))+'</td>'+
-          '<td class="n"'+(x.seuil>0 && x.stock<x.seuil ? ' style="color:var(--warn);font-weight:600"' : '')+'>'+x.stock+'</td>'+
-          '<td class="n">'+(x.seuil||"—")+'</td></tr>'));
+          '<td class="n" style="color:'+(stt.k==="good"?"var(--good)":stt.k==="warn"?"var(--warn)":"var(--bad)")+'">'+esc(eur(x.gain))+
+            (x.reel ? '' : '<span class="hint" style="display:block;margin:0;font-size:11.5px">prix de la fiche</span>')+'</td>'+
+          '<td class="n">'+x.stock+'</td></tr>'));
       });
-      w5.appendChild(t5);
-      c5.querySelector(".body").appendChild(w5);
-      main.appendChild(c5);
+      wR.appendChild(tR);
+      cR.querySelector(".body").appendChild(wR);
+      cR.querySelector(".body").appendChild(el('<p class="hint" style="margin:10px 0 0">« Ton heure » : ce que la création t\'a '+
+        'réellement payé de l\'heure, en moyenne sur ses ventes et ses commandes livrées, au prix encaissé, une fois '+
+        'matières, frais et cotisations payés. Vert : au moins ton objectif de '+esc(eur(Number(r.tauxHoraire)||0))+'/h.</p>'));
+      main.appendChild(cR);
     }
   }
 
-  main.appendChild(el('<p class="hint" style="margin-top:20px;max-width:80ch">Ces indicateurs ne valent que par ce que tu saisis : '+
-    'les achats doivent passer par une entrée de stock avec leur prix, et les ventes par un changement d\'état dans l\'Atelier. '+
-    'Ce n\'est pas une comptabilité — c\'est un tableau de bord d\'atelier.</p>'));
+  /* --- état des pièces : seulement si l'Atelier est utilisé --- */
+  if (pieces.length){
+    var parProd = {};
+    PROD.forEach(function(x){ parProd[x.k] = 0; });
+    pieces.forEach(function(p){ if (parProd[p.prod] !== undefined) parProd[p.prod]++; });
+    var cO = el('<div class="card" style="margin-bottom:18px"><header><h2>Où en sont tes pièces</h2>'+
+      '<p>Toutes tes pièces suivies dans l\'Atelier, par étape de fabrication.</p></header>'+
+      '<div class="body"><div id="gO"></div></div></div>');
+    cO.querySelector("#gO").innerHTML = barreRepartition(PROD.map(function(x){
+      return {lib:x.nom, val:parProd[x.k], couleur:x.c};
+    }));
+    main.appendChild(cO);
+  }
+
+  /* --- d'où viennent ces chiffres --- */
+  var nbAt = enc.filter(function(x){ return x.source === "atelier"; }).length;
+  var nbCmd = enc.filter(function(x){ return x.source === "commande"; }).length;
+  main.appendChild(el('<div class="ind-source"><p><b>D\'où viennent ces chiffres.</b> '+
+    (vend ? origineEncaisse(nbAt, nbCmd) + ' ' : '')+
+    '« Achats de matières » reprend les entrées de stock saisies avec leur prix. '+
+    (vend && nbAt && nbCmd ? 'Si une même vente est notée à la fois dans l\'Atelier et dans une commande, elle compte deux fois. ' : '')+
+    'Les données d\'exemple ne sont jamais comptées.</p>'+
+    '<p>Ce n\'est pas une comptabilité : c\'est ton tableau de bord. Il se met à jour tout seul, sur tous tes appareils.</p></div>'));
 }
 
 
@@ -4394,9 +4886,9 @@ function bouton(libelle, action, primaire){
 function inviteComplet(raison){
   if (state.reglages.mode === "complet") return null;
   var d = el('<div class="banner"><p><b>Besoin de plus ?</b> '+esc(raison)+'</p></div>');
-  d.appendChild(bouton("Passer en mode complet", function(){
+  d.appendChild(bouton("Activer l'Atelier", function(){
     state.reglages.mode = "complet"; sauverTout(); render();
-    toast("Mode complet : Atelier et Indicateurs sont apparus");
+    toast("L'onglet Atelier est apparu");
   }));
   return d;
 }
@@ -6117,7 +6609,7 @@ function renderDemarrage(main){
           + "se met tout seul — les taux 2026 sont déjà dedans, tu n'as rien à chercher. Et ton taux "
           + "horaire : celui de départ (" + eur(b.tauxHoraire) + "/h) est un exemple, remplace-le par ce que "
           + "tu veux gagner de l'heure. C'est le seul chiffre que personne ne peut trouver à ta place.",
-      bouton: ["Ouvrir mes réglages", function(){ aller("reglages"); }]
+      bouton: ["Ouvrir mes réglages", function(){ view.regSection = "activite"; aller("reglages"); }]
     },
     {
       fait: b.matPerso >= 5,
@@ -6175,7 +6667,7 @@ function renderDemarrage(main){
               + "temps en temps : c'est une copie supplémentaire, indépendante du compte."
             : "Tes données vivent dans ce navigateur, sur cet appareil. Vider l'historique du navigateur les efface. "
               + "Exporte un fichier de sauvegarde : c'est aussi comme ça que tu passes du téléphone à l'ordinateur."),
-      bouton: ["Exporter ma sauvegarde", function(){ view.sub = "sauvegarde"; aller("reglages"); }]
+      bouton: ["Exporter ma sauvegarde", function(){ view.regSection = "donnees"; aller("reglages"); }]
     }
   ];
 
@@ -6417,20 +6909,15 @@ function caAnnuel(annee){
   annee = annee || new Date().getFullYear();
   var debut = new Date(annee, 0, 1).getTime();
   var fin   = new Date(annee + 1, 0, 1).getTime();
-  var pieces = 0, commandes = 0;
-  (state.pieces||[]).forEach(function(p){
-    if (p.com !== "vendu" || !p.venduLe) return;
-    if (p.venduLe < debut || p.venduLe >= fin) return;
-    pieces += Number(p.prix) || 0;
+  var pieces = 0, cmds = 0;
+  /* Même source que les Indicateurs : l'argent reçu, à sa date. C'est aussi
+     la base légale du chiffre d'affaires en micro-entreprise (les recettes
+     encaissées), donc celle sur laquelle les seuils s'apprécient. */
+  encaissements().forEach(function(x){
+    if (x.t < debut || x.t >= fin) return;
+    if (x.source === "atelier") pieces += x.montant; else cmds += x.montant;
   });
-  (state.commandes||[]).forEach(function(c){
-    if (c.statut !== "livree") return;
-    var d = c.factureLe ? new Date(c.factureLe).getTime()
-          : (c.datePromise ? new Date(c.datePromise).getTime() : null);
-    if (d === null || isNaN(d) || d < debut || d >= fin) return;
-    commandes += encaisse(c);
-  });
-  return {annee:annee, pieces:pieces, commandes:commandes, total:pieces + commandes};
+  return {annee:annee, pieces:pieces, commandes:cmds, total:pieces + cmds};
 }
 
 /* ═════ 35. PRIX MARCHÉ VÉRIFIÉS ═════
