@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// Inscription — pseudo, identité de base, adresse de courriel et mot de passe
+// Inscription — pseudo, adresse de courriel, mot de passe et attestation d'âge
 // (Supabase Edge Function)
 //
 // Supabase authentifie par adresse de courriel, pas par pseudo. Cette
@@ -84,30 +84,31 @@ Deno.serve(async (req: Request) => {
     return json({ erreur: "Pseudo invalide : 3 à 24 caractères, lettres, chiffres, tiret ou "
       + "tiret bas, sans accent ni espace, et qui commence par une lettre ou un chiffre." }, 400);
   }
-  if (!prenom || prenom.length > LONGUEUR_MAX_NOM) {
-    return json({ erreur: "Indique ton prénom." }, 400);
+  // Inscription allégée : seuls le pseudo, l'adresse, le mot de passe et
+  // l'attestation d'âge sont demandés. Le reste est facultatif — on ne
+  // collecte que ce qui sert (RGPD, article 5.1.c). Si une ancienne version
+  // du formulaire envoie encore ces champs, ils sont vérifiés et gardés.
+  if (prenom.length > LONGUEUR_MAX_NOM || nom.length > LONGUEUR_MAX_NOM) {
+    return json({ erreur: "Le prénom et le nom ne doivent pas dépasser 80 caractères." }, 400);
   }
-  if (!nom || nom.length > LONGUEUR_MAX_NOM) {
-    return json({ erreur: "Indique ton nom." }, 400);
+  if (ville.length > LONGUEUR_MAX_LIEU || pays.length > LONGUEUR_MAX_LIEU) {
+    return json({ erreur: "La ville et le pays ne doivent pas dépasser 100 caractères." }, 400);
   }
-  if (!RE_DATE.test(dateNaissance)) {
-    return json({ erreur: "Indique une date de naissance valide." }, 400);
+  if (typeActivite && !TYPES_ACTIVITE.has(typeActivite)) {
+    return json({ erreur: "Type d'activité inconnu." }, 400);
   }
-  const age = ageEnAnnees(dateNaissance);
-  if (age === null) {
-    return json({ erreur: "Cette date de naissance ne semble pas correcte." }, 400);
-  }
-  if (age < AGE_MINIMUM) {
-    return json({ erreur: `Crochompte ne s'adresse pas aux personnes de moins de ${AGE_MINIMUM} ans.` }, 400);
-  }
-  if (!ville || ville.length > LONGUEUR_MAX_LIEU) {
-    return json({ erreur: "Indique ta ville." }, 400);
-  }
-  if (!pays || pays.length > LONGUEUR_MAX_LIEU) {
-    return json({ erreur: "Indique ton pays." }, 400);
-  }
-  if (!TYPES_ACTIVITE.has(typeActivite)) {
-    return json({ erreur: "Choisis un type d'activité." }, 400);
+  // Âge : une date de naissance, si elle est donnée, est vérifiée ; sinon
+  // la personne doit avoir coché « J'ai 15 ans ou plus ».
+  if (dateNaissance) {
+    const age = RE_DATE.test(dateNaissance) ? ageEnAnnees(dateNaissance) : null;
+    if (age === null) {
+      return json({ erreur: "Cette date de naissance ne semble pas correcte." }, 400);
+    }
+    if (age < AGE_MINIMUM) {
+      return json({ erreur: `Crochompte ne s'adresse pas aux personnes de moins de ${AGE_MINIMUM} ans.` }, 400);
+    }
+  } else if (body.age15 !== true) {
+    return json({ erreur: `Coche la case « J'ai ${AGE_MINIMUM} ans ou plus » : Crochompte ne s'adresse pas aux personnes plus jeunes.` }, 400);
   }
   if (!RE_COURRIEL.test(email)) {
     return json({ erreur: "Cette adresse ne ressemble pas à une adresse de courriel." }, 400);
@@ -157,8 +158,12 @@ Deno.serve(async (req: Request) => {
   // réglé dans le projet. Le prénom et le pseudo voyagent avec le compte :
   // c'est ce qui permet au courriel de dire « Bienvenue, Marie ».
   const anon = createClient(url, anonKey);
+  // L'attestation d'âge est gardée, datée, avec le compte : c'est la trace
+  // de ce que la personne a déclaré en s'inscrivant.
+  const donnees: Record<string, string> = { pseudo, age_atteste_le: new Date().toISOString() };
+  if (prenom) donnees.prenom = prenom;
   const inscrire = () => anon.auth.signUp({
-    email, password: motDePasse, options: { emailRedirectTo, data: { prenom, pseudo } },
+    email, password: motDePasse, options: { emailRedirectTo, data: donnees },
   });
   let { data, error } = await inscrire();
   if (error) return json({ erreur: error.message }, 400);
@@ -182,7 +187,8 @@ Deno.serve(async (req: Request) => {
 
   const { error: eRes } = await admin.from("pseudos").insert({
     user_id: data.user.id, pseudo, pseudo_cle: pseudo, courriel: email,
-    prenom, nom, date_naissance: dateNaissance, ville, pays, type_activite: typeActivite,
+    prenom: prenom || null, nom: nom || null, date_naissance: dateNaissance || null,
+    ville: ville || null, pays: pays || null, type_activite: typeActivite || null,
   });
   if (eRes) {
     // On ne détruit QUE le compte créé à l'instant par cet appel : jamais un

@@ -12,7 +12,7 @@ Ce n'est pas un avis juridique : c'est une liste de contrôle honnête.
 
 | Obligation | Comment c'est couvert |
 |---|---|
-| **Minimisation** (art. 5.1.c) | Seuls le pseudo, l'identité de base (prénom, nom, date de naissance, ville, pays, type d'activité), l'adresse de courriel et l'atelier sont enregistrés. Pas d'adresse postale complète : ville + pays suffisent. Aucun traceur, aucune mesure d'audience, aucun profilage |
+| **Minimisation** (art. 5.1.c) | À l'inscription, seuls le pseudo, l'adresse de courriel, le mot de passe et une attestation datée « 15 ans ou plus » sont demandés. Prénom, nom, ville, pays et type d'activité sont facultatifs, ajoutés plus tard si l'utilisatrice le souhaite. La date de naissance n'est plus collectée. Aucun traceur, aucune mesure d'audience, aucun profilage |
 | **Transparence avant collecte** (art. 13) | Avant le bouton de connexion, l'application annonce ce qui sera enregistré et lie la politique de confidentialité |
 | **Droit à la portabilité** (art. 20) | L'export de sauvegarde rend l'atelier entier dans un fichier JSON lisible |
 | **Droit de rectification** (art. 16) | Tout est modifiable dans l'application |
@@ -57,9 +57,9 @@ prêt à remplir. Une seule ligne suffit ici :
   appareils
 - **Base légale** : exécution du service (art. 6.1.b)
 - **Catégories de personnes** : utilisatrices inscrites
-- **Catégories de données** : pseudo, prénom, nom, date de naissance, ville,
-  pays, type d'activité, adresse de courriel, mot de passe (chiffré),
-  données d'atelier, photos
+- **Catégories de données** : pseudo, adresse de courriel, mot de passe
+  (chiffré), attestation « 15 ans ou plus » datée, données d'atelier, photos ;
+  facultatif : prénom, nom, ville, pays, type d'activité
 - **Destinataires** : Supabase (hébergement), [hébergeur des pages],
   [service d'envoi de courriels]
 - **Transferts hors UE** : aucun si les régions européennes sont retenues —
@@ -102,14 +102,11 @@ Trois choix d'architecture réduisent le risque à la racine :
    utiliser l'outil** (l'écran de connexion s'affiche avant tout le reste) :
    c'est un choix produit assumé, pas une omission technique — vérifie que le
    point suivant est bien couvert dans ton registre et ta politique.
-   > ⚠️ Demander une identité complète (nom, date de naissance, ville, pays)
-   > juste pour utiliser un calculateur de prix de revient est plus que ce
-   > qu'exige strictement le service : le principe de minimisation (art. 5.1.c)
-   > demande de collecter le moins possible pour la finalité poursuivie.
-   > Si le compte ne sert qu'à sauvegarder l'atelier d'un appareil à l'autre,
-   > demande-toi si l'âge/la ville/le pays sont vraiment nécessaires dès
-   > l'inscription, ou si un pseudo, un mot de passe et une adresse de
-   > courriel suffiraient, le reste étant proposé plus tard en option.
+   > ✅ Réglé (septembre 2026) : l'inscription ne demande plus que le pseudo,
+   > l'adresse, le mot de passe et la case « J'ai 15 ans ou plus » (horodatée
+   > dans le compte). Le reste est facultatif, dans « Mes informations ».
+   > Enregistrer ces informations efface une date de naissance saisie avec
+   > l'ancienne version.
 2. **Le mot de passe n'est jamais stocké en clair.** Il est chiffré par la
    brique d'authentification de Supabase dès son arrivée sur le serveur —
    même une fuite de la base ne le rendrait pas lisible.

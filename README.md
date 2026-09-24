@@ -60,8 +60,8 @@ Compte 30 minutes la première fois. Tout est gratuit à cette échelle.
    autre.
 4. Toujours dans **SQL Editor**, colle maintenant tout le contenu de
    `schema-pseudo.sql`, clique **Run**. Ça crée la table qui associe pseudo,
-   identité de base (prénom, nom, date de naissance, ville, pays, type
-   d'activité) et compte, et les fonctions qui permettent de la consulter ou
+   identité facultative (prénom, nom, ville, pays, type d'activité) et
+   compte, et les fonctions qui permettent de la consulter ou
    de la corriger sans jamais exposer les adresses courriel au navigateur.
    > Tu avais déjà exécuté une version précédente de ce fichier (sans les
    > colonnes de profil) ? Recolle celle-ci et relance **Run** : elle est
@@ -89,9 +89,9 @@ un mot de passe, mais **l'adresse courriel ne doit jamais être visible depuis
 le navigateur**. C'est pour ça que trois opérations passent par des fonctions
 serveur plutôt que par du code exécuté chez l'utilisatrice :
 
-- `inscription` : crée le compte (pseudo, prénom, nom, date de naissance,
-  ville, pays, type d'activité, courriel, mot de passe), envoie le courriel
-  de confirmation, et vérifie que la personne a au moins 15 ans.
+- `inscription` : crée le compte (pseudo, courriel, mot de passe ; le reste
+  est facultatif), envoie le courriel de confirmation, et exige la case
+  « J'ai 15 ans ou plus », dont la date est gardée dans le compte.
 - `connexion` : accepte le pseudo **ou** l'adresse de courriel. Si c'est un
   pseudo, retrouve le courriel correspondant côté serveur uniquement ; sinon
   utilise directement l'adresse fournie.
@@ -200,9 +200,8 @@ dans Réglages.
    `config.js` n'est pas lu : vérifie qu'il est bien à la racine, à côté de
    `index.html`.
 2. Sur cet écran, clique sur « Créer un compte » : choisis un pseudo
-   (l'application te dit tout de suite s'il est disponible), renseigne
-   prénom, nom, date de naissance, ville, pays, type d'activité, une adresse
-   courriel et un mot de passe. Ouvre le courriel de confirmation **sur le
+   (l'application te dit tout de suite s'il est disponible), une adresse
+   courriel, un mot de passe, et coche « J'ai 15 ans ou plus ». Ouvre le courriel de confirmation **sur le
    même appareil**, clique sur le lien.
 3. Reviens sur le site, connecte-toi cette fois avec **ton pseudo et ton mot
    de passe** : l'écran de connexion doit s'effacer et laisser place à

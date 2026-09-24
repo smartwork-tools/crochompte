@@ -10,8 +10,8 @@
        adresse de courriel vérifiée à l'inscription (elle sert à confirmer
        que le compte t'appartient, à te reconnecter si tu préfères, et à
        réinitialiser le mot de passe) ;
-     • un minimum d'identité (prénom, nom, date de naissance, ville, pays,
-       type d'activité) demandé à l'inscription et modifiable ensuite ;
+     • une inscription courte (pseudo, adresse, mot de passe, « 15 ans ou
+       plus ») ; prénom, nom, ville, pays et activité restent facultatifs ;
      • les données qui suivent l'artisane d'un appareil à l'autre ;
      • les photos et les pages de patrons stockées en ligne.
 
@@ -68,7 +68,7 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
   }
 
   var brouillonInscriptionVide = function(){
-    return {pseudo:"", prenom:"", nom:"", dateNaissance:"", ville:"", pays:"", typeActivite:"", email:""};
+    return {pseudo:"", prenom:"", nom:"", dateNaissance:"", ville:"", pays:"", typeActivite:"", email:"", age15:false};
   };
   var brouillonProfilVide = function(){
     return {prenom:"", nom:"", dateNaissance:"", ville:"", pays:"", typeActivite:""};
@@ -577,39 +577,6 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
           'de courriel, au choix).</p>'+
           '<p class="hint" id="sy-i-pseudo-etat" style="margin:4px 0 0;min-height:16px"></p>'+
 
-          '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">'+
-            '<label class="f" style="flex:1;min-width:160px"><span>Prénom</span>'+
-            '<input type="text" id="sy-i-prenom" autocomplete="given-name" maxlength="80" '+
-            'value="' + echappe(etat.brouillon.prenom) + '"></label>'+
-            '<label class="f" style="flex:1;min-width:160px"><span>Nom</span>'+
-            '<input type="text" id="sy-i-nom" autocomplete="family-name" maxlength="80" '+
-            'value="' + echappe(etat.brouillon.nom) + '"></label>'+
-          '</div>'+
-
-          '<label class="f" style="max-width:220px;margin-top:12px"><span>Date de naissance</span>'+
-          '<input type="date" id="sy-i-naissance" autocomplete="bday" '+
-          'value="' + echappe(etat.brouillon.dateNaissance) + '"></label>'+
-          '<p class="hint" style="margin:4px 0 0">Crochompte ne s\'adresse pas aux personnes de moins '+
-          'de ' + AGE_MINIMUM + ' ans.</p>'+
-
-          '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">'+
-            '<label class="f" style="flex:1;min-width:160px"><span>Ville</span>'+
-            '<input type="text" id="sy-i-ville" autocomplete="address-level2" maxlength="100" '+
-            'value="' + echappe(etat.brouillon.ville) + '"></label>'+
-            '<label class="f" style="flex:1;min-width:160px"><span>Pays</span>'+
-            '<input type="text" id="sy-i-pays" autocomplete="country-name" maxlength="100" '+
-            'value="' + echappe(etat.brouillon.pays) + '"></label>'+
-          '</div>'+
-          '<p class="hint" style="margin:4px 0 0">Pas besoin de ton adresse complète : la ville et le '+
-          'pays suffisent.</p>'+
-
-          '<label class="f" style="max-width:420px;margin-top:12px"><span>Ton activité</span>'+
-          '<select id="sy-i-activite">'+
-            '<option value="amateur"' + (etat.brouillon.typeActivite === "amateur" ? ' selected' : '') + '>Amateur / loisir</option>'+
-            '<option value="artisanat"' + (etat.brouillon.typeActivite === "artisanat" ? ' selected' : '') + '>Artisanat (activité déclarée ou en cours de déclaration)</option>'+
-            '<option value="entreprise"' + (etat.brouillon.typeActivite === "entreprise" ? ' selected' : '') + '>Petite entreprise</option>'+
-          '</select></label>'+
-
           '<label class="f" style="max-width:420px;margin-top:12px"><span>Ton adresse de courriel</span>'+
           '<input type="email" id="sy-i-mail" autocomplete="email" placeholder="toi@exemple.fr" '+
           'value="' + echappe(etat.brouillon.email) + '"></label>'+
@@ -621,20 +588,26 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
           '<input type="password" id="sy-i-mdp1" autocomplete="new-password"></label>'+
           '<label class="f" style="max-width:420px;margin-top:10px"><span>Confirme-le</span>'+
           '<input type="password" id="sy-i-mdp2" autocomplete="new-password"></label>'+
+          '<p class="hint" style="margin:4px 0 0">Au moins 8 caractères.</p>'+
 
-          '<div class="et-act" style="margin-top:12px">'+
+          '<label style="display:flex;gap:10px;align-items:flex-start;margin-top:14px;max-width:460px;cursor:pointer">'+
+            '<input type="checkbox" id="sy-i-age" style="width:20px;height:20px;min-height:0;margin:2px 0 0;flex:none"' +
+            (etat.brouillon.age15 ? ' checked' : '') + '>'+
+            '<span>J\'ai ' + AGE_MINIMUM + ' ans ou plus.</span></label>'+
+
+          '<div class="et-act" style="margin-top:14px">'+
             '<button type="button" class="btn primary" id="sy-i-valider">Créer mon compte</button>'+
           '</div>'+
           '<p class="hint" style="margin-top:10px">Un lien de confirmation arrive dans ta boîte : '+
           'clique dessus pour activer ton compte, puis reconnecte-toi avec ton pseudo ou ton adresse.</p>'+
           '<div class="banner" style="margin-top:14px"><p><b>Ce qui sera enregistré en ligne</b> : '+
-          'ton pseudo, ton prénom, ton nom, ta date de naissance, ta ville et ton pays, le type '+
-          'd\'activité choisi, ton adresse de courriel, ton mot de passe (jamais en clair — Supabase '+
-          'le chiffre, personne chez Crochompte ne peut le lire), et l\'atelier que tu construis ici — '+
+          'ton pseudo, ton adresse de courriel, ton mot de passe (jamais en clair — Supabase le '+
+          'chiffre, personne chez Crochompte ne peut le lire), et l\'atelier que tu construis ici — '+
           'tes réglages, tes matières, tes créations, tes patrons et tes photos. Rien d\'autre : ni '+
           'suivi, ni publicité, ni revente. Ces informations ne sont jamais montrées à d\'autres '+
           'utilisatrices.<br>'+
-          'Tu peux les corriger dans Réglages ou tout effacer, à tout moment, une fois connectée.'+
+          'Ton prénom ou ton activité, si tu veux les donner, s\'ajoutent plus tard dans Réglages, '+
+          'où tu peux aussi tout effacer, à tout moment.'+
           '<br><a href="confidentialite.html" target="_blank" rel="noopener">Politique de confidentialité</a>'+
           '</p></div>'+
           '<p class="hint" style="margin-top:12px">Déjà un compte ? '+
@@ -682,7 +655,9 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
         '<div id="sy-hist-zone"></div>'+
 
         '<div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--rule)">'+
-          '<p style="margin:0 0 10px"><b>Mes informations</b></p>'+
+          '<p style="margin:0 0 4px"><b>Mes informations</b></p>'+
+          '<p class="hint" style="margin:0 0 10px">Toutes facultatives. Le prénom sert à te saluer '+
+          'dans les courriels ; le reste nous aide seulement à comprendre qui utilise Crochompte.</p>'+
           '<div style="display:flex;gap:10px;flex-wrap:wrap">'+
             '<label class="f" style="flex:1;min-width:160px"><span>Prénom</span>'+
             '<input type="text" id="sy-p-prenom" maxlength="80" '+
@@ -691,9 +666,6 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
             '<input type="text" id="sy-p-nom" maxlength="80" '+
             'value="' + echappe(etat.brouillonProfil.nom) + '"></label>'+
           '</div>'+
-          '<label class="f" style="max-width:220px;margin-top:10px"><span>Date de naissance</span>'+
-          '<input type="date" id="sy-p-naissance" '+
-          'value="' + echappe(etat.brouillonProfil.dateNaissance) + '"></label>'+
           '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">'+
             '<label class="f" style="flex:1;min-width:160px"><span>Ville</span>'+
             '<input type="text" id="sy-p-ville" maxlength="100" '+
@@ -704,6 +676,7 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
           '</div>'+
           '<label class="f" style="max-width:420px;margin-top:10px"><span>Mon activité</span>'+
           '<select id="sy-p-activite">'+
+            '<option value=""' + (!etat.brouillonProfil.typeActivite ? ' selected' : '') + '>— non précisé —</option>'+
             '<option value="amateur"' + (etat.brouillonProfil.typeActivite === "amateur" ? ' selected' : '') + '>Amateur / loisir</option>'+
             '<option value="artisanat"' + (etat.brouillonProfil.typeActivite === "artisanat" ? ' selected' : '') + '>Artisanat (activité déclarée ou en cours de déclaration)</option>'+
             '<option value="entreprise"' + (etat.brouillonProfil.typeActivite === "entreprise" ? ' selected' : '') + '>Petite entreprise</option>'+
@@ -789,40 +762,19 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 
         q("#sy-i-valider").addEventListener("click", function(){
           var pseudo    = (q("#sy-i-pseudo").value || "").trim();
-          var prenom    = (q("#sy-i-prenom").value || "").trim();
-          var nom       = (q("#sy-i-nom").value || "").trim();
-          var naissance = (q("#sy-i-naissance").value || "").trim();
-          var ville     = (q("#sy-i-ville").value || "").trim();
-          var pays      = (q("#sy-i-pays").value || "").trim();
-          var activite  = q("#sy-i-activite").value || "";
+          var age15     = !!q("#sy-i-age").checked;
           var mail      = (q("#sy-i-mail").value || "").trim();
           var p1 = q("#sy-i-mdp1").value || "", p2 = q("#sy-i-mdp2").value || "";
 
           /* On retient ce qui a été tapé AVANT toute validation : une erreur,
              qu'elle vienne d'ici ou du serveur, ne doit jamais faire tout
              retaper — sauf les mots de passe, qu'on ne restitue jamais. */
-          etat.brouillon.pseudo = pseudo; etat.brouillon.prenom = prenom; etat.brouillon.nom = nom;
-          etat.brouillon.dateNaissance = naissance; etat.brouillon.ville = ville;
-          etat.brouillon.pays = pays; etat.brouillon.typeActivite = activite;
+          etat.brouillon.pseudo = pseudo; etat.brouillon.age15 = age15;
           etat.brouillon.email = mail;
 
           if (!RE_PSEUDO.test(pseudo)){
             peindre({erreur:"Pseudo invalide : 3 à 24 caractères, lettres/chiffres/tiret/tiret bas, sans accent ni espace."});
             return;
-          }
-          if (!prenom){ peindre({erreur:"Indique ton prénom."}); return; }
-          if (!nom){ peindre({erreur:"Indique ton nom."}); return; }
-          if (!naissance){ peindre({erreur:"Indique ta date de naissance."}); return; }
-          var age = ageEnAnnees(naissance);
-          if (age === null){ peindre({erreur:"Cette date de naissance ne semble pas correcte."}); return; }
-          if (age < AGE_MINIMUM){
-            peindre({erreur:"Crochompte ne s'adresse pas aux personnes de moins de " + AGE_MINIMUM + " ans."});
-            return;
-          }
-          if (!ville){ peindre({erreur:"Indique ta ville."}); return; }
-          if (!pays){ peindre({erreur:"Indique ton pays."}); return; }
-          if (["amateur","artisanat","entreprise"].indexOf(activite) === -1){
-            peindre({erreur:"Choisis un type d'activité."}); return;
           }
           if (!RE_COURRIEL.test(mail)){
             peindre({erreur:"Cette adresse ne ressemble pas à une adresse de courriel."});
@@ -830,12 +782,16 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
           }
           if (p1.length < 8){ peindre({erreur:"Le mot de passe doit faire au moins 8 caractères."}); return; }
           if (p1 !== p2){ peindre({erreur:"Les deux mots de passe ne correspondent pas."}); return; }
+          if (!age15){
+            peindre({erreur:"Coche la case « J'ai " + AGE_MINIMUM + " ans ou plus » : Crochompte ne "+
+                            "s'adresse pas aux personnes plus jeunes."});
+            return;
+          }
 
           var b = this; b.disabled = true; b.textContent = "Création…";
           appelFonction("inscription", {
             pseudo: pseudo, email: mail, motDePasse: p1, emailRedirectTo: urlPage(),
-            prenom: prenom, nom: nom, dateNaissance: naissance,
-            ville: ville, pays: pays, typeActivite: activite
+            age15: true
           }).then(function(r){
             if (!r._ok){ peindre({erreur: r.erreur || "L'inscription a échoué."}); return; }
             etat.mode = "connexion";
@@ -970,28 +926,17 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
       q("#sy-p-valider").addEventListener("click", function(){
         var prenom    = (q("#sy-p-prenom").value || "").trim();
         var nom       = (q("#sy-p-nom").value || "").trim();
-        var naissance = (q("#sy-p-naissance").value || "").trim();
         var ville     = (q("#sy-p-ville").value || "").trim();
         var pays      = (q("#sy-p-pays").value || "").trim();
         var activite  = q("#sy-p-activite").value || "";
         etat.brouillonProfil = {
-          prenom: prenom, nom: nom, dateNaissance: naissance,
+          prenom: prenom, nom: nom, dateNaissance: "",
           ville: ville, pays: pays, typeActivite: activite
         };
 
-        if (!prenom || !nom){ peindre({erreur:"Indique ton prénom et ton nom."}); return; }
-        if (naissance){
-          var age = ageEnAnnees(naissance);
-          if (age === null || age < AGE_MINIMUM){
-            peindre({erreur:"Cette date de naissance ne semble pas correcte."});
-            return;
-          }
-        }
-        if (!ville || !pays){ peindre({erreur:"Indique ta ville et ton pays."}); return; }
-
         var b = this; b.disabled = true; b.textContent = "Enregistrement…";
         sb.rpc("modifier_mon_profil", {
-          p_prenom: prenom, p_nom: nom, p_date_naissance: naissance || null,
+          p_prenom: prenom, p_nom: nom, p_date_naissance: null,   /* plus conservée : la case « 15 ans » suffit */
           p_ville: ville, p_pays: pays, p_type_activite: activite || null
         }).then(function(r){
           if (r.error){ peindre({erreur: r.error.message}); return; }

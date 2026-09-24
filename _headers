@@ -8,6 +8,7 @@
 # ═══════════════════════════════════════════════════════════════════════════
 
 /*
+  # Les polices sont hébergées sur le site (dossier polices/) : 'self' suffit.
   # Ce que la page a le droit de charger. Tout ce qui n'est pas listé ici est
   # refusé par le navigateur — y compris un script qu'on aurait réussi à
   # injecter. C'est la protection la plus utile de ce fichier.
@@ -28,9 +29,11 @@
   # En quittant le site, on ne transmet que le domaine, jamais la page exacte.
   Referrer-Policy: strict-origin-when-cross-origin
 
-  # Interdit au site de demander la caméra, le micro ou la position :
-  # l'application n'en a aucun usage, autant fermer la porte.
-  Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()
+  # Caméra et position fermées : l'application n'en a aucun usage (les photos
+  # passent par le sélecteur de fichiers du téléphone, pas par la caméra en
+  # direct). Le MICRO reste autorisé pour le site lui-même : le compteur de
+  # rangs « à la voix » en a besoin. Le fermer casserait cette fonction.
+  Permissions-Policy: camera=(), microphone=(self), geolocation=()
 
   # Impose HTTPS pour les deux prochaines années, y compris aux sous-domaines.
   # À n'activer qu'une fois le site bien servi en HTTPS : tant que cet en-tête
