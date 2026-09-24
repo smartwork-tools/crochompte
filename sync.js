@@ -49,6 +49,10 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
     return;   /* le repli hors ligne d'index.html dit déjà ce qu'il faut */
   }
 
+  /* Un lien de confirmation ou de mot de passe qui échoue ramène ici avec
+     l'erreur dans l'adresse (#error=…&error_code=otp_expired). On la lit
+     avant que la bibliothèque ne touche à l'adresse. */
+  var hashInitial = String(window.location.hash || "");
   var sb = createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
   var TABLE  = "ateliers";
   var BUCKET = "photos";
@@ -126,6 +130,25 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
        est pénible à retaper. */
     brouillon: Object.assign(brouillonInscriptionVide(), {identifiantOubli:"", identifiantConnexion:""})
   };
+
+  /* Sans ceci, la personne qui clique sur un lien périmé arrivait sur le
+     formulaire d'inscription sans un mot d'explication, avec l'erreur en
+     anglais dans la barre d'adresse. */
+  (function(){
+    if (hashInitial.indexOf("error") === -1) return;
+    var p;
+    try { p = new URLSearchParams(hashInitial.replace(/^#/, "")); } catch (e) { return; }
+    var code = p.get("error_code") || p.get("error") || "";
+    if (!code) return;
+    etat.alerteLien = code === "otp_expired"
+      ? {titre: "Ce lien n'est plus valable : il a déjà servi, ou il a expiré.",
+         detail: "Pour confirmer ton adresse, réinscris-toi avec la même adresse : un nouveau lien partira. "+
+                 "Si ton compte est déjà confirmé, connecte-toi simplement. "+
+                 "Pour changer ton mot de passe, refais « Mot de passe oublié »."}
+      : {titre: "Ce lien n'a pas pu être utilisé.",
+         detail: "Réessaie depuis le dernier courriel reçu, ou redemande un lien depuis cette page."};
+    try { history.replaceState(null, "", window.location.pathname + window.location.search); } catch (e) {}
+  })();
 
   /* ───────── utilitaires ───────── */
 
@@ -515,9 +538,14 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
         'maintenant en ligne, et celle de l\'autre appareil a été rangée dans '+
         'l\'historique juste en dessous — rien n\'est perdu.</p></div>';
     }
+    if (etat.session) etat.alerteLien = null;
+    if (etat.alerteLien && !msg.erreur && !msg.info && !msg.archive){
+      msg.erreur = etat.alerteLien.titre; msg.detail = etat.alerteLien.detail; msg.pasPerdu = false;
+    }
     if (msg.erreur){
       html += '<div class="banner" style="background:var(--bad-soft);border-color:var(--bad)">'+
         '<p><b>' + echappe(msg.erreur) + '</b>'+
+        (msg.detail ? '<br>' + echappe(msg.detail) : '') +
         (msg.pasPerdu === false ? '' : '<br>Tes données restent intactes dans ce navigateur.') +
         '</p></div>';
     }
@@ -700,6 +728,15 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
     }
     html += '</div></div>';
     zone.innerHTML = html;
+    /* Le message sur le lien périmé s'efface dès que la personne tente
+       quelque chose (s'inscrire, se connecter, redemander un lien) : la
+       réponse à cette action prend alors sa place. */
+    if (etat.alerteLien && !zone.__ecouteLien){
+      zone.__ecouteLien = true;
+      zone.addEventListener("click", function(e){
+        if (e.target && e.target.closest && e.target.closest("button")) etat.alerteLien = null;
+      }, true);
+    }
 
     var q = function(id){ return zone.querySelector(id); };
     var lien = function(id, fn){ var e = q(id); if (e) e.addEventListener("click", function(ev){ ev.preventDefault(); fn(); }); };

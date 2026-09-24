@@ -44,20 +44,31 @@ Deno.serve(async (req: Request) => {
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-  let courriel: string | null = null;
-  if (identifiant.includes("@")) {
-    courriel = identifiant.toLowerCase();
-  } else {
-    const admin = createClient(url, serviceKey);
-    const { data: ligne } = await admin
-      .from("pseudos")
-      .select("courriel")
-      .eq("pseudo_cle", identifiant)
-      .maybeSingle();
-    if (ligne) courriel = ligne.courriel;
-  }
+  // On retrouve la ligne du compte, qu'on ait tapé le pseudo ou l'adresse.
+  const admin = createClient(url, serviceKey);
+  const colonne = identifiant.includes("@") ? "courriel" : "pseudo_cle";
+  const valeur = identifiant.includes("@") ? identifiant.toLowerCase() : identifiant;
+  const { data: ligne } = await admin
+    .from("pseudos")
+    .select("user_id, courriel, pseudo, prenom")
+    .eq(colonne, valeur)
+    .maybeSingle();
+
+  let courriel: string | null = ligne ? ligne.courriel : null;
+  if (!courriel && identifiant.includes("@")) courriel = identifiant.toLowerCase();
 
   if (courriel) {
+    // Le pseudo et le prénom sont recopiés sur le compte juste avant l'envoi :
+    // le courriel peut alors rappeler « Ton pseudo : … » ({{ .Data.pseudo }}
+    // dans le modèle). Il n'arrive qu'à la propriétaire de l'adresse, qui
+    // retrouve ainsi un pseudo oublié sans que personne d'autre ne l'apprenne.
+    if (ligne) {
+      try {
+        await admin.auth.admin.updateUserById(ligne.user_id, {
+          user_metadata: { pseudo: ligne.pseudo, prenom: ligne.prenom },
+        });
+      } catch (_e) { /* sans gravité : le courriel partira sans le pseudo */ }
+    }
     const anon = createClient(url, anonKey);
     // Erreur volontairement ignorée : la réponse au navigateur ne doit
     // jamais varier selon que l'identifiant existe ou non, ni selon que

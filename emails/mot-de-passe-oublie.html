@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Ton nouveau mot de passe Crochompte</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f3f0;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#f4f3f0;">
+    Le lien pour choisir ton nouveau mot de passe.
+  </div>
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f3f0;">
+    <tr>
+      <td align="center" style="padding:32px 16px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+               style="max-width:560px;background-color:#ffffff;border:1px solid #e3e2dd;border-radius:14px;">
+
+          <tr>
+            <td style="padding:30px 28px 0;font-family:Arial,Helvetica,sans-serif;font-size:22px;font-weight:bold;color:#1a1c1a;letter-spacing:-0.3px;">
+              Croch<span style="color:#0f5f57;">ompte</span> 🧶
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:26px 28px 0;font-family:Arial,Helvetica,sans-serif;">
+              <h1 style="margin:0;font-size:24px;line-height:1.3;color:#1a1c1a;font-weight:bold;">
+                {{ if .Data.prenom }}Bonjour {{ .Data.prenom }},{{ else }}Bonjour,{{ end }}
+              </h1>
+              <p style="margin:14px 0 0;font-size:16px;line-height:1.6;color:#3d423f;">
+                Tu as demandé à changer le mot de passe de ton compte Crochompte.
+                Clique ci-dessous pour en choisir un nouveau.
+              </p>
+              {{ if .Data.pseudo }}<p style="margin:12px 0 0;font-size:16px;line-height:1.6;color:#3d423f;">
+                Pour rappel, ton pseudo est <b style="color:#1a1c1a;">{{ .Data.pseudo }}</b>. Tu peux aussi
+                te connecter en tapant ton adresse de courriel à sa place.
+              </p>{{ end }}
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:26px 28px 8px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td bgcolor="#0f5f57" style="border-radius:9px;">
+                    <a href="{{ .ConfirmationURL }}"
+                       style="display:inline-block;padding:15px 30px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:9px;">
+                      Choisir un nouveau mot de passe
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:6px 28px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.5;color:#6a6f6c;">
+              Le lien ne sert qu'une fois et n'est valable qu'un temps limité.
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:24px 28px 0;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                     style="background-color:#f4f8f7;border-radius:10px;">
+                <tr>
+                  <td style="padding:16px 20px;font-family:Arial,Helvetica,sans-serif;font-size:14.5px;line-height:1.55;color:#3d423f;">
+                    <b style="color:#1a1c1a;">Tu n'as rien demandé&nbsp;?</b> Ignore ce message&nbsp;: ton mot de passe
+                    actuel reste valable et rien n'a changé sur ton compte.
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:24px 28px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.55;color:#6a6f6c;">
+              Le bouton ne fonctionne pas&nbsp;? Copie ce lien dans ton navigateur&nbsp;:<br>
+              <a href="{{ .ConfirmationURL }}" style="color:#0f5f57;word-break:break-all;">{{ .ConfirmationURL }}</a>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:26px 28px 30px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="border-top:1px solid #e3e2dd;padding-top:18px;font-family:Arial,Helvetica,sans-serif;font-size:12.5px;line-height:1.6;color:#8a8f8b;">
+                    Message envoyé à {{ .Email }} à la suite d'une demande faite sur Crochompte.<br>
+                    Une question&nbsp;? Réponds à ce message, il arrive directement chez nous.<br>
+                    <a href="https://crochompte.com" style="color:#8a8f8b;">crochompte.com</a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

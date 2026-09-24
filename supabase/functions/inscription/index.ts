@@ -9,10 +9,12 @@
 // navigateur ne peut jamais lire pour le compte de quelqu'un d'autre — voir
 // schema-pseudo.sql.
 //
+// Règle : une adresse de courriel = un compte = un pseudo.
+//
 // Si le pseudo choisi est pris entre-temps par quelqu'un d'autre, ou si
-// l'enregistrement échoue pour une autre raison, le compte tout juste créé
-// est détruit aussitôt : jamais de compte orphelin, sans pseudo, impossible
-// à utiliser.
+// l'enregistrement échoue pour une autre raison, le compte créé À L'INSTANT
+// par cet appel est détruit aussitôt : jamais de compte orphelin, et jamais
+// la suppression d'un compte qui existait déjà.
 //
 // Déploiement :
 //   supabase functions deploy inscription
@@ -117,39 +119,81 @@ Deno.serve(async (req: Request) => {
   const url = Deno.env.get("SUPABASE_URL")!;
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const admin = createClient(url, serviceKey);
+
+  // Une adresse de courriel, un compte, un pseudo. Le message ne révèle
+  // jamais le pseudo lié à l'adresse (ce serait le donner à n'importe qui) :
+  // il indique comment le retrouver, par un courriel qui n'arrive qu'à la
+  // propriétaire de l'adresse.
+  const DEJA_UN_COMPTE = "Cette adresse de courriel a déjà un compte. Connecte-toi en tapant ton adresse "
+    + "à la place du pseudo, ou utilise « Mot de passe oublié » : le courriel que tu recevras te "
+    + "rappellera ton pseudo.";
+
+  // ── Une inscription précédente avec cette adresse ? ──
+  // Supabase ne crée pas de second compte pour une adresse déjà inscrite
+  // mais jamais confirmée : il renvoie le premier, avec son ANCIEN mot de
+  // passe. Sans ce contrôle, la personne croyait s'être réinscrite avec un
+  // nouveau pseudo et un nouveau mot de passe, alors que rien n'avait
+  // changé — et l'ancienne version de cette fonction supprimait même le
+  // compte en croyant nettoyer.
+  const { data: lignes, error: eLect } = await admin
+    .from("pseudos").select("user_id").eq("courriel", email).limit(5);
+  if (eLect) return json({ erreur: "Inscription impossible pour l'instant. Réessaie dans un moment." }, 500);
+  for (const l of lignes ?? []) {
+    const { data: u } = await admin.auth.admin.getUserById(l.user_id);
+    const existant = u?.user ?? null;
+    if (existant && existant.email_confirmed_at) {
+      return json({ erreur: DEJA_UN_COMPTE }, 409);
+    }
+    // Inscription jamais confirmée : le compte n'a jamais pu servir. On le
+    // retire pour que la nouvelle inscription reparte proprement, avec le
+    // pseudo et le mot de passe qui viennent d'être choisis.
+    if (existant) await admin.auth.admin.deleteUser(l.user_id);
+    else await admin.from("pseudos").delete().eq("user_id", l.user_id);
+  }
 
   // La création du compte passe par la voie normale (anon key), pour que
   // Supabase envoie lui-même le courriel de confirmation avec le modèle
-  // réglé dans le projet — exactement comme si le navigateur l'avait
-  // appelée directement.
+  // réglé dans le projet. Le prénom et le pseudo voyagent avec le compte :
+  // c'est ce qui permet au courriel de dire « Bienvenue, Marie ».
   const anon = createClient(url, anonKey);
-  const { data, error } = await anon.auth.signUp({
-    email, password: motDePasse, options: { emailRedirectTo },
+  const inscrire = () => anon.auth.signUp({
+    email, password: motDePasse, options: { emailRedirectTo, data: { prenom, pseudo } },
   });
+  let { data, error } = await inscrire();
   if (error) return json({ erreur: error.message }, 400);
 
   // Une adresse déjà enregistrée et confirmée renvoie un « succès » sans
-  // identité nouvelle : c'est le signal officiel de Supabase pour ce cas,
-  // sans avoir à révéler l'information autrement.
+  // identité : c'est le signal officiel de Supabase pour ce cas.
   if (!data.user || (data.user.identities && data.user.identities.length === 0)) {
-    return json({ erreur: "Cette adresse de courriel a déjà un compte." }, 409);
+    return json({ erreur: DEJA_UN_COMPTE }, 409);
   }
 
-  const admin = createClient(url, serviceKey);
+  // Un compte en attente de confirmation, sans pseudo (reste d'un essai
+  // interrompu) : Supabase vient de le renvoyer tel quel, avec son ancien
+  // mot de passe. On le remplace par une inscription neuve.
+  const anciennete = (d: string | undefined) => (d ? Date.now() - Date.parse(d) : 0);
+  if (!data.user.email_confirmed_at && anciennete(data.user.created_at) > 60_000) {
+    await admin.auth.admin.deleteUser(data.user.id);
+    ({ data, error } = await inscrire());
+    if (error) return json({ erreur: error.message }, 400);
+    if (!data.user) return json({ erreur: "Inscription impossible pour l'instant. Réessaie dans un moment." }, 500);
+  }
+
   const { error: eRes } = await admin.from("pseudos").insert({
     user_id: data.user.id, pseudo, pseudo_cle: pseudo, courriel: email,
     prenom, nom, date_naissance: dateNaissance, ville, pays, type_activite: typeActivite,
   });
   if (eRes) {
-    // Le pseudo était pris entre-temps, ou toute autre erreur (y compris une
-    // contrainte de la base, filet de sécurité derrière les vérifications
-    // ci-dessus) : on ne laisse pas de compte orphelin derrière.
-    await admin.auth.admin.deleteUser(data.user.id);
-    const dejaPris = /duplicate|unique/i.test(eRes.message || "");
-    return json(
-      { erreur: dejaPris ? "Ce pseudo est déjà pris." : eRes.message },
-      dejaPris ? 409 : 500,
-    );
+    // On ne détruit QUE le compte créé à l'instant par cet appel : jamais un
+    // compte qui existait avant. Ainsi, pas de compte orphelin sans pseudo,
+    // et aucun risque d'effacer celui de quelqu'un.
+    const creeALInstant = !data.user.email_confirmed_at && anciennete(data.user.created_at) < 60_000;
+    if (creeALInstant) await admin.auth.admin.deleteUser(data.user.id);
+    const message = eRes.message || "";
+    if (/pseudo_cle/i.test(message)) return json({ erreur: "Ce pseudo est déjà pris." }, 409);
+    if (/duplicate|unique/i.test(message)) return json({ erreur: DEJA_UN_COMPTE }, 409);
+    return json({ erreur: "Inscription impossible pour l'instant. Réessaie dans un moment." }, 500);
   }
 
   return json({ inscrite: true });

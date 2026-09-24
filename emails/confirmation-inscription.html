@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Bienvenue sur Crochompte</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f3f0;">
+  <!-- Aperçu affiché dans la boîte de réception, sous l'objet -->
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#f4f3f0;">
+    Plus qu'un clic pour ouvrir ton atelier Crochompte.
+  </div>
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f3f0;">
+    <tr>
+      <td align="center" style="padding:32px 16px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+               style="max-width:560px;background-color:#ffffff;border:1px solid #e3e2dd;border-radius:14px;">
+
+          <!-- Nom -->
+          <tr>
+            <td style="padding:30px 28px 0;font-family:Arial,Helvetica,sans-serif;font-size:22px;font-weight:bold;color:#1a1c1a;letter-spacing:-0.3px;">
+              Croch<span style="color:#0f5f57;">ompte</span> 🧶
+            </td>
+          </tr>
+
+          <!-- Accueil -->
+          <tr>
+            <td style="padding:26px 28px 0;font-family:Arial,Helvetica,sans-serif;">
+              <h1 style="margin:0;font-size:24px;line-height:1.3;color:#1a1c1a;font-weight:bold;">
+                {{ if .Data.prenom }}Bienvenue, {{ .Data.prenom }} !{{ else }}Bienvenue !{{ end }}
+              </h1>
+              <p style="margin:14px 0 0;font-size:16px;line-height:1.6;color:#3d423f;">
+                Ton compte est presque prêt. Il reste une seule chose à faire&nbsp;: confirmer que
+                cette adresse est bien la tienne.
+              </p>
+              {{ if .Data.pseudo }}<p style="margin:12px 0 0;font-size:16px;line-height:1.6;color:#3d423f;">
+                Ton pseudo&nbsp;: <b style="color:#1a1c1a;">{{ .Data.pseudo }}</b>. Pour te connecter, tu pourras
+                taper ce pseudo ou ton adresse de courriel.
+              </p>{{ end }}
+            </td>
+          </tr>
+
+          <!-- Bouton -->
+          <tr>
+            <td style="padding:26px 28px 8px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td bgcolor="#0f5f57" style="border-radius:9px;">
+                    <a href="{{ .ConfirmationURL }}"
+                       style="display:inline-block;padding:15px 30px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:9px;">
+                      Confirmer mon adresse
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:6px 28px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.5;color:#6a6f6c;">
+              Le lien ne sert qu'une fois et n'est valable qu'un temps limité.
+            </td>
+          </tr>
+
+          <!-- Ce qui l'attend -->
+          <tr>
+            <td style="padding:28px 28px 0;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                     style="background-color:#f4f8f7;border-radius:10px;">
+                <tr>
+                  <td style="padding:20px 22px 6px;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:bold;color:#0f5f57;text-transform:uppercase;letter-spacing:0.6px;">
+                    Ce qui t'attend
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:8px 22px 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.55;color:#3d423f;">
+                    💰&nbsp; <b style="color:#1a1c1a;">Ce que tu gagnes vraiment</b>, à l'heure, sur chaque création&nbsp;:
+                    matières, temps, frais et cotisations compris.
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 22px 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.55;color:#3d423f;">
+                    🧾&nbsp; <b style="color:#1a1c1a;">Tes commandes et tes factures</b>, avec les bonnes mentions légales,
+                    et ce qu'il te reste à encaisser.
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 22px 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.55;color:#3d423f;">
+                    📱&nbsp; <b style="color:#1a1c1a;">Ton atelier sur tous tes appareils</b>&nbsp;: commence sur ton téléphone,
+                    continue sur ton ordinateur, rien ne se perd.
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Lien de secours -->
+          <tr>
+            <td style="padding:26px 28px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.55;color:#6a6f6c;">
+              Le bouton ne fonctionne pas&nbsp;? Copie ce lien dans ton navigateur&nbsp;:<br>
+              <a href="{{ .ConfirmationURL }}" style="color:#0f5f57;word-break:break-all;">{{ .ConfirmationURL }}</a>
+            </td>
+          </tr>
+
+          <!-- Pied -->
+          <tr>
+            <td style="padding:26px 28px 30px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="border-top:1px solid #e3e2dd;padding-top:18px;font-family:Arial,Helvetica,sans-serif;font-size:12.5px;line-height:1.6;color:#8a8f8b;">
+                    Tu reçois ce message parce que l'adresse {{ .Email }} a servi à créer un compte sur Crochompte.
+                    Si ce n'est pas toi, ignore-le simplement&nbsp;: sans confirmation, le compte ne peut pas être utilisé.<br><br>
+                    Une question&nbsp;? Réponds à ce message, il arrive directement chez nous.<br>
+                    <a href="https://crochompte.com" style="color:#8a8f8b;">crochompte.com</a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
