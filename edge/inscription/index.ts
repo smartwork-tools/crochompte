@@ -53,6 +53,18 @@ function ageEnAnnees(iso: string): number | null {
   return age;
 }
 
+// Adresses de retour acceptées dans les e-mails : uniquement le site.
+function siteAutorise(v: unknown): string {
+  const defaut = Deno.env.get("SITE_URL") || "https://crochompte.com/";
+  if (typeof v !== "string") return defaut;
+  try {
+    const u = new URL(v);
+    const hote = u.hostname.toLowerCase();
+    if (u.protocol === "https:" && (hote === "crochompte.com" || hote === "www.crochompte.com")) return u.origin + u.pathname;
+  } catch (_e) { /* adresse illisible */ }
+  return defaut;
+}
+
 Deno.serve(async (req: Request) => {
   const cors = {
     "Access-Control-Allow-Origin": "*",
@@ -78,7 +90,8 @@ Deno.serve(async (req: Request) => {
   const ville = String(body.ville || "").trim();
   const pays = String(body.pays || "").trim();
   const typeActivite = String(body.typeActivite || "").trim();
-  const emailRedirectTo = typeof body.emailRedirectTo === "string" ? body.emailRedirectTo : undefined;
+  // Le lien de confirmation ne peut ramener QUE sur le site.
+  const emailRedirectTo = siteAutorise(body.emailRedirectTo);
 
   if (!RE_PSEUDO.test(pseudo)) {
     return json({ erreur: "Pseudo invalide : 3 à 24 caractères, lettres, chiffres, tiret ou "
@@ -140,11 +153,26 @@ Deno.serve(async (req: Request) => {
   const { data: lignes, error: eLect } = await admin
     .from("pseudos").select("user_id").eq("courriel", email).limit(5);
   if (eLect) return json({ erreur: "Inscription impossible pour l'instant. Réessaie dans un moment." }, 500);
+  // Au plus 20 inscriptions par adresse IP en 15 minutes (anti-robots).
+  const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "inconnue";
+  try {
+    const { data: n } = await admin.rpc("compter_tentative", { p_cle: "insc-ip:" + ip });
+    if ((Number(n) || 0) > 20) return json({ erreur: "Trop d'inscriptions depuis ce réseau. Patiente 15 minutes, puis réessaie." }, 429);
+  } catch (_e) { /* compteur indisponible : on continue */ }
+
   for (const l of lignes ?? []) {
     const { data: u } = await admin.auth.admin.getUserById(l.user_id);
     const existant = u?.user ?? null;
     if (existant && existant.email_confirmed_at) {
       return json({ erreur: DEJA_UN_COMPTE }, 409);
+    }
+    // Une inscription de moins d'une heure, pas encore confirmée : on ne la
+    // supprime pas (sinon n'importe qui pourrait effacer celle d'une autre
+    // personne en se réinscrivant avec son adresse). On invite à ouvrir
+    // l'e-mail déjà envoyé.
+    if (existant && Date.now() - Date.parse(existant.created_at || "") < 3_600_000) {
+      return json({ erreur: "Une inscription avec cette adresse attend déjà sa confirmation. Ouvre l'e-mail reçu "
+        + "(pense aux courriers indésirables) et clique sur « Confirmer mon adresse ». Sans e-mail, réessaie dans une heure." }, 409);
     }
     // Inscription jamais confirmée : le compte n'a jamais pu servir. On le
     // retire pour que la nouvelle inscription reparte proprement, avec le

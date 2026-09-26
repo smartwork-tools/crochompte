@@ -1,0 +1,23 @@
+const {chromium} = require('./outils').playwright;
+const path = require('path');
+(async () => {
+  const b = await chromium.launch(require('./outils').lancement);
+  const ctx = await b.newContext({viewport:{width:1100, height:800}});
+  const p = await ctx.newPage(); const R = {}; const errs = [];
+  p.on('pageerror', e=>errs.push(e.message));
+  await p.route('**/cdn.jsdelivr.net/**', r=>r.fulfill({path:path.join(__dirname,'faux-supabase.js'),contentType:'application/javascript'}));
+  await p.route('**/functions/v1/connexion', r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({access_token:'AT',refresh_token:'RT'})}));
+  await p.goto('http://127.0.0.1:8934/index.html'); await p.waitForTimeout(500);
+  R.manifeste = await p.evaluate(()=> fetch('manifest.webmanifest').then(r=>r.json()).then(m=>m.name));
+  await p.fill('#sy-c-identifiant','LaineTest'); await p.fill('#sy-c-mdp','motdepasse123');
+  await p.click('#sy-c-valider'); await p.waitForTimeout(1200);
+  R.sw_actif = await p.evaluate(()=> navigator.serviceWorker.ready.then(r=>!!r.active));
+  await p.waitForTimeout(800);
+  await ctx.setOffline(true);
+  await p.reload(); await p.waitForTimeout(1500);
+  R.hors_ligne_s_ouvre = (await p.textContent('body')).includes('hors ligne');
+  R.accueil_hors_ligne = (await p.textContent('#main')).includes('Bonjour') || (await p.textContent('#main')).includes('Pour bien démarrer');
+  R.erreurs = errs;
+  console.log(JSON.stringify(R,null,1));
+  await b.close();
+})();

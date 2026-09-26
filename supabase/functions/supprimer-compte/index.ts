@@ -47,6 +47,18 @@ Deno.serve(async (req: Request) => {
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
+  // Les photos d'abord : elles ne disparaissent pas avec le compte. Tout le
+  // dossier, page par page (l'application a déjà essayé ; ceci rattrape ce
+  // qui aurait pu rester).
+  try {
+    for (let tour = 0; tour < 50; tour++) {
+      const { data: fichiers, error: eL } = await admin.storage.from("photos").list(user.id, { limit: 100 });
+      if (eL || !fichiers || !fichiers.length) break;
+      const { error: eR } = await admin.storage.from("photos").remove(fichiers.map((f) => `${user.id}/${f.name}`));
+      if (eR) break;
+    }
+  } catch (_e) { /* on continue : l'identité doit partir quoi qu'il arrive */ }
+
   const { error: e2 } = await admin.auth.admin.deleteUser(user.id);
   if (e2) {
     return new Response(JSON.stringify({ erreur: e2.message }), {

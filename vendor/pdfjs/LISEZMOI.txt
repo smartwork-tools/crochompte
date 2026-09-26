@@ -1,0 +1,7 @@
+pdf.js 6.3.289 (Mozilla, licence Apache 2.0 — voir LICENSE), version « legacy »
+pour les navigateurs plus anciens. Copié tel quel depuis le paquet npm
+pdfjs-dist, sans modification.
+
+Sert uniquement à importer un PDF (pages d'un patron, photo d'une création) :
+chaque page est transformée en image sur l'appareil, et son texte est extrait.
+Ces fichiers ne sont chargés qu'au moment d'importer un PDF.

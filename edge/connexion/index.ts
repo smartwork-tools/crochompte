@@ -22,7 +22,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 Deno.serve(async (req: Request) => {
   const cors = {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "authorization, content-type",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
   };
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -46,6 +46,20 @@ Deno.serve(async (req: Request) => {
   const url = Deno.env.get("SUPABASE_URL")!;
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const admin = createClient(url, serviceKey);
+
+  // Limite de tentatives : 10 par identifiant et 50 par adresse IP en
+  // 15 minutes. Sans elle, on pourrait essayer des mots de passe à l'infini
+  // sur un pseudo connu. (Nécessite schema-fiabilite.sql ; sans lui, la
+  // connexion fonctionne comme avant.)
+  const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "inconnue";
+  try {
+    const { data: n1 } = await admin.rpc("compter_tentative", { p_cle: "cx:" + identifiant.toLowerCase() });
+    const { data: n2 } = await admin.rpc("compter_tentative", { p_cle: "cx-ip:" + ip });
+    if ((Number(n1) || 0) > 10 || (Number(n2) || 0) > 50) {
+      return json({ erreur: "Trop de tentatives de connexion. Patiente 15 minutes, puis réessaie." }, 429);
+    }
+  } catch (_e) { /* compteur indisponible : on continue */ }
 
   let courriel: string;
   if (identifiant.includes("@")) {
@@ -53,14 +67,19 @@ Deno.serve(async (req: Request) => {
     // directement à demander le jeton.
     courriel = identifiant.toLowerCase();
   } else {
-    const admin = createClient(url, serviceKey);
     const { data: ligne } = await admin
       .from("pseudos")
-      .select("courriel")
+      .select("user_id, courriel")
       .eq("pseudo_cle", identifiant)
       .maybeSingle();
     if (!ligne) return json(ECHEC, 401);
+    // L'adresse ACTUELLE du compte (elle a pu changer depuis l'inscription),
+    // plutôt que la copie faite ce jour-là.
     courriel = ligne.courriel;
+    try {
+      const { data: u } = await admin.auth.admin.getUserById(ligne.user_id);
+      if (u && u.user && u.user.email) courriel = u.user.email;
+    } catch (_e) { /* on garde la copie */ }
   }
 
   // On demande nous-mêmes le jeton à Supabase, avec l'adresse retrouvée ou
@@ -72,6 +91,11 @@ Deno.serve(async (req: Request) => {
     body: JSON.stringify({ email: courriel, password: motDePasse }),
   });
   const jeton = await rep.json().catch(() => ({}));
+  // Adresse pas encore confirmée : Supabase ne le dit qu'APRÈS avoir vérifié
+  // le mot de passe, donc le dire ne révèle rien à quelqu'un qui devine.
+  if (jeton && (jeton.error_code === "email_not_confirmed" || /not confirmed/i.test(String(jeton.msg || jeton.error_description || "")))) {
+    return json({ erreur: "Ton adresse e-mail n'est pas encore confirmée. Clique sur le lien reçu par e-mail, puis reconnecte-toi." }, 403);
+  }
   if (!rep.ok || !jeton.access_token) return json(ECHEC, 401);
 
   return json({

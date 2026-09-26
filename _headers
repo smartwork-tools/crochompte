@@ -17,7 +17,7 @@
   # son script dans la page elle-même. Ce n'est pas idéal en théorie ; en
   # pratique aucun contenu de tiers n'est jamais inséré comme du HTML (tout
   # passe par esc()), ce qui est la condition pour que ce soit acceptable.
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://upload.wikimedia.org https://www.gutenberg.org; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://upload.wikimedia.org https://www.gutenberg.org; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
 
   # Empêche d'afficher Crochompte dans un cadre sur un autre site — la façon
   # classique de faire cliquer quelqu'un sur un bouton qu'il ne voit pas.

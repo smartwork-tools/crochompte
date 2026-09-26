@@ -22,10 +22,16 @@ appareil à l'autre.
 | `.gitignore` | fichiers à ne pas envoyer sur GitHub |
 | `confidentialite.html` | politique de confidentialité — **à compléter** |
 | `RGPD.md` | liste de contrôle : ce qui est fait, ce qui reste à ta charge |
-| `supabase/functions/inscription/` | fonction serveur : création du compte (pseudo, identité de base, courriel, mot de passe) |
-| `supabase/functions/connexion/` | fonction serveur : connexion avec pseudo **ou** courriel + mot de passe |
-| `supabase/functions/mot-de-passe-oublie/` | fonction serveur : envoi du lien de réinitialisation à partir du pseudo ou du courriel |
+| `supabase/functions/inscription/` | fonction serveur : création du compte (pseudo, adresse e-mail, mot de passe, « 15 ans ou plus ») |
+| `supabase/functions/connexion/` | fonction serveur : connexion avec pseudo **ou** adresse e-mail + mot de passe |
+| `supabase/functions/mot-de-passe-oublie/` | fonction serveur : envoi du lien de réinitialisation à partir du pseudo ou de l'adresse e-mail |
 | `supabase/functions/supprimer-compte/` | fonction serveur pour l'effacement complet du compte |
+| `schema-signalements.sql` | un signalement par personne et par patron partagé, à coller dans Supabase |
+| `sw.js` | garde une copie de l'application sur l'appareil, pour l'ouvrir sans réseau |
+| `manifest.webmanifest`, `icones/` | nom et icônes pour « Ajouter à l'écran d'accueil » sur téléphone |
+| `polices/` | les polices, hébergées sur le site (licence SIL OFL) |
+| `vendor/pdfjs/` | pdf.js (Mozilla, licence Apache 2.0) : lecture des PDF sur l'appareil, chargé seulement à l'import d'un PDF |
+| `tests/` | les tests automatiques (voir `tests/README.md`) |
 
 > Pas de `netlify.toml` dans ce dossier : ce fichier ne sert qu'avec l'hébergeur
 > Netlify. Comme tu utilises **GitHub Pages**, il ne t'est d'aucune utilité —
@@ -228,20 +234,22 @@ dans Réglages.
   seul document JSON, enregistré sous ton compte.
 - **L'envoi est automatique**, deux secondes et demie après la dernière
   modification, et une dernière fois quand tu fermes l'onglet.
-- **La récupération est manuelle**, volontairement. Elle remplace ce qui est
-  dans le navigateur : c'est un geste qu'on fait en arrivant sur un appareil,
-  pas au milieu d'un travail.
-- **Les conflits ne sont jamais tranchés en silence.** Si un autre appareil a
-  écrit après ta dernière lecture, l'application refuse d'envoyer et te le dit,
-  avec la date. À toi de choisir.
-- **Les photos** sont envoyées à la demande, par le bouton dédié. Elles pèsent
-  lourd : c'est un geste conscient, pas un transfert permanent.
+- **La mise à jour est automatique** à l'ouverture et au retour sur l'onglet :
+  s'il y a une version plus récente en ligne, elle est récupérée.
+- **Rien n'est écrasé sans filet.** Quand une version en remplace une autre,
+  l'ancienne est rangée dans l'historique des versions (Réglages › Mon compte).
+- **Les photos** partent toutes seules en arrière-plan après chaque
+  enregistrement, et reviennent toutes seules sur un nouvel appareil.
+- **À la déconnexion**, l'atelier et les photos sont retirés de l'appareil,
+  seulement une fois tout bien envoyé. Sur un ordinateur partagé, la personne
+  suivante part d'un atelier vierge.
 
 ### Ce qui reste à faire un jour
 - La fusion fine (deux appareils modifiant deux créations différentes en même
-  temps : aujourd'hui, l'un des deux gagne).
-- Le transfert des photos en tâche de fond.
-- L'application mobile native.
+  temps : aujourd'hui, le dernier enregistrement gagne, l'autre est dans
+  l'historique).
+- L'application mobile native (en attendant, « Ajouter à l'écran d'accueil »
+  installe Crochompte comme une application).
 
 ---
 
@@ -329,9 +337,6 @@ python3 -m http.server 8000
 # puis http://localhost:8000
 ```
 
-Les tests (hors de ce dossier, dans l'espace de travail) se lancent avec
-Playwright, avec un faux client Supabase pour ne dépendre d'aucun projet réel.
-Ils couvrent : l'inscription complète (identité, âge minimum, disponibilité
-du pseudo en direct), la connexion et le mot de passe oublié par pseudo comme
-par adresse, la lecture et la modification du profil, la récupération de mot
-de passe, et le repli hors ligne sans configuration.
+Les tests sont dans `tests/` et se lancent avec `node tests/lancer.js`
+(Playwright, avec un faux client Supabase : aucun projet réel n'est touché).
+Le détail est dans `tests/README.md`.

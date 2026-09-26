@@ -104,28 +104,11 @@ create policy "chacune retire ses patrons"
   using ( (select auth.uid()) = user_id );
 
 -- ─────────────────────────────────────────────────────────────────────────
--- Signaler un patron
--- Une personne qui reconnaît son propre travail publié par quelqu'un d'autre
--- doit pouvoir le dire sans t'écrire. Le compteur monte ; à toi de regarder.
--- La fonction est « security definer » parce qu'incrémenter un compteur sur
--- la ligne d'une autre personne est justement ce que les règles interdisent.
--- Elle ne renvoie rien et ne permet de lire ni de modifier quoi que ce soit
--- d'autre : c'est une porte étroite, ouverte pour un seul geste.
+-- Signaler un patron : la fonction est définie dans schema-signalements.sql
+-- (un signalement par personne et par patron, pas le sien). Elle n'est plus
+-- redéfinie ici : rejouer ce fichier ne doit pas rétablir l'ancienne version,
+-- qui permettait à une seule personne de faire retirer n'importe quel patron.
 -- ─────────────────────────────────────────────────────────────────────────
-create or replace function public.signaler_patron(p_id uuid)
-returns void
-language sql
-security definer
-set search_path = public
-as $$
-  update public.patrons_publics
-     set signalements = signalements + 1,
-         retire = (signalements + 1 >= 3)   -- retrait automatique au 3e signalement
-   where id = p_id and retire = false;
-$$;
-
-revoke all on function public.signaler_patron(uuid) from public;
-grant execute on function public.signaler_patron(uuid) to authenticated;
 
 -- ─────────────────────────────────────────────────────────────────────────
 -- Vérification

@@ -118,7 +118,6 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
        qui permet, au retour sur l'onglet, de savoir s'il faut envoyer son
        travail ou aller chercher celui de l'autre appareil. */
     sale: false,
-    enCours: false,
     minuteur: null,
     minuteurPseudo: null,
     zone: null,
@@ -146,7 +145,7 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
                  "Si ton compte est déjà confirmé, connecte-toi simplement. "+
                  "Pour changer ton mot de passe, refais « Mot de passe oublié »."}
       : {titre: "Ce lien n'a pas pu être utilisé.",
-         detail: "Réessaie depuis le dernier courriel reçu, ou redemande un lien depuis cette page."};
+         detail: "Réessaie depuis le dernier e-mail reçu, ou demande un nouveau lien depuis cette page."};
     try { history.replaceState(null, "", window.location.pathname + window.location.search); } catch (e) {}
   })();
 
@@ -226,7 +225,51 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
     }).catch(function(){});
   }
 
-  /* ───────── synchronisation de l'état ───────── */
+  /* ───────── synchronisation de l'état ─────────
+     Règles, dans l'ordre où elles protègent le travail :
+       1. On ne remplace JAMAIS la version en ligne sans l'archiver, dès
+          qu'elle n'est pas exactement celle que cet appareil connaît.
+          La version « connue » (vuLe) est retenue dans le navigateur, par
+          compte : elle survit aux rechargements et aux reconnexions.
+       2. Rien ne part tant que la première mise à jour de la session n'a pas
+          réussi (etat.pret) : un appareil neuf, vide, ne peut pas écraser
+          l'atelier en ligne avant de l'avoir récupéré.
+       3. Un atelier vierge ne remplace jamais un atelier rempli (sauf remise
+          à zéro volontaire, qui porte une marque).
+       4. Un seul envoi à la fois ; ce qui est modifié pendant un envoi repart
+          juste après (compteur de générations) ; une réception n'écrase pas
+          une modification faite pendant qu'elle arrivait.
+       5. Seules les vraies modifications déclenchent un envoi : changer
+          d'application ou fermer l'onglet ne suffit pas. */
+
+  var CLE_BASE = "crochompte-v1.versionConnue";
+  function lireBase(uid){
+    try{ var m = JSON.parse(localStorage.getItem(CLE_BASE) || "null"); return (m && m.uid === uid) ? m.maj : null; }
+    catch(e){ return null; }
+  }
+  function noterBase(maj){
+    etat.vuLe = maj || null;
+    try{ if (etat.session) localStorage.setItem(CLE_BASE, JSON.stringify({uid: etat.session.user.id, maj: etat.vuLe})); }catch(e){}
+  }
+  etat.pret = false;
+  etat.generation = 0;
+  etat.envoiEnCours = null;
+  etat.relancer = false;
+  etat.derniereErreur = null;
+
+  /* Un atelier « vierge » : rien que la personne ait saisi. La remise à zéro
+     volontaire pose reinitialiseLe, pour qu'elle puisse, elle, remplacer la
+     version en ligne. */
+  function estViergeDonnees(d){
+    if (!d || typeof d !== "object") return true;
+    if (d.reinitialiseLe) return false;
+    var nb = function(x){ return Array.isArray(x) ? x.length : 0; };
+    if (nb(d.creations) || nb(d.pieces) || nb(d.commandes) || nb(d.patrons)) return false;
+    if (d.reglages && d.reglages.confirmeLe) return false;
+    if (d.photosModeles && Object.keys(d.photosModeles).some(function(k){ return d.photosModeles[k] && d.photosModeles[k].photo; })) return false;
+    if (Array.isArray(d.matieres) && d.matieres.some(function(m){ return m && (m.perso || (Array.isArray(m.mouv) && m.mouv.length) || Number(m.stock) > 0); })) return false;
+    return true;
+  }
 
   /* Un nom d'appareil lisible, pour que l'historique dise « ton téléphone »
      plutôt qu'une suite de chiffres. Rien d'identifiant n'est envoyé. */
@@ -237,124 +280,156 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
     return "ordinateur";
   }
 
-  /* Archive l'état actuellement EN LIGNE avant de le remplacer.
-     C'est la pièce maîtresse : tant que cet appel existe, aucune écriture
-     ne peut faire disparaître définitivement le travail d'un autre appareil. */
+  /* Archive un état AVANT de le remplacer. Si l'archivage échoue, on ne
+     remplace rien : c'est la condition pour que rien ne se perde. */
   function archiver(donnees, maj, raison){
     if (!etat.session || !donnees) return Promise.resolve();
     return sb.from("ateliers_versions").insert({
       user_id: etat.session.user.id,
       donnees: donnees, maj: maj || new Date().toISOString(),
       appareil: nomAppareil(), raison: raison || "remplacee"
-    }).then(function(){
-      return sb.rpc("purger_versions");
-    }).catch(function(){ /* l'archivage ne doit jamais bloquer un envoi */ });
+    }).then(function(r){
+      if (r && r.error) throw new Error("archivage : " + r.error.message);
+      return sb.rpc("purger_versions").then(function(){}, function(){});
+    });
   }
 
-  /* ENVOYER — ne refuse jamais.
-     Avant cette version, un conflit bloquait l'enregistrement : l'appareil
-     ne pouvait plus rien sauvegarder, et le seul bouton proposé écrasait son
-     travail. Désormais : si la version en ligne est plus récente que ce que
-     cet appareil avait lu, on l'archive d'abord, puis on écrit. Le dernier
-     envoi gagne — ce que tout le monde attend — et l'écrasé reste récupérable
-     dans l'historique. */
+  function programmerEnvoi(delai){
+    if (etat.minuteur) clearTimeout(etat.minuteur);
+    etat.minuteur = setTimeout(function(){ etat.minuteur = null; envoyer(); }, delai || 2500);
+  }
+
+  /* ENVOYER — la version d'ici devient la version en ligne. */
   function envoyer(){
-    if (!etat.session || etat.enCours) return Promise.resolve();
-    etat.enCours = true;
-    var corps = pont.lire();
-    return sb.from(TABLE)
-      .select("donnees, maj")
-      .eq("user_id", etat.session.user.id)
-      .maybeSingle()
+    if (!etat.session || etat.recuperation || etat.suppression) return Promise.resolve(false);
+    if (!etat.pret) return synchroniser();
+    if (etat.envoiEnCours){ etat.relancer = true; return etat.envoiEnCours; }
+    var uid = etat.session.user.id;
+    var gen = etat.generation;
+    var corps = JSON.parse(JSON.stringify(pont.lire()));   /* instantané : l'état peut changer pendant l'envoi */
+    var archive = null;
+    etat.envoiEnCours = sb.from(TABLE).select("donnees, maj").eq("user_id", uid).maybeSingle()
       .then(function(r){
-        var ecrase = !!(r.data && etat.vuLe && r.data.maj > etat.vuLe);
-        var avant = ecrase ? archiver(r.data.donnees, r.data.maj, "remplacee")
-                           : Promise.resolve();
-        return avant.then(function(){
-          var maj = new Date().toISOString();
-          return sb.from(TABLE).upsert({
-            user_id: etat.session.user.id,
-            donnees: corps,
-            maj: maj
-          }, {onConflict: "user_id"}).then(function(res){
-            etat.enCours = false;
-            if (res.error) { peindre({erreur: res.error.message}); return; }
-            etat.vuLe = maj;
-            etat.sale = false;
-            marquerAEnvoyer(false);
-            etat.versionsSues = null;
-            peindre(ecrase ? {archive: r.data.maj} : undefined);
-          });
+        if (r.error) throw new Error(r.error.message);
+        if (r.data && estViergeDonnees(corps) && !estViergeDonnees(r.data.donnees)) throw new Error("vierge");
+        var ecrase = !!(r.data && r.data.maj !== etat.vuLe);
+        if (ecrase) archive = r.data.maj;
+        return (ecrase ? archiver(r.data.donnees, r.data.maj, "remplacee") : Promise.resolve()).then(function(){
+          return sb.from(TABLE).upsert({user_id: uid, donnees: corps, maj: new Date().toISOString()},
+                                       {onConflict: "user_id"}).select("maj").single();
         });
+      })
+      .then(function(res){
+        if (res.error) throw new Error(res.error.message);
+        noterBase(res.data && res.data.maj);
+        if (etat.generation === gen){ etat.sale = false; marquerAEnvoyer(false); }
+        etat.derniereErreur = null;
+        planifierPhotos();
+        return true;
       })
       .catch(function(e){
-        etat.enCours = false;
-        peindre({erreur: String(e && e.message || e)});
+        var m = String(e && e.message || e);
+        if (m === "vierge"){
+          /* Cet appareil n'a rien d'utile et l'atelier en ligne est rempli :
+             on le récupère au lieu de l'écraser. */
+          etat.sale = false; marquerAEnvoyer(false); etat.pret = false;
+          setTimeout(synchroniser, 0);
+          return false;
+        }
+        etat.derniereErreur = traduire(m);
+        return false;
+      })
+      .then(function(ok){
+        etat.envoiEnCours = null;
+        peindre(archive && ok ? {archive: archive, garderFocus: true} : {garderFocus: true});
+        if (etat.relancer){ etat.relancer = false; if (etat.sale) programmerEnvoi(800); }
+        else if (!ok && etat.sale) programmerEnvoi(30000);   /* nouvel essai automatique */
+        return ok;
       });
+    return etat.envoiEnCours;
   }
 
-  function recevoir(archiverLocal){
-    if (!etat.session) return Promise.resolve(false);
-    return sb.from(TABLE)
-      .select("donnees, maj")
-      .eq("user_id", etat.session.user.id)
-      .maybeSingle()
-      .then(function(r){
-        if (r.error || !r.data) return false;
-        /* Récupérer remplace ce qui est dans ce navigateur : on en garde
-           une copie avant, pour que ce geste soit lui aussi réversible. */
-        var avant = archiverLocal
-          ? archiver(pont.lire(), etat.vuLe || new Date().toISOString(), "avant_recuperation")
-          : Promise.resolve();
-        return avant.then(function(){
-          etat.vuLe = r.data.maj;
-          etat.sale = false;
-          return pont.ecrire(r.data.donnees);
-        });
-      })
-      .catch(function(){ return false; });
+  /* RECEVOIR — la version en ligne remplace celle d'ici (archivée avant, si
+     elle contient quelque chose et qu'elle diffère). Renvoie "recu",
+     "identique", "vide" ou "modifie" (quelque chose a changé ici pendant
+     la réception : on n'écrase pas, l'appelant enverra). */
+  function recevoir(){
+    if (!etat.session) return Promise.resolve("vide");
+    var gen = etat.generation;
+    var uid = etat.session.user.id;
+    return sb.from(TABLE).select("donnees, maj").eq("user_id", uid).maybeSingle().then(function(r){
+      if (r.error) throw new Error(r.error.message);
+      if (!r.data) return "vide";
+      if (etat.generation !== gen || etat.sale) return "modifie";
+      var local = pont.lire();
+      var identique = JSON.stringify(local) === JSON.stringify(r.data.donnees);
+      var avant = (!identique && !estViergeDonnees(local))
+        ? archiver(local, etat.vuLe || new Date().toISOString(), "avant_recuperation")
+        : Promise.resolve();
+      return avant.then(function(){
+        if (etat.generation !== gen || etat.sale) return "modifie";
+        if (!identique) pont.ecrire(r.data.donnees);
+        noterBase(r.data.maj);
+        return identique ? "identique" : "recu";
+      });
+    });
   }
 
-  /* SYNCHRONISER — ce qui se passe à l'ouverture et au retour sur l'onglet.
-     L'artisane ne doit pas avoir à se demander si elle est à jour, ni à
-     cliquer sur un bouton dont elle ne peut pas deviner l'effet.
-       • du travail local pas encore envoyé  → on l'envoie ;
-       • sinon, une version plus récente en ligne → on la récupère.
-     Dans les deux cas, ce qui est remplacé est archivé avant. */
+  /* SYNCHRONISER — à l'ouverture, à la connexion, au retour sur l'onglet et
+     au retour du réseau. L'artisane n'a jamais à se demander si elle est à
+     jour, ni à cliquer sur un bouton dont elle ne devine pas l'effet. */
+  var syncEnCours = null;
   function synchroniser(){
-    if (!etat.session || etat.enCours) return Promise.resolve();
-    if (etat.sale) return envoyer();
-    return sb.from(TABLE)
-      .select("maj")
-      .eq("user_id", etat.session.user.id)
-      .maybeSingle()
+    if (!etat.session || etat.recuperation || etat.suppression) return Promise.resolve(false);
+    if (syncEnCours) return syncEnCours;
+    if (etat.envoiEnCours) return etat.envoiEnCours;
+    var uid = etat.session.user.id;
+    syncEnCours = sb.from(TABLE).select("maj").eq("user_id", uid).maybeSingle()
       .then(function(r){
-        if (r.error || !r.data) return false;
-        if (etat.vuLe && r.data.maj <= etat.vuLe) return false;
-        return recevoir(true).then(function(ok){
-          if (ok) pont.toast("Atelier mis à jour depuis ton autre appareil.");
-          return ok;
+        if (r.error) throw new Error(r.error.message);
+        if (!r.data){
+          /* Compte sans atelier en ligne : on y met celui d'ici s'il a du contenu. */
+          etat.pret = true;
+          return (etat.sale || !estViergeDonnees(pont.lire())) ? "envoyer" : true;
+        }
+        if (r.data.maj === etat.vuLe){ etat.pret = true; return etat.sale ? "envoyer" : true; }
+        /* La version en ligne n'est pas celle qu'on connaît. */
+        if (etat.sale){ etat.pret = true; return "envoyer"; }   /* elle sera archivée par envoyer() */
+        return recevoir().then(function(res){
+          etat.pret = true;
+          if (res === "modifie") return "envoyer";
+          if (res === "recu") pont.toast("Atelier mis à jour avec les modifications faites sur un autre appareil.");
+          return true;
         });
       })
-      .catch(function(){ return false; });
+      .then(function(suite){
+        syncEnCours = null;
+        etat.derniereErreur = null;
+        return suite === "envoyer" ? envoyer() : true;
+      }, function(e){
+        syncEnCours = null;
+        etat.derniereErreur = traduire(String(e && e.message || e));
+        peindre({garderFocus: true});
+        return false;
+      });
+    return syncEnCours;
   }
 
-  /* L'application appelle ceci à chaque enregistrement. On regroupe :
+  /* L'application appelle ceci à chaque modification réelle. On regroupe :
      personne n'a besoin d'un aller-retour réseau par frappe au clavier. */
   function signaler(){
     if (!etat.session) return;
+    etat.generation++;
     etat.sale = true;
     marquerAEnvoyer(true);
-    if (etat.minuteur) clearTimeout(etat.minuteur);
-    etat.minuteur = setTimeout(envoyer, 2500);
+    programmerEnvoi(2500);
   }
 
-  /* Un dernier envoi quand on quitte la page. Sur mobile, « pagehide » n'est
-     pas toujours déclenché — l'onglet peut être gelé puis tué en silence —,
-     alors on écoute aussi le passage en arrière-plan, qui l'est, lui. */
+  /* Un dernier envoi quand on quitte la page ou qu'elle passe en arrière-plan
+     — seulement s'il y a quelque chose à envoyer. */
   function envoiDeSortie(){
     if (!etat.session || !etat.sale) return;
-    if (etat.minuteur) clearTimeout(etat.minuteur);
+    if (etat.minuteur){ clearTimeout(etat.minuteur); etat.minuteur = null; }
     envoyer();
   }
   window.addEventListener("pagehide", envoiDeSortie);
@@ -362,90 +437,208 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
     if (document.visibilityState === "hidden") envoiDeSortie();
     else synchroniser();   /* de retour sur l'onglet : on se remet à jour */
   });
+  /* Retour du réseau : ce qui attendait part, et on se remet à jour. */
+  window.addEventListener("online", function(){ synchroniser(); });
+  /* Filet : si une mise à jour ou un envoi a échoué, on réessaie chaque minute. */
+  setInterval(function(){
+    if (etat.session && !etat.recuperation && (!etat.pret || etat.sale) && !etat.envoiEnCours && !syncEnCours &&
+        document.visibilityState !== "hidden") synchroniser();
+  }, 60000);
 
-  /* ───────── photos ───────── */
+  /* Fin d'une session (déconnexion, expiration, suppression) : plus rien ne
+     doit partir au nom de ce compte. */
+  function finDeSession(){
+    if (etat.minuteur){ clearTimeout(etat.minuteur); etat.minuteur = null; }
+    etat.sale = false; etat.pret = false; etat.vuLe = null; etat.derniereErreur = null;
+    etat.generation++;
+    sessionDemarree = null;
+  }
 
+  /* ───────── photos ─────────
+     Elles partent toutes seules, en arrière-plan, après chaque enregistrement.
+     On retient celles qui sont déjà en ligne (par compte) pour ne pas les
+     renvoyer ; une photo changée reçoit un nouvel identifiant, donc repart.
+     Les suppressions attendent dans une file tant qu'elles n'ont pas abouti. */
+  var CLE_PHOTOS = "crochompte-v1.photosEnvoyees";
+  var CLE_PHOTOS_SUPPR = "crochompte-v1.photosASupprimer";
+  function lireCle(cle){
+    try{
+      var m = JSON.parse(localStorage.getItem(cle) || "null");
+      if (m && etat.session && m.uid === etat.session.user.id) return m.ids || {};
+    }catch(e){}
+    return {};
+  }
+  function ecrireCle(cle, ids){
+    try{ if (etat.session) localStorage.setItem(cle, JSON.stringify({uid: etat.session.user.id, ids: ids})); }catch(e){}
+  }
+  function photosEnvoyees(){ return lireCle(CLE_PHOTOS); }
+  function noterPhotos(ids){ ecrireCle(CLE_PHOTOS, ids); }
+
+  var photosEnCours = null;
   function envoyerPhotos(journal){
-    if (!etat.session) return Promise.resolve();
-    var ids = pont.photo.lister();
+    if (!etat.session) return Promise.resolve({faites:0, echecs:0});
+    if (photosEnCours) return photosEnCours;
+    var deja = photosEnvoyees();
+    var ids = pont.photo.lister().filter(function(id){ return id && !deja[id]; });
     var uid = etat.session.user.id;
-    var faites = 0;
-    return ids.reduce(function(chaine, id){
+    var faites = 0, echecs = 0;
+    photosEnCours = ids.reduce(function(chaine, id){
       return chaine.then(function(){
-        return pont.photo.lire(id).then(function(url){
-          if (!url) return;
-          return fetch(url).then(function(r){ return r.blob(); }).then(function(blob){
+        /* La photo est lue telle qu'elle est rangée sur l'appareil (un Blob). */
+        return pont.photo.lire(id).then(function(v){
+          if (!v) return;
+          var obtenir = (typeof Blob !== "undefined" && v instanceof Blob)
+            ? Promise.resolve(v)
+            : fetch(v).then(function(r){ if (!r.ok) throw new Error("photo illisible"); return r.blob(); });
+          return obtenir.then(function(blob){
             return sb.storage.from(BUCKET)
               .upload(uid + "/" + id + ".jpg", blob, {upsert:true, contentType:"image/jpeg"})
-              .then(function(){ faites++; if (journal) journal(faites, ids.length); });
+              .then(function(res){
+                if (res && res.error){ echecs++; return; }
+                deja[id] = 1; noterPhotos(deja);
+                faites++; if (journal) journal(faites, ids.length);
+              });
+          });
+        }).catch(function(){ echecs++; });
+      });
+    }, Promise.resolve()).then(function(){
+      photosEnCours = null;
+      return {faites: faites, echecs: echecs};
+    });
+    return photosEnCours;
+  }
+  /* Attend l'envoi en cours, puis renvoie tout ce qui manque encore ; compte
+     comme échec toute photo présente ici mais toujours absente en ligne. */
+  function envoyerToutesPhotos(){
+    return (photosEnCours || Promise.resolve()).then(function(){ return envoyerPhotos(); }).then(function(b){
+      var deja = photosEnvoyees();
+      var reste = pont.photo.lister().filter(function(id){ return id && !deja[id]; });
+      return Promise.all(reste.map(function(id){ return pont.photo.lire(id); })).then(function(v){
+        return {faites: b.faites, echecs: v.filter(Boolean).length};
+      });
+    });
+  }
+  var minuteurPhotos = null;
+  function planifierPhotos(){
+    if (minuteurPhotos) clearTimeout(minuteurPhotos);
+    minuteurPhotos = setTimeout(function(){ traiterSuppressions().then(function(){ envoyerPhotos(); }); }, 1500);
+  }
+  /* Une photo supprimée dans l'application l'est aussi en ligne ; si le
+     réseau manque, la suppression attend et repart plus tard. */
+  function photoEffacee(id){
+    if (!etat.session || !id) return;
+    var deja = photosEnvoyees(); delete deja[id]; noterPhotos(deja);
+    var file = lireCle(CLE_PHOTOS_SUPPR); file[id] = 1; ecrireCle(CLE_PHOTOS_SUPPR, file);
+    traiterSuppressions();
+  }
+  function traiterSuppressions(){
+    if (!etat.session) return Promise.resolve();
+    var file = lireCle(CLE_PHOTOS_SUPPR);
+    var ids = Object.keys(file);
+    if (!ids.length) return Promise.resolve();
+    var uid = etat.session.user.id;
+    return sb.storage.from(BUCKET).remove(ids.map(function(id){ return uid + "/" + id + ".jpg"; }))
+      .then(function(r){
+        if (r && r.error) return;
+        var f2 = lireCle(CLE_PHOTOS_SUPPR);
+        ids.forEach(function(id){ delete f2[id]; });
+        ecrireCle(CLE_PHOTOS_SUPPR, f2);
+      }).catch(function(){});
+  }
+
+  /* Ramène sur cet appareil les photos de l'atelier qui n'y sont pas encore.
+     Seules les photos utilisées par l'atelier sont téléchargées : une photo
+     supprimée ailleurs ne réapparaît pas. */
+  function recevoirPhotos(journal){
+    if (!etat.session) return Promise.resolve(0);
+    var uid = etat.session.user.id;
+    var utiles = pont.photo.lister().filter(Boolean);
+    var faites = 0;
+    return utiles.reduce(function(chaine, id){
+      return chaine.then(function(){
+        return pont.photo.lire(id).then(function(dejaLa){
+          if (dejaLa) return;
+          return sb.storage.from(BUCKET).download(uid + "/" + id + ".jpg").then(function(d){
+            if (d.error || !d.data) return;
+            return pont.photo.ecrire(id, d.data).then(function(ok){
+              if (ok === false) return;
+              var deja = photosEnvoyees(); deja[id] = 1; noterPhotos(deja);
+              faites++; if (journal) journal(faites, utiles.length);
+            });
           });
         }).catch(function(){});
       });
     }, Promise.resolve()).then(function(){ return faites; });
   }
 
-  function recevoirPhotos(journal){
-    if (!etat.session) return Promise.resolve(0);
-    var uid = etat.session.user.id;
-    return sb.storage.from(BUCKET).list(uid, {limit: 1000}).then(function(r){
-      if (r.error || !r.data) return 0;
-      var faites = 0;
-      return r.data.reduce(function(chaine, f){
-        return chaine.then(function(){
-          var id = f.name.replace(/\.jpg$/, "");
-          return pont.photo.lire(id).then(function(dejaLa){
-            if (dejaLa) return;   /* déjà dans ce navigateur */
-            return sb.storage.from(BUCKET).download(uid + "/" + f.name).then(function(d){
-              if (d.error || !d.data) return;
-              return pont.photo.ecrire(id, d.data).then(function(){
-                faites++; if (journal) journal(faites, r.data.length);
-              });
-            });
-          }).catch(function(){});
-        });
-      }, Promise.resolve()).then(function(){ return faites; });
-    }).catch(function(){ return 0; });
+  /* Tous les fichiers du dossier du compte, page par page (au-delà de 100). */
+  function listerTout(uid){
+    var tous = [];
+    function page(offset){
+      return sb.storage.from(BUCKET).list(uid, {limit: 100, offset: offset}).then(function(r){
+        if (r.error) throw new Error(r.error.message);
+        var l = r.data || [];
+        tous = tous.concat(l);
+        return l.length === 100 ? page(offset + 100) : tous;
+      });
+    }
+    return page(0);
   }
 
   /* ───────── effacement du compte (RGPD, droit à l'effacement) ─────────
-     Trois temps, dans cet ordre : les photos, puis l'atelier, puis l'identité
-     de connexion. Les deux premiers, le navigateur peut les faire lui-même —
-     les règles de la base l'y autorisent pour ses propres lignes. Le
-     troisième demande un droit d'administration, donc une fonction serveur
-     (voir edge/supprimer-compte). Si elle n'est pas déployée, on le dit au
-     lieu de faire croire que tout est parti. */
-
+     Dans cet ordre : on coupe tout envoi, puis les photos (toutes les pages
+     du dossier), l'historique des versions, l'atelier, enfin l'identité de
+     connexion par la fonction serveur. Chaque étape vérifie son résultat :
+     le message final dit exactement ce qui a été fait. */
   function effacerToutLeCompte(journal){
     if (!etat.session) return Promise.resolve({ok:false});
     var uid = etat.session.user.id;
+    etat.suppression = true;
+    if (etat.minuteur){ clearTimeout(etat.minuteur); etat.minuteur = null; }
+    if (minuteurPhotos){ clearTimeout(minuteurPhotos); minuteurPhotos = null; }
 
-    return sb.storage.from(BUCKET).list(uid, {limit: 1000})
-      .then(function(r){
-        var noms = (r.data || []).map(function(f){ return uid + "/" + f.name; });
-        if (journal) journal("Effacement des photos…");
-        return noms.length ? sb.storage.from(BUCKET).remove(noms) : null;
+    return Promise.all([etat.envoiEnCours, photosEnCours].filter(Boolean)).catch(function(){})
+      .then(function(){
+        if (journal) journal("Suppression des photos…");
+        return listerTout(uid);
+      })
+      .then(function(fichiers){
+        var noms = fichiers.map(function(f){ return uid + "/" + f.name; });
+        var lots = [];
+        for (var i = 0; i < noms.length; i += 100) lots.push(noms.slice(i, i + 100));
+        return lots.reduce(function(ch, lot){
+          return ch.then(function(){
+            return sb.storage.from(BUCKET).remove(lot).then(function(r){ if (r && r.error) throw new Error(r.error.message); });
+          });
+        }, Promise.resolve());
       })
       .then(function(){
-        if (journal) journal("Effacement de l'atelier…");
+        if (journal) journal("Suppression de l'historique…");
+        return sb.from("ateliers_versions").delete().eq("user_id", uid);
+      })
+      .then(function(res){
+        if (res && res.error) throw new Error(res.error.message);
+        if (journal) journal("Suppression de l'atelier…");
         return sb.from(TABLE).delete().eq("user_id", uid);
       })
       .then(function(res){
         if (res && res.error) throw new Error(res.error.message);
-        if (journal) journal("Effacement du compte…");
-        /* La fonction serveur, si elle est déployée. Elle efface aussi la
-           ligne « pseudos » (contrainte on delete cascade). */
+        if (journal) journal("Suppression du compte…");
         return sb.functions.invoke("supprimer-compte")
           .then(function(f){ return {ok:true, identite: !f.error}; })
           .catch(function(){ return {ok:true, identite:false}; });
       })
       .then(function(bilan){
-        return sb.auth.signOut().then(function(){
-          etat.session = null; etat.vuLe = null; etat.pseudo = null;
+        return sb.auth.signOut({scope: "local"}).catch(function(){}).then(function(){
+          finDeSession();
+          etat.suppression = false;
+          etat.session = null; etat.pseudo = null;
           etat.brouillonProfil = brouillonProfilVide();
           return bilan;
         });
       })
       .catch(function(e){
+        etat.suppression = false;
         return {ok:false, message: String(e && e.message || e)};
       });
   }
@@ -481,19 +674,39 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
   function deconnecter(){
     if (deconnexionEnCours || !etat.session) return Promise.resolve();
     deconnexionEnCours = true;
-    var dernier = etat.sale ? envoyer() : Promise.resolve();
-    return dernier.then(function(){ marquerAEnvoyer(false); }).then(function(){
-      return sb.auth.signOut();
-    }).then(function(){
-      etat.session = null; etat.vuLe = null; etat.pseudo = null; etat.mode = "connexion";
+    if (etat.minuteur){ clearTimeout(etat.minuteur); etat.minuteur = null; }
+    var dernier = etat.sale ? (etat.pret ? envoyer() : synchroniser()) : Promise.resolve(true);
+    return dernier.then(function(){
+      /* Se déconnecter efface l'atelier de ce navigateur : on ne le fait
+         jamais tant que tout n'est pas bien parti en ligne, photos comprises. */
+      if (etat.sale) throw new Error("non_envoye");
+      return envoyerToutesPhotos();
+    }).then(function(bilan){
+      if (bilan && bilan.echecs) throw new Error("photos");
+      /* « local » : on ne déconnecte que cet appareil, pas le téléphone. */
+      return sb.auth.signOut({scope: "local"});
+    }).then(function(r){
+      if (r && r.error) throw new Error("deconnexion");
+      marquerAEnvoyer(false);
+      finDeSession();
+      etat.session = null; etat.pseudo = null; etat.mode = "connexion";
       etat.brouillon = Object.assign(brouillonInscriptionVide(), {identifiantOubli:"", identifiantConnexion:""});
       etat.brouillonProfil = brouillonProfilVide();
       deconnexionEnCours = false;
-      pont.toast("Déconnectée.");
+      /* Rien de l'atelier ne reste dans ce navigateur après la déconnexion :
+         sur un ordinateur partagé, la personne suivante ne doit ni le voir,
+         ni le récupérer dans son propre compte. Tout est déjà en ligne. */
+      if (pont.oublierAtelier) pont.oublierAtelier();
+      pont.toast("Tu es déconnectée.");
       peindre();
-    }, function(){
+    }, function(e){
       deconnexionEnCours = false;
-      pont.toast("La déconnexion n'a pas abouti. Vérifie ta connexion et réessaie.");
+      var m = e && e.message;
+      pont.toast(m === "non_envoye"
+        ? "Tes dernières modifications ne sont pas encore enregistrées en ligne. Vérifie ta connexion internet, puis réessaie de te déconnecter."
+        : m === "photos"
+          ? "Certaines photos ne sont pas encore enregistrées en ligne. Vérifie ta connexion internet, puis réessaie de te déconnecter."
+          : "La déconnexion n'a pas abouti. Vérifie ta connexion internet, puis réessaie.");
     });
   }
 
@@ -513,6 +726,75 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
     pont.definirCompte(info);
   }
 
+  /* Les messages d'erreur de Supabase arrivent en anglais et en termes
+     techniques : on les traduit en ce que la personne peut faire. */
+  function traduire(m){
+    var t = String(m || "");
+    /* Messages des fonctions serveur, déjà en français : on les aligne sur le
+       vocabulaire de l'application sans avoir à les redéployer. */
+    if (/déjà un compte/i.test(t)) return "Cette adresse e-mail est déjà associée à un compte. Connecte-toi avec ton adresse e-mail, "+
+      "ou utilise « Mot de passe oublié » : l'e-mail que tu recevras te rappellera ton pseudo.";
+    if (/^Identifiant ou mot de passe incorrect/i.test(t)) return "Pseudo, adresse e-mail ou mot de passe incorrect.";
+    if (/ressemble pas à une adresse/i.test(t)) return "Cette adresse e-mail n'est pas valide.";
+    if (/Inscription impossible pour l'instant/i.test(t)) return "La création du compte n'a pas abouti. Réessaie dans quelques minutes.";
+    if (/[àéèêç]/i.test(t)) return t.replace(/courriel/g, "e-mail");
+    if (/different from the old password/i.test(t)) return "Choisis un mot de passe différent de l'actuel.";
+    if (/at least \d+ characters|password should be/i.test(t)) return "Le mot de passe doit contenir au moins 8 caractères.";
+    if (/weak|pwned|compromised/i.test(t)) return "Ce mot de passe est trop courant. Choisis-en un plus difficile à deviner.";
+    if (/rate limit|too many/i.test(t)) return "Trop de tentatives en peu de temps. Patiente quelques minutes, puis réessaie.";
+    if (/network|fetch|failed to/i.test(t)) return "Impossible de joindre le serveur. Vérifie ta connexion internet, puis réessaie.";
+    if (/jwt|session|not authenticated|expired/i.test(t)) return "Ta connexion a expiré. Déconnecte-toi, puis reconnecte-toi.";
+    return t || "Une erreur est survenue. Réessaie dans un instant.";
+  }
+
+  /* Un champ de saisie. Les mots de passe ont un bouton « Afficher » : c'est
+     ce qui évite la plupart des fautes de frappe, sur téléphone surtout. */
+  function champ(o){
+    var type = o.type || "text";
+    var attrs = ' id="' + o.id + '" name="' + o.id + '" type="' + type + '"' +
+      (o.auto ? ' autocomplete="' + o.auto + '"' : '') +
+      (o.max ? ' maxlength="' + o.max + '"' : '') +
+      (o.mode ? ' inputmode="' + o.mode + '"' : '') +
+      (o.place ? ' placeholder="' + echappe(o.place) + '"' : '') +
+      (type !== "password" ? ' value="' + echappe(o.val || "") + '"' : '') +
+      (o.aide ? ' aria-describedby="' + o.id + '-aide"' : '') +
+      ' autocapitalize="' + (o.cap || "off") + '" spellcheck="false"';
+    var entree = type === "password"
+      ? '<span class="mdp"><input' + attrs + '><button type="button" class="mdp-voir" data-voir="' + o.id + '" aria-pressed="false">Afficher</button></span>'
+      : '<input' + attrs + '>';
+    return '<div class="auth-champ">' +
+      '<label class="f" for="' + o.id + '"><span>' + echappe(o.label) +
+        (o.lien ? '<a href="#" id="' + o.lien.id + '" class="auth-lien-label">' + echappe(o.lien.texte) + '</a>' : '') +
+      '</span>' + entree + '</label>' +
+      (o.aide ? '<p class="hint" id="' + o.id + '-aide">' + o.aide + '</p>' : '') +
+      (o.etat ? '<p class="hint auth-etat" id="' + o.etat + '" aria-live="polite"></p>' : '') +
+      '</div>';
+  }
+
+  function texteStatut(){
+    if (etat.derniereErreur) return "Enregistrement en attente : " + etat.derniereErreur + " Nouvel essai automatique.";
+    if (etat.sale) return "Modifications en cours d'enregistrement…";
+    return etat.vuLe ? "Dernier enregistrement : " + dateLisible(etat.vuLe) + "."
+                     : "Rien n'a encore été enregistré en ligne.";
+  }
+
+  function bandeaux(msg){
+    var h = "";
+    if (msg.archive){
+      h += '<div class="banner"><p><b>Ton autre appareil avait enregistré des modifications</b> le '+
+        echappe(dateLisible(msg.archive)) + '. C\'est la version de cet appareil qui est maintenant en ligne ; '+
+        'celle de l\'autre appareil est conservée dans l\'historique des versions, ci-dessous.</p></div>';
+    }
+    if (msg.erreur){
+      h += '<div class="banner auth-erreur" role="alert"><p><b>' + echappe(msg.erreur) + '</b>'+
+        (msg.detail ? '<br>' + echappe(msg.detail) : '') + '</p></div>';
+    }
+    if (msg.info){
+      h += '<div class="banner" role="status"><p>' + echappe(msg.info) + '</p></div>';
+    }
+    return h;
+  }
+
   function peindre(msg){
     declarerEtat();
     annoncerCompte();
@@ -521,189 +803,158 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
     msg = msg || {};
     var connecte = !!etat.session && !etat.recuperation;
 
-    var html = '<div class="card"><header><h2>Compte et synchronisation</h2>'+
-      '<p>' + (connecte
-        ? 'Tes données sont enregistrées en ligne et te suivent d\'un appareil à l\'autre.'
-        : 'Sans compte, tout reste dans ce navigateur. Avec un compte, tu retrouves ton '+
-          'atelier sur ton téléphone comme sur ton ordinateur.') +
-      '</p></header><div class="body">';
-
-    /* Plus de message de conflit : il bloquait l'enregistrement et proposait
-       un choix que personne ne pouvait faire en connaissance de cause. On
-       informe après coup, et on dit où retrouver ce qui a été remplacé. */
-    if (msg.archive){
-      html += '<div class="banner">'+
-        '<p><b>Ton autre appareil avait enregistré du travail de son côté</b>, le '+
-        echappe(dateLisible(msg.archive)) + '. C\'est ta version d\'ici qui est '+
-        'maintenant en ligne, et celle de l\'autre appareil a été rangée dans '+
-        'l\'historique juste en dessous — rien n\'est perdu.</p></div>';
+    /* L'enregistrement automatique repasse ici toutes les quelques secondes.
+       Tout redessiner effacerait ce que la personne est en train de taper
+       dans « Mes informations » : on ne met alors à jour que la ligne d'état. */
+    if (connecte && zone.__vue === "compte" && !msg.erreur && !msg.info && !msg.archive && !msg.complet){
+      var st = zone.querySelector("#sy-statut");
+      if (st) st.textContent = texteStatut();
+      return;
     }
+
     if (etat.session) etat.alerteLien = null;
     if (etat.alerteLien && !msg.erreur && !msg.info && !msg.archive){
-      msg.erreur = etat.alerteLien.titre; msg.detail = etat.alerteLien.detail; msg.pasPerdu = false;
-    }
-    if (msg.erreur){
-      html += '<div class="banner" style="background:var(--bad-soft);border-color:var(--bad)">'+
-        '<p><b>' + echappe(msg.erreur) + '</b>'+
-        (msg.detail ? '<br>' + echappe(msg.detail) : '') +
-        (msg.pasPerdu === false ? '' : '<br>Tes données restent intactes dans ce navigateur.') +
-        '</p></div>';
-    }
-    if (msg.info){
-      html += '<div class="banner"><p>' + echappe(msg.info) + '</p></div>';
+      msg.erreur = etat.alerteLien.titre; msg.detail = etat.alerteLien.detail;
     }
 
+    var html = "";
     if (etat.session && etat.recuperation){
-      /* On revient d'un lien « mot de passe oublié » : Supabase a déjà ouvert
-         une session temporaire, le temps de choisir un nouveau mot de passe. */
-      html += '<p style="margin:0 0 10px">Choisis un nouveau mot de passe pour ton compte.</p>'+
-        '<label class="f" style="max-width:420px"><span>Nouveau mot de passe</span>'+
-        '<input type="password" id="sy-np1" autocomplete="new-password"></label>'+
-        '<label class="f" style="max-width:420px;margin-top:10px"><span>Confirme-le</span>'+
-        '<input type="password" id="sy-np2" autocomplete="new-password"></label>'+
-        '<div class="et-act" style="margin-top:12px">'+
-          '<button type="button" class="btn primary" id="sy-np-valider">Enregistrer ce mot de passe</button>'+
-        '</div>'+
-        '<p class="hint">Au moins 8 caractères.</p>';
+      html = '<div class="card auth"><div class="body">'+
+        '<h2 class="auth-titre">Choisis un nouveau mot de passe</h2>'+
+        '<p class="auth-sous">Il remplacera l\'ancien sur tous tes appareils.</p>'+
+        bandeaux(msg)+
+        '<form id="sy-form" novalidate>'+
+          champ({id:"sy-np1", label:"Nouveau mot de passe", type:"password", auto:"new-password", aide:"8 caractères minimum."})+
+          champ({id:"sy-np2", label:"Confirmer le mot de passe", type:"password", auto:"new-password"})+
+          '<button type="submit" class="btn primary auth-btn" id="sy-np-valider">Enregistrer le mot de passe</button>'+
+        '</form></div></div>';
 
     } else if (!connecte){
-
+      html = '<div class="card auth"><div class="body">';
       if (etat.mode === "inscription"){
-        html += '<label class="f" style="max-width:420px"><span>Ton pseudo</span>'+
-          '<input type="text" id="sy-i-pseudo" autocomplete="username" maxlength="24" placeholder="ex. LaineEtCie" '+
-          'value="' + echappe(etat.brouillon.pseudo) + '"></label>'+
-          '<p class="hint" style="margin:4px 0 0">3 à 24 caractères : lettres, chiffres, tiret ou tiret bas, '+
-          'sans accent ni espace. C\'est ce que tu pourras retaper pour te reconnecter (ou ton adresse '+
-          'de courriel, au choix).</p>'+
-          '<p class="hint" id="sy-i-pseudo-etat" style="margin:4px 0 0;min-height:16px"></p>'+
-
-          '<label class="f" style="max-width:420px;margin-top:12px"><span>Ton adresse de courriel</span>'+
-          '<input type="email" id="sy-i-mail" autocomplete="email" placeholder="toi@exemple.fr" '+
-          'value="' + echappe(etat.brouillon.email) + '"></label>'+
-          '<p class="hint" style="margin:4px 0 0">Sert à confirmer que le compte est le tien, à te '+
-          'reconnecter si tu préfères plutôt que ton pseudo, et à réinitialiser ton mot de passe si '+
-          'tu l\'oublies.</p>'+
-
-          '<label class="f" style="max-width:420px;margin-top:12px"><span>Mot de passe</span>'+
-          '<input type="password" id="sy-i-mdp1" autocomplete="new-password"></label>'+
-          '<label class="f" style="max-width:420px;margin-top:10px"><span>Confirme-le</span>'+
-          '<input type="password" id="sy-i-mdp2" autocomplete="new-password"></label>'+
-          '<p class="hint" style="margin:4px 0 0">Au moins 8 caractères.</p>'+
-
-          '<label style="display:flex;gap:10px;align-items:flex-start;margin-top:14px;max-width:460px;cursor:pointer">'+
-            '<input type="checkbox" id="sy-i-age" style="width:20px;height:20px;min-height:0;margin:2px 0 0;flex:none"' +
-            (etat.brouillon.age15 ? ' checked' : '') + '>'+
-            '<span>J\'ai ' + AGE_MINIMUM + ' ans ou plus.</span></label>'+
-
-          '<div class="et-act" style="margin-top:14px">'+
-            '<button type="button" class="btn primary" id="sy-i-valider">Créer mon compte</button>'+
-          '</div>'+
-          '<p class="hint" style="margin-top:10px">Un lien de confirmation arrive dans ta boîte : '+
-          'clique dessus pour activer ton compte, puis reconnecte-toi avec ton pseudo ou ton adresse.</p>'+
-          '<div class="banner" style="margin-top:14px"><p><b>Ce qui sera enregistré en ligne</b> : '+
-          'ton pseudo, ton adresse de courriel, ton mot de passe (jamais en clair — Supabase le '+
-          'chiffre, personne chez Crochompte ne peut le lire), et l\'atelier que tu construis ici — '+
-          'tes réglages, tes matières, tes créations, tes patrons et tes photos. Rien d\'autre : ni '+
-          'suivi, ni publicité, ni revente. Ces informations ne sont jamais montrées à d\'autres '+
-          'utilisatrices.<br>'+
-          'Ton prénom ou ton activité, si tu veux les donner, s\'ajoutent plus tard dans Réglages, '+
-          'où tu peux aussi tout effacer, à tout moment.'+
-          '<br><a href="confidentialite.html" target="_blank" rel="noopener">Politique de confidentialité</a>'+
-          '</p></div>'+
-          '<p class="hint" style="margin-top:12px">Déjà un compte ? '+
-          '<a href="#" id="sy-vers-connexion">Se connecter</a></p>';
+        html += '<h2 class="auth-titre">Créer un compte</h2>'+
+          '<p class="auth-sous">Quelques secondes suffisent. Tu compléteras ton profil plus tard, si tu le souhaites.</p>'+
+          bandeaux(msg)+
+          '<form id="sy-form" novalidate>'+
+            champ({id:"sy-i-pseudo", label:"Pseudo", auto:"username", max:24, val:etat.brouillon.pseudo,
+                   aide:"3 à 24 caractères : lettres, chiffres, tiret ou tiret bas, sans espace ni accent.", etat:"sy-i-pseudo-etat"})+
+            champ({id:"sy-i-mail", label:"Adresse e-mail", type:"email", auto:"email", mode:"email", val:etat.brouillon.email,
+                   aide:"Pour confirmer ton compte et, si besoin, réinitialiser ton mot de passe."})+
+            champ({id:"sy-i-mdp1", label:"Mot de passe", type:"password", auto:"new-password", aide:"8 caractères minimum."})+
+            champ({id:"sy-i-mdp2", label:"Confirmer le mot de passe", type:"password", auto:"new-password"})+
+            '<label class="auth-case"><input type="checkbox" id="sy-i-age"' + (etat.brouillon.age15 ? ' checked' : '') + '>'+
+              '<span>J\'ai ' + AGE_MINIMUM + ' ans ou plus.</span></label>'+
+            '<button type="submit" class="btn primary auth-btn" id="sy-i-valider">Créer mon compte</button>'+
+          '</form>'+
+          '<p class="hint auth-legal">Ton pseudo, ton adresse e-mail et ton atelier sont enregistrés pour faire fonctionner '+
+          'le service. Ton mot de passe est chiffré. Aucune publicité, aucun suivi, aucune revente. '+
+          '<a href="confidentialite.html" target="_blank" rel="noopener">Politique de confidentialité</a></p>'+
+          '<p class="auth-bas">Déjà un compte ? <a href="#" id="sy-vers-connexion">Se connecter</a></p>';
 
       } else if (etat.mode === "oubli"){
-        html += '<label class="f" style="max-width:420px"><span>Pseudo ou adresse de courriel</span>'+
-          '<input type="text" id="sy-o-identifiant" autocomplete="username" '+
-          'value="' + echappe(etat.brouillon.identifiantOubli) + '"></label>'+
-          '<div class="et-act" style="margin-top:12px">'+
-            '<button type="button" class="btn primary" id="sy-o-valider">Envoyer un lien de réinitialisation</button>'+
-          '</div>'+
-          '<p class="hint">Si cet identifiant correspond à un compte, un courriel arrive à l\'adresse '+
-          'enregistrée, avec un lien pour choisir un nouveau mot de passe.</p>'+
-          '<p class="hint" style="margin-top:10px"><a href="#" id="sy-vers-connexion">Retour à la connexion</a></p>';
+        html += '<h2 class="auth-titre">Mot de passe oublié</h2>'+
+          '<p class="auth-sous">Indique ton pseudo ou ton adresse e-mail. Nous t\'enverrons un lien pour choisir un nouveau mot de passe.</p>'+
+          bandeaux(msg)+
+          '<form id="sy-form" novalidate>'+
+            champ({id:"sy-o-identifiant", label:"Pseudo ou adresse e-mail", auto:"username", val:etat.brouillon.identifiantOubli})+
+            '<button type="submit" class="btn primary auth-btn" id="sy-o-valider">Envoyer le lien</button>'+
+          '</form>'+
+          '<p class="auth-bas"><a href="#" id="sy-vers-connexion">← Retour à la connexion</a></p>';
+
+      } else if (etat.mode === "verifier"){
+        html += '<h2 class="auth-titre">Confirme ton adresse e-mail</h2>'+
+          '<p class="auth-sous">Ton compte <b>' + echappe(etat.brouillon.identifiantConnexion) + '</b> est créé. '+
+          'Nous venons d\'envoyer un e-mail à <b>' + echappe(etat.courrielEnvoye || "ton adresse") + '</b>.</p>'+
+          '<ol class="auth-etapes"><li>Ouvre cet e-mail, de préférence sur cet appareil.</li>'+
+          '<li>Clique sur « Confirmer mon adresse ».</li><li>Connecte-toi avec ton pseudo ou ton adresse e-mail.</li></ol>'+
+          '<button type="button" class="btn primary auth-btn" id="sy-vers-connexion-btn">Se connecter</button>'+
+          '<p class="hint" style="margin-top:14px">Rien reçu après quelques minutes ? Regarde dans tes courriers indésirables. '+
+          'Le lien n\'est valable qu\'un temps limité : s\'il a expiré, recommence l\'inscription avec la même adresse.</p>';
+
+      } else if (etat.mode === "lienEnvoye"){
+        html += '<h2 class="auth-titre">Vérifie ta boîte mail</h2>'+
+          '<p class="auth-sous">Si un compte correspond à <b>' + echappe(etat.brouillon.identifiantConnexion) + '</b>, '+
+          'un e-mail vient d\'être envoyé à l\'adresse enregistrée, avec un lien pour choisir un nouveau mot de passe.</p>'+
+          '<button type="button" class="btn primary auth-btn" id="sy-vers-connexion-btn">Retour à la connexion</button>'+
+          '<p class="hint" style="margin-top:14px">Rien reçu après quelques minutes ? Regarde dans tes courriers indésirables, '+
+          'puis vérifie l\'orthographe de ton pseudo ou de ton adresse.</p>';
 
       } else {
-        html += '<label class="f" style="max-width:420px"><span>Pseudo ou adresse de courriel</span>'+
-          '<input type="text" id="sy-c-identifiant" autocomplete="username" '+
-          'value="' + echappe(etat.brouillon.identifiantConnexion) + '"></label>'+
-          '<label class="f" style="max-width:420px;margin-top:10px"><span>Mot de passe</span>'+
-          '<input type="password" id="sy-c-mdp" autocomplete="current-password"></label>'+
-          '<div class="et-act" style="margin-top:12px">'+
-            '<button type="button" class="btn primary" id="sy-c-valider">Se connecter</button>'+
-          '</div>'+
-          '<p class="hint"><a href="#" id="sy-vers-oubli">Mot de passe oublié ?</a></p>'+
-          '<p class="hint" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--rule)">'+
-          'Pas encore de compte ? <a href="#" id="sy-vers-inscription">Créer un compte</a></p>';
+        html += '<h2 class="auth-titre">Se connecter</h2>'+
+          '<p class="auth-sous">Retrouve ton atelier sur cet appareil.</p>'+
+          bandeaux(msg)+
+          '<form id="sy-form" novalidate>'+
+            champ({id:"sy-c-identifiant", label:"Pseudo ou adresse e-mail", auto:"username", val:etat.brouillon.identifiantConnexion})+
+            champ({id:"sy-c-mdp", label:"Mot de passe", type:"password", auto:"current-password",
+                   lien:{id:"sy-vers-oubli", texte:"Mot de passe oublié ?"}})+
+            '<button type="submit" class="btn primary auth-btn" id="sy-c-valider">Se connecter</button>'+
+          '</form>'+
+          '<p class="auth-bas">Pas encore de compte ? <a href="#" id="sy-vers-inscription">Créer un compte</a></p>';
       }
+      html += '</div></div>';
 
     } else {
-      html += '<p style="margin:0 0 4px"><b>' + echappe(etat.pseudo || etat.session.user.email) + '</b></p>'+
-        '<p class="hint" style="margin:0">' +
-        (etat.vuLe ? 'Dernier enregistrement en ligne : ' + echappe(dateLisible(etat.vuLe))
-                   : 'Aucun enregistrement en ligne pour l\'instant.') + '</p>'+
-        '<p class="hint" style="margin:6px 0 0">Ton atelier part tout seul quelques secondes '+
-        'après chaque modification, et se remet à jour tout seul quand tu reviens sur '+
-        'l\'application. Tu n\'as rien à cliquer.</p>'+
-        '<div class="et-act" style="margin-top:14px">'+
-          '<button type="button" class="btn" id="sy-push">Enregistrer en ligne maintenant</button>'+
-          '<button type="button" class="btn" id="sy-photos">Synchroniser les photos</button>'+
-          '<button type="button" class="btn" id="sy-hist">Historique</button>'+
-          '<button type="button" class="btn" id="sy-out">Se déconnecter</button>'+
-        '</div>'+
-        '<div id="sy-hist-zone"></div>'+
+      var courriel = (etat.session.user && etat.session.user.email) || "";
+      html =
+        bandeaux(msg)+
+        '<div class="card compte-carte"><header><h2>Profil</h2></header><div class="body">'+
+          '<dl class="compte-infos">'+
+            '<div><dt>Pseudo</dt><dd>' + echappe(etat.pseudo || "—") + '</dd></div>'+
+            '<div><dt>Adresse e-mail</dt><dd>' + echappe(courriel || "—") + '</dd></div>'+
+          '</dl>'+
+          '<p class="hint" style="margin:10px 0 0">Pour changer de pseudo ou d\'adresse e-mail, écris-nous à '+
+          '<a href="mailto:bonjour@crochompte.com">bonjour@crochompte.com</a>.</p>'+
+        '</div></div>'+
 
-        '<div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--rule)">'+
-          '<p style="margin:0 0 4px"><b>Mes informations</b></p>'+
-          '<p class="hint" style="margin:0 0 10px">Toutes facultatives. Le prénom sert à te saluer '+
-          'dans les courriels ; le reste nous aide seulement à comprendre qui utilise Crochompte.</p>'+
-          '<div style="display:flex;gap:10px;flex-wrap:wrap">'+
-            '<label class="f" style="flex:1;min-width:160px"><span>Prénom</span>'+
-            '<input type="text" id="sy-p-prenom" maxlength="80" '+
-            'value="' + echappe(etat.brouillonProfil.prenom) + '"></label>'+
-            '<label class="f" style="flex:1;min-width:160px"><span>Nom</span>'+
-            '<input type="text" id="sy-p-nom" maxlength="80" '+
-            'value="' + echappe(etat.brouillonProfil.nom) + '"></label>'+
+        '<div class="card compte-carte"><header><h2>Enregistrement en ligne</h2>'+
+          '<p id="sy-statut">' + echappe(texteStatut()) + '</p></header><div class="body">'+
+          '<p style="margin:0">Chaque modification est enregistrée automatiquement quelques secondes plus tard, '+
+          'photos comprises, et ton atelier se met à jour tout seul quand tu l\'ouvres sur un autre appareil.</p>'+
+          '<div class="et-act" style="margin-top:14px">'+
+            '<button type="button" class="btn" id="sy-push">Enregistrer maintenant</button>'+
+            '<button type="button" class="btn" id="sy-hist">Historique des versions</button>'+
           '</div>'+
-          '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">'+
-            '<label class="f" style="flex:1;min-width:160px"><span>Ville</span>'+
-            '<input type="text" id="sy-p-ville" maxlength="100" '+
-            'value="' + echappe(etat.brouillonProfil.ville) + '"></label>'+
-            '<label class="f" style="flex:1;min-width:160px"><span>Pays</span>'+
-            '<input type="text" id="sy-p-pays" maxlength="100" '+
-            'value="' + echappe(etat.brouillonProfil.pays) + '"></label>'+
+          '<div id="sy-hist-zone"></div>'+
+        '</div></div>'+
+
+        '<div class="card compte-carte"><header><h2>Mes informations</h2>'+
+          '<p>Toutes facultatives. Ton prénom sert à te saluer dans nos e-mails.</p></header><div class="body">'+
+          '<form id="sy-profil" novalidate>'+
+          '<div class="grid2">'+
+            champ({id:"sy-p-prenom", label:"Prénom", auto:"given-name", max:80, cap:"words", val:etat.brouillonProfil.prenom})+
+            champ({id:"sy-p-nom", label:"Nom", auto:"family-name", max:80, cap:"words", val:etat.brouillonProfil.nom})+
+            champ({id:"sy-p-ville", label:"Ville", auto:"address-level2", max:100, cap:"words", val:etat.brouillonProfil.ville})+
+            champ({id:"sy-p-pays", label:"Pays", auto:"country-name", max:100, cap:"words", val:etat.brouillonProfil.pays})+
           '</div>'+
-          '<label class="f" style="max-width:420px;margin-top:10px"><span>Mon activité</span>'+
+          '<label class="f" style="max-width:420px;margin-top:12px" for="sy-p-activite"><span>Mon activité</span>'+
           '<select id="sy-p-activite">'+
-            '<option value=""' + (!etat.brouillonProfil.typeActivite ? ' selected' : '') + '>— non précisé —</option>'+
-            '<option value="amateur"' + (etat.brouillonProfil.typeActivite === "amateur" ? ' selected' : '') + '>Amateur / loisir</option>'+
-            '<option value="artisanat"' + (etat.brouillonProfil.typeActivite === "artisanat" ? ' selected' : '') + '>Artisanat (activité déclarée ou en cours de déclaration)</option>'+
+            '<option value=""' + (!etat.brouillonProfil.typeActivite ? ' selected' : '') + '>Non précisée</option>'+
+            '<option value="amateur"' + (etat.brouillonProfil.typeActivite === "amateur" ? ' selected' : '') + '>Loisir</option>'+
+            '<option value="artisanat"' + (etat.brouillonProfil.typeActivite === "artisanat" ? ' selected' : '') + '>Artisane (activité déclarée ou en cours)</option>'+
             '<option value="entreprise"' + (etat.brouillonProfil.typeActivite === "entreprise" ? ' selected' : '') + '>Petite entreprise</option>'+
           '</select></label>'+
-          '<div class="et-act" style="margin-top:12px">'+
-            '<button type="button" class="btn" id="sy-p-valider">Enregistrer mes informations</button>'+
-          '</div>'+
-          '<p class="hint" style="margin-top:8px">Ton pseudo et ton adresse de courriel ne changent '+
-          'pas ici. Écris-nous si tu as vraiment besoin d\'en changer.</p>'+
-        '</div>'+
+          '<div class="et-act" style="margin-top:14px">'+
+            '<button type="submit" class="btn" id="sy-p-valider">Enregistrer mes informations</button>'+
+          '</div></form>'+
+        '</div></div>'+
 
-        '<div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--rule)">'+
-          '<p style="margin:0 0 4px"><b>Effacer mon compte et toutes mes données</b></p>'+
-          '<p class="hint" style="margin:0 0 12px">Efface définitivement, sur le serveur : '+
-          'ton atelier, tes photos et ton compte. C\'est irréversible. '+
-          'Ce qui est dans ce navigateur n\'est pas touché — exporte une sauvegarde avant '+
-          'si tu veux garder ton travail.</p>'+
-          '<div class="et-act"><button type="button" class="btn" id="sy-del">Effacer mon compte</button></div>'+
-          '<p class="hint" style="margin-top:10px">'+
-          '<a href="confidentialite.html" target="_blank" rel="noopener">Politique de confidentialité</a></p>'+
-        '</div>';
+        '<div class="card compte-carte"><header><h2>Sécurité</h2></header><div class="body">'+
+          '<div id="sy-secu"><div class="et-act">'+
+            '<button type="button" class="btn" id="sy-mdp-ouvrir">Changer mon mot de passe</button>'+
+            '<button type="button" class="btn" id="sy-out">Se déconnecter</button>'+
+          '</div></div>'+
+        '</div></div>'+
+
+        '<div class="card compte-carte zone-sensible"><header><h2>Supprimer mon compte</h2>'+
+          '<p>Supprime définitivement ton compte, ton atelier et tes photos, sur le serveur et sur cet appareil. '+
+          'Pense à télécharger une sauvegarde avant (Réglages › Mes données).</p></header><div class="body">'+
+          '<button type="button" class="btn danger" id="sy-del">Supprimer mon compte</button>'+
+          '<p class="hint" style="margin-top:12px"><a href="confidentialite.html" target="_blank" rel="noopener">Politique de confidentialité</a></p>'+
+        '</div></div>';
     }
-    html += '</div></div>';
     zone.innerHTML = html;
-    /* Le message sur le lien périmé s'efface dès que la personne tente
-       quelque chose (s'inscrire, se connecter, redemander un lien) : la
-       réponse à cette action prend alors sa place. */
+    zone.__vue = connecte ? "compte" : "auth";
+
     if (etat.alerteLien && !zone.__ecouteLien){
       zone.__ecouteLien = true;
       zone.addEventListener("click", function(e){
@@ -714,148 +965,186 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
     var q = function(id){ return zone.querySelector(id); };
     var lien = function(id, fn){ var e = q(id); if (e) e.addEventListener("click", function(ev){ ev.preventDefault(); fn(); }); };
 
+    /* Afficher / masquer les mots de passe */
+    zone.querySelectorAll("[data-voir]").forEach(function(b){
+      b.addEventListener("click", function(){
+        var inp = q("#" + b.getAttribute("data-voir"));
+        var voir = inp.type === "password";
+        inp.type = voir ? "text" : "password";
+        b.textContent = voir ? "Masquer" : "Afficher";
+        b.setAttribute("aria-pressed", voir ? "true" : "false");
+        inp.focus();
+      });
+    });
+    /* Le champ en cause est signalé et reçoit le curseur. */
+    if (msg.champ && q(msg.champ)){
+      var fautif = q(msg.champ);
+      fautif.setAttribute("aria-invalid", "true");
+      fautif.addEventListener("input", function(){ fautif.removeAttribute("aria-invalid"); }, {once:true});
+      fautif.focus();
+    } else if (!connecte && !msg.garderFocus){
+      var premier = zone.querySelector("form input:not([type=checkbox])");
+      var vide = [].slice.call(zone.querySelectorAll("form input:not([type=checkbox])")).filter(function(x){ return !x.value; })[0];
+      if (window.matchMedia && window.matchMedia("(min-width:861px)").matches && (vide || premier)) (vide || premier).focus();
+    }
+    var form = q("#sy-form");
+    var soumettre = function(fn){ if (form) form.addEventListener("submit", function(e){ e.preventDefault(); fn.call(form.querySelector("button[type=submit]")); }); };
+    function occupe(b, texte){ b.disabled = true; b.setAttribute("data-texte", b.textContent); b.textContent = texte; }
+
     if (etat.session && etat.recuperation){
-      q("#sy-np-valider").addEventListener("click", function(){
+      soumettre(function(){
         var p1 = q("#sy-np1").value || "", p2 = q("#sy-np2").value || "";
-        if (p1.length < 8){ peindre({erreur:"Le mot de passe doit faire au moins 8 caractères."}); return; }
-        if (p1 !== p2){ peindre({erreur:"Les deux mots de passe ne correspondent pas."}); return; }
-        var b = this; b.disabled = true; b.textContent = "Enregistrement…";
+        if (p1.length < 8){ peindre({erreur:"Le mot de passe doit contenir au moins 8 caractères.", champ:"#sy-np1"}); return; }
+        if (p1 !== p2){ peindre({erreur:"Les deux mots de passe ne sont pas identiques.", champ:"#sy-np2"}); return; }
+        occupe(this, "Enregistrement…");
         sb.auth.updateUser({password: p1}).then(function(r){
-          if (r.error){ peindre({erreur: r.error.message}); return; }
+          if (r.error){ peindre({erreur: traduire(r.error.message), champ:"#sy-np1"}); return; }
           etat.recuperation = false;
-          recupererProfil().then(function(){
-            pont.toast("Mot de passe changé. Tu es connectée.");
-            peindre();
-          });
+          pont.toast("Mot de passe modifié. Tu es connectée.");
+          demarrerSession(etat.session, false);
         });
       });
 
     } else if (!connecte){
 
-      lien("#sy-vers-connexion", function(){ etat.mode = "connexion"; peindre(); });
-      lien("#sy-vers-inscription", function(){ etat.mode = "inscription"; peindre(); });
-      lien("#sy-vers-oubli", function(){ etat.mode = "oubli"; peindre(); });
+      function versMode(m){
+        etat.mode = m;
+        try{ history.pushState({crochompteAuth:m}, ""); }catch(e){}
+        peindre();
+      }
+      lien("#sy-vers-connexion", function(){ versMode("connexion"); });
+      lien("#sy-vers-inscription", function(){ versMode("inscription"); });
+      lien("#sy-vers-oubli", function(){
+        var id = q("#sy-c-identifiant"); if (id) etat.brouillon.identifiantOubli = id.value.trim();
+        versMode("oubli");
+      });
+      var bCx = q("#sy-vers-connexion-btn");
+      if (bCx) bCx.addEventListener("click", function(){ versMode("connexion"); });
 
       if (etat.mode === "inscription"){
-        /* Vérification en direct de la disponibilité du pseudo, sans
-           reconstruire tout le formulaire à chaque frappe (ce qui ferait
-           perdre le focus et la position du curseur) : on modifie juste le
-           petit texte d'état sous le champ. */
         var elPseudo = q("#sy-i-pseudo");
         var elPseudoEtat = q("#sy-i-pseudo-etat");
         elPseudo.addEventListener("input", function(){
           var val = elPseudo.value.trim();
           etat.brouillon.pseudo = val;
           if (etat.minuteurPseudo) clearTimeout(etat.minuteurPseudo);
-          if (!RE_PSEUDO.test(val)){ elPseudoEtat.textContent = ""; return; }
+          elPseudoEtat.className = "hint auth-etat";
+          if (!val){ elPseudoEtat.textContent = ""; return; }
+          if (!RE_PSEUDO.test(val)){
+            elPseudoEtat.textContent = val.length < 3 ? "" : "Caractère non autorisé : lettres, chiffres, - ou _ uniquement.";
+            return;
+          }
           elPseudoEtat.textContent = "Vérification…";
-          elPseudoEtat.style.color = "var(--muted)";
           etat.minuteurPseudo = setTimeout(function(){
             sb.rpc("pseudo_disponible", {p: val}).then(function(r){
-              if (elPseudo.value.trim() !== val) return;  /* retapé entre-temps */
+              if (elPseudo.value.trim() !== val) return;
               if (r.error){ elPseudoEtat.textContent = ""; return; }
-              elPseudoEtat.textContent = r.data ? "✓ Ce pseudo est disponible." : "✗ Ce pseudo est déjà pris.";
-              elPseudoEtat.style.color = r.data ? "var(--primary)" : "var(--bad, #b3261e)";
+              elPseudoEtat.textContent = r.data ? "Ce pseudo est disponible." : "Ce pseudo est déjà pris. Essaie une variante.";
+              elPseudoEtat.className = "hint auth-etat " + (r.data ? "ok" : "ko");
             }).catch(function(){ elPseudoEtat.textContent = ""; });
           }, 450);
         });
+        q("#sy-i-mail").addEventListener("input", function(){ etat.brouillon.email = this.value.trim(); });
+        q("#sy-i-age").addEventListener("change", function(){ etat.brouillon.age15 = this.checked; });
 
-        q("#sy-i-valider").addEventListener("click", function(){
-          var pseudo    = (q("#sy-i-pseudo").value || "").trim();
-          var age15     = !!q("#sy-i-age").checked;
-          var mail      = (q("#sy-i-mail").value || "").trim();
+        soumettre(function(){
+          var pseudo = (q("#sy-i-pseudo").value || "").trim();
+          var age15  = !!q("#sy-i-age").checked;
+          var mail   = (q("#sy-i-mail").value || "").trim();
           var p1 = q("#sy-i-mdp1").value || "", p2 = q("#sy-i-mdp2").value || "";
-
-          /* On retient ce qui a été tapé AVANT toute validation : une erreur,
-             qu'elle vienne d'ici ou du serveur, ne doit jamais faire tout
-             retaper — sauf les mots de passe, qu'on ne restitue jamais. */
-          etat.brouillon.pseudo = pseudo; etat.brouillon.age15 = age15;
-          etat.brouillon.email = mail;
+          etat.brouillon.pseudo = pseudo; etat.brouillon.age15 = age15; etat.brouillon.email = mail;
 
           if (!RE_PSEUDO.test(pseudo)){
-            peindre({erreur:"Pseudo invalide : 3 à 24 caractères, lettres/chiffres/tiret/tiret bas, sans accent ni espace."});
+            peindre({erreur:"Ce pseudo n'est pas valide.", detail:"Utilise 3 à 24 caractères : lettres, chiffres, tiret ou tiret bas, sans espace ni accent.", champ:"#sy-i-pseudo"});
             return;
           }
           if (!RE_COURRIEL.test(mail)){
-            peindre({erreur:"Cette adresse ne ressemble pas à une adresse de courriel."});
+            peindre({erreur:"Cette adresse e-mail n'est pas valide.", detail:"Vérifie qu'elle est complète, par exemple prenom@domaine.fr.", champ:"#sy-i-mail"});
             return;
           }
-          if (p1.length < 8){ peindre({erreur:"Le mot de passe doit faire au moins 8 caractères."}); return; }
-          if (p1 !== p2){ peindre({erreur:"Les deux mots de passe ne correspondent pas."}); return; }
+          if (p1.length < 8){ peindre({erreur:"Le mot de passe doit contenir au moins 8 caractères.", champ:"#sy-i-mdp1"}); return; }
+          if (p1 !== p2){ peindre({erreur:"Les deux mots de passe ne sont pas identiques.", champ:"#sy-i-mdp2"}); return; }
           if (!age15){
-            peindre({erreur:"Coche la case « J'ai " + AGE_MINIMUM + " ans ou plus » : Crochompte ne "+
-                            "s'adresse pas aux personnes plus jeunes."});
+            peindre({erreur:"Coche la case « J'ai " + AGE_MINIMUM + " ans ou plus » pour continuer.",
+                     detail:"Crochompte est réservé aux personnes de " + AGE_MINIMUM + " ans et plus.", champ:"#sy-i-age"});
             return;
           }
-
-          var b = this; b.disabled = true; b.textContent = "Création…";
+          occupe(this, "Création du compte…");
           appelFonction("inscription", {
             pseudo: pseudo, email: mail, motDePasse: p1, emailRedirectTo: urlPage(),
             age15: true
           }).then(function(r){
-            if (!r._ok){ peindre({erreur: r.erreur || "L'inscription a échoué."}); return; }
-            etat.mode = "connexion";
-            etat.brouillon = Object.assign(brouillonInscriptionVide(), {
-              identifiantOubli: "", identifiantConnexion: pseudo
-            });
-            peindre({info:"Compte créé pour « " + pseudo + " ». Ouvre ta boîte de courriel, "+
-                          "clique sur le lien de confirmation, puis reconnecte-toi ici avec ton "+
-                          "pseudo ou ton adresse."});
+            if (!r._ok){
+              var champFautif = /pseudo/i.test(r.erreur || "") ? "#sy-i-pseudo" : /adresse|compte/i.test(r.erreur || "") ? "#sy-i-mail" : null;
+              peindre({erreur: traduire(r.erreur) || "La création du compte n'a pas abouti. Réessaie dans un instant.", champ: champFautif});
+              return;
+            }
+            etat.courrielEnvoye = mail;
+            etat.brouillon = Object.assign(brouillonInscriptionVide(), {identifiantOubli:"", identifiantConnexion: pseudo});
+            etat.mode = "verifier";
+            peindre();
           });
         });
 
       } else if (etat.mode === "oubli"){
-        q("#sy-o-valider").addEventListener("click", function(){
+        soumettre(function(){
           var identifiant = (q("#sy-o-identifiant").value || "").trim();
           etat.brouillon.identifiantOubli = identifiant;
-          if (!identifiant){ peindre({erreur:"Indique ton pseudo ou ton adresse de courriel."}); return; }
-          var b = this; b.disabled = true; b.textContent = "Envoi…";
+          if (!identifiant){ peindre({erreur:"Indique ton pseudo ou ton adresse e-mail.", champ:"#sy-o-identifiant"}); return; }
+          occupe(this, "Envoi…");
           appelFonction("mot-de-passe-oublie", {identifiant: identifiant, redirectTo: urlPage()})
-            .then(function(){
-              etat.mode = "connexion";
+            .then(function(r){
+              if (r._reseau){ peindre({erreur: r.erreur}); return; }
               etat.brouillon.identifiantConnexion = identifiant; etat.brouillon.identifiantOubli = "";
-              peindre({info:"Si cet identifiant correspond à un compte, un courriel de réinitialisation "+
-                            "vient d'être envoyé à l'adresse enregistrée."});
+              etat.mode = "lienEnvoye";
+              peindre();
             });
         });
 
-      } else {
-        q("#sy-c-valider").addEventListener("click", function(){
+      } else if (etat.mode === "connexion"){
+        q("#sy-c-identifiant").addEventListener("input", function(){ etat.brouillon.identifiantConnexion = this.value.trim(); });
+        soumettre(function(){
           var identifiant = (q("#sy-c-identifiant").value || "").trim();
           var mdp = q("#sy-c-mdp").value || "";
           etat.brouillon.identifiantConnexion = identifiant;
-          if (!identifiant || !mdp){ peindre({erreur:"Identifiant ou mot de passe incorrect.", pasPerdu:false}); return; }
-          var b = this; b.disabled = true; b.textContent = "Connexion…";
+          if (!identifiant){ peindre({erreur:"Indique ton pseudo ou ton adresse e-mail.", champ:"#sy-c-identifiant"}); return; }
+          if (!mdp){ peindre({erreur:"Indique ton mot de passe.", champ:"#sy-c-mdp"}); return; }
+          occupe(this, "Connexion…");
           appelFonction("connexion", {identifiant: identifiant, motDePasse: mdp})
             .then(function(r){
               if (!r._ok || !r.access_token){
-                peindre({erreur: r.erreur || "Identifiant ou mot de passe incorrect.", pasPerdu:false});
+                peindre({erreur: r.erreur ? traduire(r.erreur) : "Pseudo, adresse e-mail ou mot de passe incorrect.", champ:"#sy-c-mdp"});
                 return;
               }
               etat.brouillon.identifiantConnexion = "";
-              /* On ne fait rien de plus ici : setSession() déclenche lui-même
-                 onAuthStateChange (événement SIGNED_IN), qui s'occupe déjà de
-                 etat.session, du profil et du message de bienvenue. Dupliquer
-                 ce travail ici affichait le message « Connectée » deux fois
-                 et interrogeait le profil deux fois pour rien. */
-              sb.auth.setSession({access_token: r.access_token, refresh_token: r.refresh_token});
+              /* setSession() déclenche onAuthStateChange (SIGNED_IN), qui
+                 s'occupe du reste : profil, mise à jour, message d'accueil. */
+              etat.connexionManuelle = true;
+              sb.auth.setSession({access_token: r.access_token, refresh_token: r.refresh_token}).then(function(rs){
+                if (rs && rs.error){ etat.connexionManuelle = false; peindre({erreur: traduire(rs.error.message)}); }
+              }, function(e){ etat.connexionManuelle = false; peindre({erreur: traduire(e && e.message)}); });
             });
         });
       }
 
     } else {
       q("#sy-push").addEventListener("click", function(){
-        var b = this; b.disabled = true; b.textContent = "Envoi…";
-        etat.sale = true;
-        envoyer().then(function(){ pont.toast("Atelier enregistré en ligne"); });
+        var b = this; occupe(b, "Enregistrement…");
+        etat.generation++; etat.sale = true; marquerAEnvoyer(true);
+        envoyer().then(function(ok){
+          return envoyerToutesPhotos().then(function(bilan){
+            if (ok && !bilan.echecs) pont.toast("Atelier et photos enregistrés en ligne");
+            else pont.toast("L'enregistrement n'a pas abouti. Vérifie ta connexion internet : un nouvel essai aura lieu automatiquement.");
+            peindre({complet:true, garderFocus:true});
+          });
+        });
       });
-      /* L'historique : la seule façon de revenir en arrière, et le filet qui
-         rend toute la synchronisation non destructrice. */
       q("#sy-hist").addEventListener("click", function(){
         var z = q("#sy-hist-zone");
         if (z.getAttribute("data-ouvert") === "1"){
-          z.innerHTML = ""; z.setAttribute("data-ouvert","0"); return;
+          z.innerHTML = ""; z.setAttribute("data-ouvert","0"); this.textContent = "Historique des versions"; return;
         }
+        this.textContent = "Masquer l'historique";
         z.setAttribute("data-ouvert","1");
         z.innerHTML = '<p class="hint" style="margin-top:12px">Chargement de l\'historique…</p>';
         sb.from("ateliers_versions")
@@ -865,105 +1154,145 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
           .limit(20)
           .then(function(r){
             if (r.error){
-              z.innerHTML = '<p class="hint" style="margin-top:12px">Historique indisponible : '+
-                echappe(r.error.message) + '</p>';
+              z.innerHTML = '<p class="hint" style="margin-top:12px">L\'historique n\'a pas pu être chargé. ' + echappe(traduire(r.error.message)) + '</p>';
               return;
             }
             var l = r.data || [];
             if (!l.length){
-              z.innerHTML = '<p class="hint" style="margin-top:12px">Aucune version archivée. '+
-                'Il n\'y en a que lorsqu\'un autre appareil a enregistré de son côté.</p>';
+              z.innerHTML = '<p class="hint" style="margin-top:12px">Aucune version enregistrée pour l\'instant. '+
+                'Une version est conservée chaque fois qu\'un autre appareil remplace ton atelier en ligne.</p>';
               return;
             }
-            var h = '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--rule)">'+
-              '<p style="margin:0 0 4px"><b>Versions précédentes de ton atelier</b></p>'+
-              '<p class="hint" style="margin:0 0 10px">Chaque fois qu\'une version en remplace une '+
-              'autre, l\'ancienne est rangée ici. Restaurer remplace ce que tu as dans ce navigateur '+
-              '— et la version d\'aujourd\'hui y sera rangée à son tour.</p>';
+            var h = '<div class="compte-hist">'+
+              '<p class="hint" style="margin:0 0 10px">Restaurer une version remplace ton atelier actuel ; '+
+              'celui-ci est d\'abord conservé ici, tu pourras donc y revenir.</p>';
             l.forEach(function(v){
-              h += '<div style="display:flex;gap:10px;align-items:center;justify-content:space-between;'+
-                'padding:8px 0;border-bottom:1px solid var(--rule)">'+
-                '<span>'+ echappe(dateLisible(v.cree)) +
+              h += '<div class="compte-hist-ligne"><span>'+ echappe(dateLisible(v.cree)) +
                 (v.appareil ? ' · depuis ton ' + echappe(v.appareil) : '') +
-                (v.raison === "avant_recuperation" ? ' · avant une récupération' : '') + '</span>'+
-                '<button type="button" class="btn sm" data-restaurer="'+ v.id +'">Restaurer</button>'+
+                (v.raison === "avant_recuperation" ? ' · avant une mise à jour' : '') + '</span>'+
+                '<button type="button" class="btn sm" data-restaurer="'+ v.id +'" data-quand="' + echappe(dateLisible(v.cree)) + '">Restaurer</button>'+
                 '</div>';
             });
             z.innerHTML = h + '</div>';
             z.querySelectorAll("[data-restaurer]").forEach(function(b){
               b.addEventListener("click", function(){
-                if (!confirm("Remettre ton atelier dans l'état de cette version ?\n\n"+
-                             "Ce que tu as maintenant sera rangé dans l'historique, "+
-                             "tu pourras y revenir.")) return;
-                b.disabled = true; b.textContent = "…";
-                sb.from("ateliers_versions").select("donnees")
-                  .eq("id", Number(b.getAttribute("data-restaurer"))).maybeSingle()
-                  .then(function(rr){
-                    if (rr.error || !rr.data) { pont.toast("Version introuvable"); return; }
-                    return archiver(pont.lire(), etat.vuLe, "avant_recuperation").then(function(){
-                      pont.ecrire(rr.data.donnees);
-                      etat.sale = true;
-                      return envoyer();
-                    }).then(function(){
-                      pont.toast("Atelier restauré");
-                      pont.redessiner();
+                pont.confirmer({
+                  titre: "Restaurer la version du " + b.getAttribute("data-quand") + " ?",
+                  texte: "Ton atelier actuel sera remplacé par cette version, sur tous tes appareils. Il est d'abord conservé dans l'historique : tu pourras y revenir.",
+                  bouton: "Restaurer cette version"
+                }, function(){
+                  occupe(b, "Restauration…");
+                  sb.from("ateliers_versions").select("donnees")
+                    .eq("id", Number(b.getAttribute("data-restaurer"))).maybeSingle()
+                    .then(function(rr){
+                      if (rr.error || !rr.data) { pont.toast("Cette version est introuvable."); return; }
+                      return archiver(pont.lire(), etat.vuLe || new Date().toISOString(), "avant_recuperation").then(function(){
+                        pont.ecrire(rr.data.donnees);
+                        etat.generation++; etat.sale = true; marquerAEnvoyer(true);
+                        return envoyer();
+                      }).then(function(ok){
+                        pont.toast(ok ? "Version restaurée" : "Version restaurée sur cet appareil. L'envoi en ligne sera retenté automatiquement.");
+                        pont.redessiner();
+                      }, function(e){
+                        b.disabled = false; b.textContent = "Restaurer";
+                        pont.toast("La restauration n'a pas abouti : " + traduire(e && e.message));
+                      });
                     });
-                  });
+                });
               });
             });
           });
       });
-      q("#sy-photos").addEventListener("click", function(){
-        var b = this; b.disabled = true;
-        b.textContent = "Photos…";
-        envoyerPhotos(function(n, t){ b.textContent = "Envoi " + n + "/" + t; })
-          .then(function(){ return recevoirPhotos(function(n, t){ b.textContent = "Réception " + n + "/" + t; }); })
-          .then(function(recues){
-            peindre({info:"Photos synchronisées" + (recues ? " — " + recues + " récupérée" + (recues>1?"s":"") : "") + "."});
-            pont.redessiner();
-          });
-      });
-      q("#sy-p-valider").addEventListener("click", function(){
+      q("#sy-profil").addEventListener("submit", function(e){
+        e.preventDefault();
         var prenom    = (q("#sy-p-prenom").value || "").trim();
         var nom       = (q("#sy-p-nom").value || "").trim();
         var ville     = (q("#sy-p-ville").value || "").trim();
         var pays      = (q("#sy-p-pays").value || "").trim();
         var activite  = q("#sy-p-activite").value || "";
-        etat.brouillonProfil = {
-          prenom: prenom, nom: nom, dateNaissance: "",
-          ville: ville, pays: pays, typeActivite: activite
-        };
-
-        var b = this; b.disabled = true; b.textContent = "Enregistrement…";
+        etat.brouillonProfil = {prenom: prenom, nom: nom, dateNaissance: "", ville: ville, pays: pays, typeActivite: activite};
+        occupe(q("#sy-p-valider"), "Enregistrement…");
         sb.rpc("modifier_mon_profil", {
           p_prenom: prenom, p_nom: nom, p_date_naissance: null,   /* plus conservée : la case « 15 ans » suffit */
           p_ville: ville, p_pays: pays, p_type_activite: activite || null
         }).then(function(r){
-          if (r.error){ peindre({erreur: r.error.message}); return; }
-          peindre({info:"Informations enregistrées."});
+          if (r.error){ peindre({erreur: traduire(r.error.message)}); return; }
+          pont.toast("Informations enregistrées");
+          peindre({complet:true, garderFocus:true});
         });
       });
+
+      /* Changer de mot de passe sans passer par « mot de passe oublié ». */
+      q("#sy-mdp-ouvrir").addEventListener("click", function(){
+        var z = q("#sy-secu");
+        z.innerHTML = '<form id="sy-mdp-form" novalidate>'+
+          champ({id:"sy-m1", label:"Nouveau mot de passe", type:"password", auto:"new-password", aide:"8 caractères minimum."})+
+          champ({id:"sy-m2", label:"Confirmer le mot de passe", type:"password", auto:"new-password"})+
+          '<p class="hint auth-etat ko" id="sy-m-err" role="alert"></p>'+
+          '<div class="et-act"><button type="submit" class="btn primary">Enregistrer le mot de passe</button>'+
+          '<button type="button" class="btn" id="sy-m-annuler">Annuler</button></div></form>';
+        z.querySelectorAll("[data-voir]").forEach(function(b){
+          b.addEventListener("click", function(){
+            var inp = z.querySelector("#" + b.getAttribute("data-voir"));
+            var voir = inp.type === "password";
+            inp.type = voir ? "text" : "password"; b.textContent = voir ? "Masquer" : "Afficher";
+          });
+        });
+        z.querySelector("#sy-m1").focus();
+        z.querySelector("#sy-m-annuler").addEventListener("click", function(){ peindre({complet:true, garderFocus:true}); });
+        z.querySelector("#sy-mdp-form").addEventListener("submit", function(e){
+          e.preventDefault();
+          var p1 = z.querySelector("#sy-m1").value || "", p2 = z.querySelector("#sy-m2").value || "";
+          var err = z.querySelector("#sy-m-err");
+          if (p1.length < 8){ err.textContent = "Le mot de passe doit contenir au moins 8 caractères."; z.querySelector("#sy-m1").focus(); return; }
+          if (p1 !== p2){ err.textContent = "Les deux mots de passe ne sont pas identiques."; z.querySelector("#sy-m2").focus(); return; }
+          var b = z.querySelector("button[type=submit]"); occupe(b, "Enregistrement…");
+          sb.auth.updateUser({password: p1}).then(function(r){
+            if (r.error){ err.textContent = traduire(r.error.message); b.disabled = false; b.textContent = "Enregistrer le mot de passe"; return; }
+            pont.toast("Mot de passe modifié");
+            peindre({complet:true, garderFocus:true});
+          });
+        });
+      });
+
       q("#sy-del").addEventListener("click", function(){
         var b = this;
-        if (!confirm("Effacer définitivement ton compte et toutes tes données en ligne ?\n\n"+
-                     "Cette action est irréversible. Ce qui est dans ce navigateur reste, "+
-                     "mais plus rien ne sera enregistré en ligne.")) return;
-        if (!confirm("Dernière vérification : tu es sûre ?")) return;
-        b.disabled = true;
-        effacerToutLeCompte(function(etape){ b.textContent = etape; }).then(function(r){
-          if (!r.ok){ peindre({erreur: r.message || "L'effacement a échoué."}); return; }
-          pont.toast(r.identite
-            ? "Compte et données effacés. Il ne reste rien sur le serveur."
-            : "Atelier et photos effacés, et tu es déconnectée. L'identité de connexion "+
-              "(ton adresse et ton pseudo) subsiste tant que la fonction d'effacement du serveur "+
-              "n'est pas installée — voir le README.");
-          peindre();
+        var pseudo = etat.pseudo || "";
+        pont.confirmer({
+          titre: "Supprimer définitivement ton compte ?",
+          texte: "Cette action est irréversible. Seront supprimés, sur le serveur et sur cet appareil :",
+          details: ["ton compte " + (pseudo ? "« " + pseudo + " » " : "") + "et ton adresse e-mail",
+                    "ton atelier : créations, pièces, commandes, patrons, matières et réglages",
+                    "tes photos et l'historique des versions"],
+          saisie: pseudo || "SUPPRIMER",
+          bouton: "Supprimer mon compte", danger: true
+        }, function(){
+          occupe(b, "Suppression…");
+          effacerToutLeCompte(function(etape){ b.textContent = etape; }).then(function(r){
+            if (!r.ok){ b.disabled = false; b.textContent = "Supprimer mon compte";
+              peindre({erreur: "La suppression n'a pas abouti. " + traduire(r.message)}); return; }
+            if (pont.oublierAtelier) pont.oublierAtelier();
+            etat.mode = "connexion";
+            pont.toast(r.identite
+              ? "Ton compte et toutes tes données ont été supprimés."
+              : "Ton atelier et tes photos ont été supprimés. Pour finaliser la suppression de ton compte, écris-nous à bonjour@crochompte.com.");
+            peindre();
+          });
         });
       });
 
       q("#sy-out").addEventListener("click", deconnecter);
     }
   }
+
+  /* Le bouton « précédent » dans les écrans de connexion : de « Créer un
+     compte » ou « Mot de passe oublié », il ramène à la connexion. */
+  window.addEventListener("popstate", function(ev){
+    if (etat.session && !etat.recuperation) return;
+    var m = ev.state && ev.state.crochompteAuth;
+    etat.mode = m || "connexion";
+    peindre({garderFocus:true});
+  });
 
   /* ───────── démarrage ───────── */
 
@@ -974,27 +1303,74 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 
   /* On expose le signal d'enregistrement pour que l'application prévienne
      ce module à chaque sauvegarde. */
-  window.CrochompteSync = {signaler: signaler, deconnecter: deconnecter};
+  /* Photo remise depuis une sauvegarde : elle repart en ligne, même si une
+     photo du même nom y a déjà été envoyée autrefois. */
+  function photoRestauree(id){
+    if (!etat.session || !id) return;
+    var deja = photosEnvoyees(); delete deja[id]; noterPhotos(deja);
+    planifierPhotos();
+  }
+  /* Numéro de facture donné par le serveur : unique entre tous les comptes
+     (code propre au compte) et sans doublon entre deux appareils du même
+     compte (schema-factures.sql). min = dernier numéro déjà émis ici. */
+  function numeroFacture(annee, min){
+    if (!etat.session) return Promise.resolve({erreur:"connexion"});
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return Promise.resolve({erreur:"reseau"});
+    return sb.rpc("prochain_numero_facture", {p_annee: annee, p_min: min || 0}).then(function(r){
+      if (r.error || typeof r.data !== "string") return {erreur: (r.error && r.error.message) || "serveur"};
+      return {numero: r.data};
+    }, function(){ return {erreur:"reseau"}; });
+  }
+  window.CrochompteSync = {signaler: signaler, deconnecter: deconnecter, photoEffacee: photoEffacee,
+                           photoRestauree: photoRestauree, numeroFacture: numeroFacture,
+                           connecte: function(){ return !!etat.session; }};
+
+  /* À l'ouverture et à la connexion : ramener les photos faites sur un autre
+     appareil, puis envoyer celles d'ici qui ne sont pas encore en ligne. */
+  function photosAuDemarrage(){
+    return recevoirPhotos().then(function(n){ if (n) pont.redessiner(); return envoyerPhotos(); });
+  }
+
+  /* Ouverture d'une session, quelle qu'en soit l'origine (session gardée
+     d'une visite précédente, formulaire de connexion, nouveau mot de passe) :
+     une seule fois par compte, dans cet ordre. */
+  var sessionDemarree = null;
+  function demarrerSession(session, annoncer){
+    if (!session || etat.recuperation) return;
+    etat.session = session;
+    var uid = session.user.id;
+    if (sessionDemarree === uid){ peindre({garderFocus:true}); return; }
+    sessionDemarree = uid;
+    if (pont.ouvrirCompte) pont.ouvrirCompte(uid);
+    etat.pret = false;
+    etat.vuLe = lireBase(uid);
+    /* Du travail fait hors ligne attend peut-être depuis la dernière fois. */
+    etat.sale = resteAEnvoyer(uid);
+    if (etat.sale) marquerAEnvoyer(true);   /* on y inscrit le compte */
+    recupererProfil().then(function(){
+      peindre();
+      return synchroniser();
+    }).then(function(ok){
+      if (annoncer) pont.toast(ok ? "Tu es connectée. Ton atelier est à jour."
+        : "Tu es connectée. La mise à jour de ton atelier n'a pas abouti : nouvel essai automatique dans un instant.");
+      peindre({garderFocus:true});
+      traiterSuppressions();
+      photosAuDemarrage();
+    });
+  }
 
   sb.auth.getSession().then(function(r){
-    etat.session = (r.data && r.data.session) || null;
-    if (etat.session){
-      /* Du travail fait hors ligne attend peut-être depuis la dernière fois. */
-      etat.sale = resteAEnvoyer(etat.session.user.id);
-      if (etat.sale) marquerAEnvoyer(true);   /* on y inscrit le compte */
-      recupererProfil().then(function(){
-        peindre();
-        /* Au rechargement aussi : soit on envoie ce qui attendait, soit on va
-           chercher ce qui a été fait sur l'autre appareil. Jusqu'ici rien ne
-           se passait avant que l'onglet soit quitté puis retrouvé — l'artisane
-           pouvait travailler une heure sur une version périmée. */
-        return synchroniser();
-      }).then(function(){
-        if (etat.sale === false) peindre();
-      });
-    } else {
-      peindre();
+    var session = (r.data && r.data.session) || null;
+    if (!session && r.error && (!navigator.onLine || /fetch|network|retry/i.test(String(r.error.name || "") + String(r.error.message || "")))){
+      /* Pas de réseau pour renouveler la connexion : on ouvre l'atelier en mode
+         hors ligne plutôt que l'écran de connexion (au marché, par exemple). */
+      if (pont.moduleIndisponible) pont.moduleIndisponible();
+      return;
     }
+    if (session) demarrerSession(session, false);
+    else peindre();
+  }, function(){
+    if (pont.moduleIndisponible) pont.moduleIndisponible();
   });
 
   /* ─────────────────────────────────────────────────────────────────────
@@ -1088,24 +1464,17 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
       peindre();
       return;
     }
-    var etaitConnectee = !!etat.session;
-    etat.session = session || null;
-    if (!etaitConnectee && session && !etat.recuperation){
-      recupererProfil().then(function(){
-        peindre();
-        /* Se mettre à jour fait partie de la connexion : arriver depuis un
-           autre appareil et devoir cliquer quelque part pour voir son travail
-           est un piège, pas une fonctionnalité. */
-        return synchroniser();
-      }).then(function(){
-        pont.toast("Connectée. Ton atelier est à jour.");
-        peindre();
-      });
-    } else if (!session){
+    if (session){
+      if (etat.recuperation){ etat.session = session; return; }
+      var annoncer = !!etat.connexionManuelle;
+      etat.connexionManuelle = false;
+      demarrerSession(session, annoncer);
+    } else if (etat.session || sessionDemarree){
+      /* Session terminée (expirée, révoquée, déconnexion) : plus rien ne part. */
+      finDeSession();
+      etat.session = null;
       etat.pseudo = null;
       etat.brouillonProfil = brouillonProfilVide();
-      peindre();
-    } else {
       peindre();
     }
   });

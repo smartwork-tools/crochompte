@@ -50,6 +50,11 @@ begin
     raise exception 'Il faut être connectée pour signaler un patron.';
   end if;
 
+  -- Patron déjà supprimé : rien à signaler (et pas d'erreur technique).
+  if not exists (select 1 from patrons_publics where id = p_id) then
+    return;
+  end if;
+
   -- On ne signale pas son propre patron.
   if exists (select 1 from patrons_publics where id = p_id and user_id = moi) then
     return;
