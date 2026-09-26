@@ -14,7 +14,7 @@ appareil à l'autre.
 |---|---|
 | `index.html` | l'application entière. Elle fonctionne seule, sans rien d'autre |
 | `sync.js` | comptes et synchronisation. **Facultatif** |
-| `config.example.js` | à copier en `config.js` avec tes deux clés |
+| `config.example.js` | modèle de `config.js` (adresse du projet Supabase et clé publique) |
 | `schema.sql` | les tables et les règles de sécurité, à coller dans Supabase |
 | `schema-pseudo.sql` | la table des pseudos et les fonctions de vérification, à coller dans Supabase |
 | `schema-patrons-publics.sql` | la bibliothèque de patrons partagés, à coller dans Supabase |
@@ -169,10 +169,12 @@ git push -u origin main
 Si tu préfères ne pas toucher au terminal : **GitHub Desktop** fait la même
 chose en glissant le dossier et en cliquant *Publish repository*.
 
-> `config.js` **doit** partir sur GitHub, sinon il n'est pas servi : retire-le
-> du `.gitignore` avant l'envoi. Cette clé (`anon`) est faite pour être
-> publique — ce qui protège vraiment les données, ce sont les règles de
-> `schema.sql`, pas le secret de la clé.
+> **Règle unique pour `config.js` : il est public et versionné.** Il ne contient
+> que l'adresse du projet Supabase et la clé publique (`anon` / publishable),
+> faite pour être visible dans le navigateur. **Aucun secret n'y va jamais** —
+> ni la clé `service_role`, ni un mot de passe, ni une clé Brevo : ceux-là
+> restent dans les secrets des fonctions Supabase. Ce qui protège les données,
+> ce sont les règles RLS des fichiers `schema*.sql`, pas le secret de la clé.
 
 **4.3 — Activer GitHub Pages**
 
@@ -263,7 +265,9 @@ dans Réglages.
   de réattribuer sa ligne à quelqu'un d'autre.
 - **Le seau de photos est privé** (`public = false`), et chaque compte est
   cloisonné dans un dossier à son nom, vérifié par la politique de stockage.
-- `config.js` est dans `.gitignore`.
+- `config.js` est public et versionné : il ne contient que l'adresse du projet
+  et la clé publique. La clé `service_role` n'existe que dans les secrets des
+  fonctions serveur.
 - **Mot de passe jamais stocké en clair** : chiffré dès son arrivée sur le
   serveur, par la brique d'authentification de Supabase. Personne — pas même
   toi — ne peut le lire.
@@ -290,18 +294,12 @@ dans Réglages.
 
 ## Effacement du compte — une étape à ne pas oublier
 
-Le bouton « Effacer mon compte » supprime l'atelier et les photos par lui-même.
-Pour supprimer aussi **l'identité de connexion**, il faut déployer la fonction
-serveur fournie dans `supabase/functions/supprimer-compte/` :
-
-```bash
-npm install -g supabase
-supabase login
-supabase link --project-ref TON-REF-DE-PROJET
-supabase functions deploy supprimer-compte
-```
-
-(La référence du projet se trouve dans *Project Settings → General*.)
+Le bouton « Supprimer mon compte » (Réglages › Mon compte) efface les photos,
+l'historique des versions et l'atelier, puis appelle la fonction serveur
+`supprimer-compte`, qui supprime l'identité de connexion (et, par cascade, le
+profil et le compteur de factures). Cette fonction doit être déployée :
+*Supabase → Edge Functions → supprimer-compte → Code*, coller le contenu de
+`supabase/functions/supprimer-compte/index.ts`, puis *Deploy*.
 
 Sans cette fonction, l'application le **dit** à l'utilisatrice au lieu de lui
 faire croire que tout est parti. Mais déploie-la avant d'ouvrir à des tiers :
@@ -317,10 +315,12 @@ première utilisatrice qui n'est pas de ta famille :
 1. Une **page de politique de confidentialité** : quelles données, pourquoi,
    combien de temps, qui les héberge.
 2. Le **registre des traitements** — obligatoire, même pour une micro-entreprise.
-3. **L'effacement du compte** : un bouton qui supprime la ligne et les photos.
-   Le `on delete cascade` du schéma fait déjà le travail côté base ; il manque
-   le bouton.
-4. **L'export des données** : déjà là, c'est la sauvegarde JSON des Réglages.
+3. **L'effacement du compte** : fait (bouton dans Réglages › Mon compte et
+   fonction `supprimer-compte`). À tester une fois en production avec un
+   compte d'essai.
+4. **L'export des données** : fait — « Télécharger ma sauvegarde » (Réglages ›
+   Mes données) produit un fichier avec toutes les données de l'atelier et ses
+   photos.
 5. Vérifier que l'hébergement reste **dans l'Union européenne** (région du
    projet Supabase). GitHub Pages est servi depuis les États-Unis (Microsoft),
    encadré par le *Data Privacy Framework* UE–États-Unis — voir

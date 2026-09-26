@@ -40,7 +40,7 @@ const R = {};
   R.pas_de_cul_de_sac = !t.includes("n'a pas pu se charger");
 
   /* elle crée une fiche, par l'interface, comme sur un marché */
-  await p.click('button:has-text("Nouvelle création")');
+  await p.click('.acc-hero .cta .btn >> nth=0');
   await p.waitForTimeout(400);
   await p.fill('#f-nom', 'Bonnet du marche c-marche');
   await p.click('button:has-text("Ajouter à mes créations")');

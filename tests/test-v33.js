@@ -57,7 +57,7 @@ async function connecter(p){
     R.todo_bientot = todo.includes('à remettre dans les 7 jours') && todo.includes('Bea');
     R.todo_encaisser = todo.includes('40,00') && todo.includes('à réclamer');
     R.todo_stock = todo.includes('sous ton seuil');
-    R.todo_ordre_rouge_en_premier = (await p.getAttribute('.todo li:first-child .pt', 'class')).includes('bad');
+    R.todo_ordre_rouge_en_premier = (await p.getAttribute('.todo li:first-child .ico', 'class')).includes('bad');
     R.tuiles_mois = (await p.textContent('#main')).includes('Encaissé');
     R.creations_recentes = (await p.locator('.crea-mini .trow').count()) === 3;
     await p.screenshot({path:require('path').join(__dirname,'captures','accueil.png'), fullPage:true});

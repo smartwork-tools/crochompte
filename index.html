@@ -44,6 +44,7 @@
     --f-vegetal:#2f7145; --f-vegetal-b:#e7f3ea;
     --f-fete:#6b45a3;    --f-fete-b:#f0eafa;
     --f-perso:#a5323f;   --f-perso-b:#fce9eb;
+    --hero:#0e3b37; --hero-ink:#eef6f4; --hero-muted:#a9cbc4; --hero-accent:#ffb4a2; --hero-ok:#9fe3c4;
   }
   @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
     --ground:#121513; --surface:#1b1f1d; --surface-2:#171b19;
@@ -61,6 +62,7 @@
     --f-vegetal:#74ba88; --f-vegetal-b:#17271b;
     --f-fete:#ae90dc;    --f-fete-b:#231b30;
     --f-perso:#dd858f;   --f-perso-b:#2c1b1e;
+    --hero:#0d2e2b; --hero-ink:#e9f3f1; --hero-muted:#8fb3ad; --hero-accent:#f4a896; --hero-ok:#8fd6b6;
   }}
   :root[data-theme="dark"]{
     --ground:#121513; --surface:#1b1f1d; --surface-2:#171b19;
@@ -78,6 +80,7 @@
     --f-vegetal:#74ba88; --f-vegetal-b:#17271b;
     --f-fete:#ae90dc;    --f-fete-b:#231b30;
     --f-perso:#dd858f;   --f-perso-b:#2c1b1e;
+    --hero:#0d2e2b; --hero-ink:#e9f3f1; --hero-muted:#8fb3ad; --hero-accent:#f4a896; --hero-ok:#8fd6b6;
   }
 
   *{box-sizing:border-box;}
@@ -367,6 +370,60 @@
   .visio-page img{display:block;width:100%;max-width:1100px;margin:0 auto;background:#fff;border-radius:4px;}
 
   /* Tableau de bord */
+  /* ─── Accueil : la bande verte, puis le tableau de bord ─── */
+  .acc-hero{background:var(--hero);color:var(--hero-ink);margin:-22px -20px 22px;padding:48px 32px 46px;border-radius:0 0 18px 18px;}
+  .acc-hero-in{max-width:1060px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);gap:44px;align-items:center;}
+  .acc-hero .eyebrow{font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--hero-muted);}
+  .acc-hero h1{font-size:clamp(30px,4.6vw,46px);line-height:1.06;letter-spacing:-.03em;margin:12px 0 0;font-weight:700;color:var(--hero-ink);text-wrap:balance;}
+  .acc-hero h1 .suite{display:block;color:var(--hero-muted);font-weight:600;}
+  .acc-hero h1 .chiffre{color:var(--hero-ink);white-space:nowrap;}
+  .acc-hero p.lede{font-size:17px;line-height:1.55;color:var(--hero-muted);margin:16px 0 0;max-width:50ch;}
+  .acc-hero .cta{display:flex;gap:12px;flex-wrap:wrap;margin-top:26px;}
+  .acc-hero .cta .btn{background:var(--hero-ink);color:var(--hero);border-color:var(--hero-ink);}
+  .acc-hero .cta .btn.alt{background:transparent;color:var(--hero-ink);border-color:var(--hero-muted);}
+  .acc-hero .btn:focus-visible{outline:3px solid var(--hero-ok);outline-offset:2px;}
+  .preuve{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:14px;padding:22px;}
+  .preuve .t{font-size:12.5px;color:var(--hero-muted);}
+  .preuve .t b{color:var(--hero-ink);font-weight:600;}
+  .preuve .rows{margin-top:10px;}
+  .preuve .row{display:flex;justify-content:space-between;gap:12px;font-size:13.5px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.1);}
+  .preuve .row:last-child{border-bottom:none;}
+  .preuve .row span:last-child{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;}
+  .preuve .big{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;font-size:36px;letter-spacing:-.03em;margin-top:12px;color:var(--hero-accent);}
+  .preuve .big.ok{color:var(--hero-ok);}
+  .preuve .cap{font-size:12.5px;color:var(--hero-muted);margin-top:4px;}
+  .preuve .lien{margin-top:12px;background:none;border:none;padding:0;color:var(--hero-ink);font:inherit;font-size:13.5px;
+    font-weight:600;text-decoration:underline;text-underline-offset:3px;cursor:pointer;}
+  @media (max-width:820px){ .acc-hero-in{grid-template-columns:minmax(0,1fr);gap:28px;} .acc-hero{padding:32px 20px 30px;} }
+
+  .depart{margin-bottom:22px;}
+  .depart-tete{display:flex;justify-content:space-between;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:12px;}
+  .depart-tete h2{font-size:19px;letter-spacing:-.01em;}
+  .depart-tete span{font-size:13px;color:var(--muted);}
+  .depart-grille{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;}
+  .dep{background:var(--surface);border:1px solid var(--rule);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:8px;}
+  .dep .num{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-family:"IBM Plex Mono",monospace;font-size:13px;
+    background:var(--primary);color:var(--on-primary);}
+  .dep h3{font-size:15.5px;margin-top:4px;}
+  .dep p{margin:0;font-size:13.5px;color:var(--muted);flex:1;}
+  .dep .btn{align-self:flex-start;margin-top:6px;}
+  .dep.fait{background:var(--surface-2);}
+  .dep.fait .num{background:var(--good-soft);color:var(--good);}
+  .dep.fait h3{color:var(--muted);}
+  .dep .ok{font-size:13px;font-weight:600;color:var(--good);margin-top:6px;}
+  @media (max-width:760px){
+    .depart-grille{grid-template-columns:minmax(0,1fr);gap:10px;}
+    .dep.fait{flex-direction:row;align-items:center;padding:12px 16px;}
+    .dep.fait h3{margin:0;flex:1;font-size:14.5px;}
+    .dep.fait p{display:none;}
+    .dep.fait .ok{margin:0;}
+  }
+
+  .todo .ico{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;font-weight:700;font-size:14px;
+    background:var(--primary-soft);color:var(--primary-ink);}
+  .todo .ico.bad{background:var(--bad-soft);color:var(--bad);} .todo .ico.warn{background:var(--warn-soft);color:var(--warn);}
+  .todo li.avec-ico{grid-template-columns:30px minmax(0,1fr) auto;}
+  @media (max-width:560px){ .todo li.avec-ico{grid-template-columns:30px minmax(0,1fr);} }
   .dash-bloc{margin-bottom:18px;}
   .dash-grid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:18px;align-items:start;}
   .dash-col{display:flex;flex-direction:column;gap:18px;min-width:0;}
@@ -2361,6 +2418,23 @@ function pointsAFaire(){
   function ajout(niveau, titre, detail, lib, action){ l.push({n:niveau, t:titre, d:detail, lib:lib, a:action}); }
   function versCommandes(){ view.cmdVue = null; aller("commandes"); }
 
+  /* Un enregistrement en ligne qui échoue : le dire en premier, jamais en silence. */
+  var S = window.CrochompteSync;
+  var envoi = S && S.etatEnvoi ? S.etatEnvoi() : null;
+  if (envoi && envoi.connecte && envoi.erreur){
+    ajout("bad", "Tes dernières modifications ne sont pas encore enregistrées en ligne",
+      "Elles sont gardées sur cet appareil et repartiront toutes seules. " + envoi.erreur, "Réessayer",
+      function(){ S.reessayer(); toast("Nouvel essai d'enregistrement…"); });
+  }
+  /* Un chronomètre oublié fausse le temps de travail. */
+  var ch = chronoEnCours();
+  if (ch){
+    var pc = piece(ch.pid), crc = pc ? creation(pc.cid) : null;
+    var depuis = Math.round((Date.now() - ch.debut) / 60000);
+    ajout(depuis > 240 ? "warn" : "info", "Chronomètre en marche depuis " + dureeTexte(depuis),
+      crc ? "Sur « " + crc.nom + " »." : "", "Voir", function(){ aller("atelier"); });
+  }
+
   var ouvertes = commandesOuvertes().filter(function(c){ return c.statut !== "devis"; });
   var retard = ouvertes.filter(function(c){ var j = joursRestants(c); return j !== null && j < 0; });
   var bientot = ouvertes.filter(function(c){ var j = joursRestants(c); return j !== null && j >= 0 && j <= 7; });
@@ -2430,14 +2504,100 @@ function renderAccueil(main){
   var vend = r.profil !== "passion";
   var qui = (compteInfo.connecte && compteInfo.pseudo) ? compteInfo.pseudo : "";
 
-  main.appendChild(enTete("Bonjour" + (qui ? " " + qui : ""), dateDuJour() + ". Voici où en est ton atelier.", [
-    bouton("Nouvelle commande", function(){ var c = nouvelleCommande(); view.cmdVue = c.id; aller("commandes", {garderVue:true}); }),
-    bouton("Nouvelle création", nouvelleFiche, true)
-  ]));
-
-  /* Premiers pas : tant que l'atelier est vide, c'est la seule chose utile
-     à montrer. Trois étapes, cochées au fur et à mesure. */
   var aUneVente = (state.pieces||[]).some(function(p){ return p.com === "vendu"; }) || commandes().length > 0;
+  var nouvelleCmd = function(){ var c = nouvelleCommande(); view.cmdVue = c.id; aller("commandes", {garderVue:true}); };
+
+  /* ── La bande verte ──
+     Une phrase qui dit l'essentiel avec TES chiffres, et à droite le calcul
+     d'une de tes créations, ligne par ligne. Tant qu'il n'y en a aucune, le
+     même calcul sur un exemple, présenté comme tel. */
+  var calcs = state.creations.map(function(c){ return {c:c, r:calculer(c)}; });
+  var avecPrix = calcs.filter(function(x){ return Number(x.c.prix) > 0 && x.r.heures > 0; });
+  var meilleure = avecPrix.slice().sort(function(a, b){ return b.r.gainHoraire - a.r.gainHoraire; })[0] || null;
+  var vitrine = meilleure || calcs[calcs.length - 1] || null;
+  var bmH = bornesIndicateur("mois");
+  var encMois = vend ? sommeEntre(encaissements(), bmH.debut, bmH.fin) : 0;
+  var nbPoints = pointsAFaire().length;
+  var objectif = Number(r.tauxHoraire) || 0;
+
+  var titre, lede;
+  if (!calcs.length){
+    titre = (qui ? 'Bonjour ' + esc(qui) + '.' : 'Tu sais crocheter.') + '<span class="suite">Sais-tu ce que ton crochet te rapporte&nbsp;?</span>';
+    lede = "Le fil, les chutes, les yeux de sécurité, le pochon, la commission de la plateforme, les cotisations — et surtout "+
+           "tes heures. Crochompte compte tout à ta place et te répond en un chiffre : ce que tu gagnes de l'heure.";
+  } else if (vend && encMois > 0){
+    titre = 'Bonjour' + (qui ? ' ' + esc(qui) : '') + ',<span class="suite">ce mois-ci, tu as encaissé <span class="chiffre">' + esc(eur(encMois)) + '</span>.</span>';
+    lede = texteResume(nbPoints);
+  } else if (meilleure && vend){
+    titre = 'Bonjour' + (qui ? ' ' + esc(qui) : '') + ',<span class="suite">ta meilleure création te paie <span class="chiffre">' +
+            esc(eur(meilleure.r.gainHoraire)) + '</span> de l\'heure.</span>';
+    lede = texteResume(nbPoints);
+  } else {
+    titre = 'Bonjour' + (qui ? ' ' + esc(qui) : '') + '.<span class="suite">Voici où en est ton atelier.</span>';
+    lede = texteResume(nbPoints);
+  }
+  function texteResume(n){
+    var morceaux = [];
+    morceaux.push(n ? n + " point" + (n>1?"s":"") + " à regarder aujourd'hui" : "Rien d'urgent aujourd'hui");
+    morceaux.push(calcs.length + " création" + (calcs.length>1?"s":"") + " calculée" + (calcs.length>1?"s":""));
+    if (vend){ var nc = commandesOuvertes().length; if (nc) morceaux.push(nc + " commande" + (nc>1?"s":"") + " en cours"); }
+    return morceaux.join(" · ") + ".";
+  }
+
+  var hero = el('<section class="acc-hero"><div class="acc-hero-in">'+
+    '<div><div class="eyebrow">' + esc(dateDuJour()) + '</div>'+
+      '<h1>' + titre + '</h1>'+
+      '<p class="lede">' + esc(lede) + '</p>'+
+      '<div class="cta"></div></div>'+
+    '<div class="preuve"></div>'+
+  '</div></section>');
+  var cta = hero.querySelector(".cta");
+  var bH1 = el('<button type="button" class="btn lg">' + (calcs.length ? "Nouvelle création" : "Calculer ma première création") + '</button>');
+  bH1.addEventListener("click", function(){ nouvelleFiche(); });
+  cta.appendChild(bH1);
+  var bH2 = el('<button type="button" class="btn lg alt">' + (vend && calcs.length ? "Nouvelle commande" : "Parcourir le catalogue") + '</button>');
+  bH2.addEventListener("click", vend && calcs.length ? nouvelleCmd : function(){ view.modeleVu = null; aller("catalogue"); });
+  cta.appendChild(bH2);
+
+  var pv = hero.querySelector(".preuve");
+  var demo = !vitrine;
+  var cv = demo ? creationDepuisModele("ami_moyen", "Amigurumi moyen", 32, "etsy") : vitrine.c;
+  var rv = demo ? calculer(cv) : vitrine.r;
+  var prixV = Number(cv.prix) || 0;
+  var entete = demo
+    ? 'Exemple : amigurumi de 20 cm vendu ' + esc(eur(32)) + ' sur une plateforme'
+    : (meilleure === vitrine && avecPrix.length > 1 ? 'Ta création la mieux payée : ' : 'Ta création ') +
+      '<b>« ' + esc(cv.nom || "Sans nom") + ' »</b>' + (prixV ? ', vendue ' + esc(eur(prixV)) + ' · ' + esc(canal(cv.canal).nom) : '');
+  if (vend && prixV > 0){
+    var ok = objectif > 0 && rv.gainHoraire >= objectif;
+    pv.innerHTML = '<div class="t">' + entete + '</div><div class="rows">'+
+      '<div class="row"><span>Prix de vente</span><span>' + esc(eur(prixV)) + '</span></div>'+
+      '<div class="row"><span>Matières et emballage</span><span>− ' + esc(eur(rv.matieres)) + '</span></div>'+
+      '<div class="row"><span>Frais de vente</span><span>− ' + esc(eur(rv.fraisVar + rv.fraisFixesVente)) + '</span></div>'+
+      '<div class="row"><span>Cotisations</span><span>− ' + esc(eur(rv.cotisations)) + '</span></div>'+
+      '<div class="row"><span>Reste pour ' + esc(dureeTexte(rv.minutes)) + ' de travail</span><span>' + esc(eur(rv.reste)) + '</span></div></div>'+
+      '<div class="big' + (ok ? ' ok' : '') + '">' + esc(eur(rv.gainHoraire)) + ' / h</div>'+
+      '<div class="cap">' + (demo ? "C'est ce chiffre que l'application met devant toi. Pas un prix imposé : un fait."
+        : objectif > 0 ? (ok ? "Au-dessus de ton objectif de " + esc(eur(objectif)) + " / h."
+                             : "Ton objectif : " + esc(eur(objectif)) + " / h. Il manque " + esc(eur(objectif - rv.gainHoraire)) + " par heure.")
+        : "Fixe ton taux horaire visé dans Réglages pour le comparer.") + '</div>';
+  } else {
+    /* Pas de prix (création à chiffrer, ou loisir) : ce qu'elle coûte. */
+    pv.innerHTML = '<div class="t">' + entete + '</div><div class="rows">'+
+      '<div class="row"><span>Matières et emballage</span><span>' + esc(eur(rv.matieres)) + '</span></div>'+
+      '<div class="row"><span>Temps de travail</span><span>' + esc(dureeTexte(rv.minutes)) + '</span></div>'+
+      (vend ? '<div class="row"><span>Prix qui paie ton objectif</span><span>' + esc(rv.prixObjectif > 0 ? eur(rv.prixObjectif) : "—") + '</span></div>' : '')+
+      '</div><div class="big ok">' + esc(eur(rv.matieres)) + '</div>'+
+      '<div class="cap">' + (vend ? "de matières. Donne-lui un prix de vente pour voir ce qu'elle te paie de l'heure." : "de matières pour cette pièce.") + '</div>';
+  }
+  if (!demo){
+    var lienV = el('<button type="button" class="lien">Ouvrir la fiche →</button>');
+    lienV.addEventListener("click", function(){ ouvrirFiche(cv.id); });
+    pv.appendChild(lienV);
+  }
+  main.appendChild(hero);
+
+  /* ── Premiers pas : trois cartes, cochées au fur et à mesure ── */
   var etapes = [
     {fait: !!r.confirmeLe, t:"Règle tes chiffres",
      d:"Ton statut, ce que tu veux gagner de l'heure et tes frais fixes. Deux minutes, une seule fois.",
@@ -2445,27 +2605,27 @@ function renderAccueil(main){
     {fait: state.creations.length > 0, t:"Calcule ta première création",
      d:"Pars d'un type d'ouvrage du catalogue : matières et temps sont déjà remplis, tu corriges avec tes chiffres.",
      lib:"Commencer", a:function(){ view.modeleVu = null; view.catMode = "types"; aller("catalogue"); }},
-    {fait: aUneVente, t: vend ? "Note ta première commande ou ta première vente" : "Suis ta première pièce",
+    {fait: aUneVente, t: vend ? "Note ta première commande" : "Suis ta première pièce",
      d: vend ? "Tes encaissements, tes échéances et tes indicateurs se remplissent à partir de là."
              : "Ce que tu produis et ce que ton loisir te coûte se calculent à partir de là.",
      lib: vend ? "Nouvelle commande" : "Mes créations",
-     a: vend ? function(){ var c = nouvelleCommande(); view.cmdVue = c.id; aller("commandes", {garderVue:true}); }
-             : function(){ aller("creations"); }}
+     a: vend ? nouvelleCmd : function(){ aller("creations"); }}
   ];
   var faites = etapes.filter(function(e){ return e.fait; }).length;
   if (faites < etapes.length){
-    var cDep = el('<div class="card dash-bloc"><header><h2>Pour bien démarrer</h2>'+
-      '<p>' + faites + ' étape' + (faites>1?'s':'') + ' sur ' + etapes.length + ' terminée' + (faites>1?'s':'') + '</p></header>'+
-      '<div class="body"><div class="jauge" style="margin:0 0 14px"><i style="width:'+Math.round(faites/etapes.length*100)+'%;background:var(--primary)"></i></div>'+
-      '<ol class="ind-guide"></ol></div></div>');
-    var ol = cDep.querySelector("ol");
-    etapes.forEach(function(e){
-      var li = el('<li class="'+(e.fait?'fait':'')+'"><div><b>'+esc(e.t)+'</b><p>'+esc(e.d)+'</p></div></li>');
-      if (!e.fait) li.appendChild(bouton(e.lib, e.a));
-      else li.appendChild(el('<span class="chip good">Fait</span>'));
-      ol.appendChild(li);
+    var dep = el('<section class="depart" aria-label="Pour bien démarrer"><div class="depart-tete"><h2>Pour bien démarrer</h2>'+
+      '<span>' + faites + ' sur ' + etapes.length + ' terminée' + (faites>1?'s':'') + '</span></div><div class="depart-grille"></div></section>');
+    var dg = dep.querySelector(".depart-grille");
+    var prochaine = -1;
+    etapes.forEach(function(e, k){ if (!e.fait && prochaine < 0) prochaine = k; });
+    etapes.forEach(function(e, k){
+      var carte = el('<div class="dep' + (e.fait ? ' fait' : '') + '"><span class="num" aria-hidden="true">' + (e.fait ? '✓' : (k+1)) + '</span>'+
+        '<h3>' + esc(e.t) + '</h3><p>' + esc(e.d) + '</p></div>');
+      if (e.fait) carte.appendChild(el('<span class="ok">Fait</span>'));
+      else carte.appendChild(bouton(e.lib, e.a, k === prochaine));
+      dg.appendChild(carte);
     });
-    main.appendChild(cDep);
+    main.appendChild(dep);
   }
 
   var grille = el('<div class="dash-grid"></div>');
@@ -2481,7 +2641,7 @@ function renderAccueil(main){
   if (points.length){
     var ul = el('<ul class="todo"></ul>');
     points.forEach(function(x){
-      var li = el('<li><span class="pt '+x.n+'" aria-hidden="true"></span>'+
+      var li = el('<li class="avec-ico"><span class="ico '+x.n+'" aria-hidden="true">'+(x.n === "bad" ? "!" : x.n === "warn" ? "!" : "i")+'</span>'+
         '<div><b>'+esc(x.t)+'</b><span class="d">'+esc(x.d)+'</span></div></li>');
       var b = bouton(x.lib, x.a); b.classList.add("sm");
       li.appendChild(b);

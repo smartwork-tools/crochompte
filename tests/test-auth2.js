@@ -117,7 +117,7 @@ const path = require('path');
 
     // ── Premier écran : l'accueil (tableau de bord) ──
     resultats.accueil_en_premier = (await p.textContent('#nav [aria-current="true"]')).trim() === 'Accueil';
-    resultats.bonjour_pseudo = (await p.textContent('.pagehead h1')).includes('Bonjour LaineTest');
+    resultats.bonjour_pseudo = (await p.textContent('.acc-hero h1')).includes('Bonjour LaineTest');
     resultats.premiers_pas = (await p.textContent('#main')).includes('Pour bien démarrer');
     resultats.aucune_creation_exemple = await p.evaluate(()=> window.CrochomptePont.lire().creations.length === 0);
 
@@ -125,7 +125,7 @@ const path = require('path');
     await p.click('#menu-btn'); await p.waitForTimeout(150);
     resultats.menu_ouvert = await p.isVisible('#mm-liste');
     await p.goBack(); await p.waitForTimeout(300);
-    resultats.retour_ferme_menu = !(await p.isVisible('#mm-liste')) && (await p.textContent('.pagehead h1')).includes('Bonjour');
+    resultats.retour_ferme_menu = !(await p.isVisible('#mm-liste')) && (await p.textContent('.acc-hero h1')).includes('Bonjour');
     await p.click('#menu-btn'); await p.click('#mm-liste >> text=Réglages'); await p.waitForTimeout(600);
     await p.click('.reg-item[data-section="compte"]'); await p.waitForTimeout(300);
     resultats.profil_affiche = (await p.textContent('.compte-infos')).includes('LaineTest') && (await p.textContent('.compte-infos')).includes('test@exemple.fr');

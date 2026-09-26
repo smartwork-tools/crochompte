@@ -1323,7 +1323,11 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
   }
   window.CrochompteSync = {signaler: signaler, deconnecter: deconnecter, photoEffacee: photoEffacee,
                            photoRestauree: photoRestauree, numeroFacture: numeroFacture,
-                           connecte: function(){ return !!etat.session; }};
+                           connecte: function(){ return !!etat.session; },
+                           /* Pour l'Accueil : un enregistrement qui échoue doit se voir. */
+                           etatEnvoi: function(){ return {connecte: !!etat.session, enAttente: !!etat.sale,
+                                                           erreur: etat.derniereErreur || null, dernier: etat.vuLe || null}; },
+                           reessayer: function(){ etat.derniereErreur = null; return synchroniser(); }};
 
   /* À l'ouverture et à la connexion : ramener les photos faites sur un autre
      appareil, puis envoyer celles d'ici qui ne sont pas encore en ligne. */
