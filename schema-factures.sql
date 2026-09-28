@@ -32,7 +32,7 @@ create or replace function public.prochain_numero_facture(p_annee int, p_min int
 returns text
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, pg_temp
 as $$
 declare
   v_uid     uuid := auth.uid();
@@ -73,9 +73,76 @@ begin
    where user_id = v_uid
   returning code, (annees ->> p_annee::text)::int into v_code, v_n;
 
-  return v_code || '-' || p_annee || '-' || lpad(v_n::text, 4, '0');
+  -- lpad tronque au-delà de 4 chiffres : 10000 resterait 10000, pas « 1000 »
+  return v_code || '-' || p_annee || '-' || case when v_n < 10000 then lpad(v_n::text, 4, '0') else v_n::text end;
 end;
 $$;
 
 revoke all on function public.prochain_numero_facture(int, int) from public, anon;
 grant execute on function public.prochain_numero_facture(int, int) to authenticated;
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Registre des factures et avoirs (V37)
+--
+-- Une facture est un document légal : elle se conserve 10 ans et ne se
+-- modifie plus. Elle ne doit donc pas vivre seulement dans l'atelier (un
+-- document qu'une restauration, une remise à zéro ou un autre appareil
+-- peuvent remplacer). emettre_facture() attribue le numéro ET enregistre la
+-- facture figée dans la même transaction : un numéro ne peut plus se perdre,
+-- ni être donné deux fois. La table n'accepte ni modification ni
+-- suppression (sauf effacement du compte, par cascade).
+-- ═══════════════════════════════════════════════════════════════════════════
+create table if not exists public.factures (
+  user_id   uuid not null references auth.users(id) on delete cascade,
+  numero    text not null,
+  type      text not null default 'facture' check (type in ('facture','avoir')),
+  emise_le  timestamptz not null default now(),
+  commande  text,
+  donnees   jsonb not null,
+  primary key (user_id, numero)
+);
+alter table public.factures enable row level security;
+revoke all on table public.factures from anon, authenticated;
+grant select on table public.factures to authenticated;
+drop policy if exists "factures_lecture_proprietaire" on public.factures;
+create policy "factures_lecture_proprietaire" on public.factures
+  for select to authenticated using (user_id = auth.uid());
+-- Aucune politique insert/update/delete : on n'écrit que par la fonction.
+
+create or replace function public.emettre_facture(p_annee int, p_min int, p_type text, p_commande text, p_donnees jsonb)
+returns text
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_num text;
+begin
+  if v_uid is null then raise exception 'Connexion requise'; end if;
+  if p_type is null or p_type not in ('facture','avoir') then raise exception 'Type invalide'; end if;
+  if p_donnees is null or jsonb_typeof(p_donnees) <> 'object' then raise exception 'Facture invalide'; end if;
+  if octet_length(p_donnees::text) > 200000 then raise exception 'Facture trop volumineuse'; end if;
+  if p_commande is not null and length(p_commande) > 100 then raise exception 'Commande invalide'; end if;
+  -- Une commande n'a qu'une facture active à la fois (deux onglets, ou une
+  -- vieille sauvegarde restaurée, ne peuvent pas en créer une deuxième).
+  if p_type = 'facture' and p_commande is not null then
+    perform pg_advisory_xact_lock(hashtext(v_uid::text || p_commande));
+    select f.numero into v_num from public.factures f
+     where f.user_id = v_uid and f.commande = p_commande and f.type = 'facture'
+       and not exists (select 1 from public.factures a
+                        where a.user_id = v_uid and a.type = 'avoir' and a.donnees->>'ref' = f.numero)
+     limit 1;
+    if v_num is not null then
+      raise exception 'Cette commande a déjà une facture active (n° %). Annule-la par un avoir avant d''en établir une nouvelle.', v_num;
+    end if;
+  end if;
+  v_num := public.prochain_numero_facture(p_annee, p_min);
+  insert into public.factures (user_id, numero, type, commande, donnees)
+  values (v_uid, v_num, p_type, p_commande, p_donnees || jsonb_build_object('numero', v_num, 'emise_le', now()));
+  return v_num;
+end;
+$$;
+revoke all on function public.emettre_facture(int, int, text, text, jsonb) from public, anon;
+grant execute on function public.emettre_facture(int, int, text, text, jsonb) to authenticated;

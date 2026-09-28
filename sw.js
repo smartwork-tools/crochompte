@@ -9,14 +9,15 @@
    Les données de l'atelier ne passent jamais par ici : elles restent entre
    l'application et le serveur (Supabase), qui n'est jamais mis en cache.
    ═══════════════════════════════════════════════════════════════════════════ */
-var CACHE = "crochompte-app-v35";
+var CACHE = "crochompte-app-v40";
 var ESSENTIELS = [
-  "./", "index.html", "sync.js", "config.js", "confidentialite.html", "manifest.webmanifest",
+  "./", "index.html", "app.js?v=40", "sync.js", "config.js", "confidentialite.html", "manifest.webmanifest",
   "polices/public-sans-latin-400-normal.woff2", "polices/public-sans-latin-500-normal.woff2",
   "polices/public-sans-latin-600-normal.woff2", "polices/bricolage-grotesque-latin-600-normal.woff2",
   "polices/bricolage-grotesque-latin-700-normal.woff2", "polices/bricolage-grotesque-latin-800-normal.woff2",
   "polices/ibm-plex-mono-latin-400-normal.woff2", "polices/ibm-plex-mono-latin-500-normal.woff2",
-  "icones/icone-192.png", "icones/favicon-48.png"
+  "icones/icone-192.png", "icones/favicon-48.png",
+  "vendor/supabase/supabase.min.mjs"
 ];
 
 self.addEventListener("install", function(e){
@@ -53,9 +54,9 @@ self.addEventListener("fetch", function(e){
   if (req.headers.has("range")) return;   /* réponses partielles : jamais en cache */
   var url = new URL(req.url);
   var memeSite = url.origin === self.location.origin;
-  /* La bibliothèque de connexion, publiée sur jsDelivr à une version figée. */
-  var bibliotheque = url.hostname === "cdn.jsdelivr.net" && url.pathname.indexOf("/npm/@supabase/") === 0;
-  if (!memeSite && !bibliotheque) return;   /* serveur, photos d'illustration : jamais en cache ici */
+  /* La bibliothèque de connexion est servie par le site lui-même
+     (vendor/supabase) : plus aucun code n'est chargé d'un autre site. */
+  if (!memeSite) return;   /* serveur, photos d'illustration : jamais en cache ici */
   var page = req.mode === "navigate";
 
   function depuisCopie(){

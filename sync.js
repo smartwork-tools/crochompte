@@ -34,7 +34,7 @@
 // Version figée volontairement : « @2 » suivrait la dernière version publiée,
 // et ton site en ligne changerait tout seul un matin, sans que tu aies rien
 // déployé. Pour monter de version, change ce numéro et redéploie — sciemment.
-import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/+esm";
+import { createClient } from "./vendor/supabase/supabase.min.mjs";
 
 (function(){
   "use strict";
@@ -249,7 +249,12 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
   }
   function noterBase(maj){
     etat.vuLe = maj || null;
-    try{ if (etat.session) localStorage.setItem(CLE_BASE, JSON.stringify({uid: etat.session.user.id, maj: etat.vuLe})); }catch(e){}
+    /* Si l'atelier n'a pas pu être écrit dans ce navigateur (mémoire pleine),
+       la copie locale est en retard : on ne la déclare pas « à jour », pour
+       qu'au prochain démarrage la version en ligne soit archivée avant
+       d'être remplacée, jamais écrasée sans trace. */
+    var localAJour = !(pont.memoireOk && !pont.memoireOk());
+    try{ if (etat.session) localStorage.setItem(CLE_BASE, JSON.stringify({uid: etat.session.user.id, maj: localAJour ? etat.vuLe : null})); }catch(e){}
   }
   etat.pret = false;
   etat.generation = 0;
@@ -739,12 +744,14 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
     if (/Inscription impossible pour l'instant/i.test(t)) return "La création du compte n'a pas abouti. Réessaie dans quelques minutes.";
     if (/[àéèêç]/i.test(t)) return t.replace(/courriel/g, "e-mail");
     if (/different from the old password/i.test(t)) return "Choisis un mot de passe différent de l'actuel.";
-    if (/at least \d+ characters|password should be/i.test(t)) return "Le mot de passe doit contenir au moins 8 caractères.";
+    if (/at least \d+ characters|password should be/i.test(t)) return "Le mot de passe doit contenir au moins 12 caractères.";
     if (/weak|pwned|compromised/i.test(t)) return "Ce mot de passe est trop courant. Choisis-en un plus difficile à deviner.";
     if (/rate limit|too many/i.test(t)) return "Trop de tentatives en peu de temps. Patiente quelques minutes, puis réessaie.";
     if (/network|fetch|failed to/i.test(t)) return "Impossible de joindre le serveur. Vérifie ta connexion internet, puis réessaie.";
     if (/jwt|session|not authenticated|expired/i.test(t)) return "Ta connexion a expiré. Déconnecte-toi, puis reconnecte-toi.";
-    return t || "Une erreur est survenue. Réessaie dans un instant.";
+    if (/atelier_trop_gros/.test(t)) return "Tes données dépassent la taille permise (25 Mo) : supprime des patrons au texte très long, puis réessaie.";
+    /* Un message technique en anglais n'aide personne : on dit quoi faire. */
+    return "Le serveur n'a pas pu enregistrer ta demande. Réessaie dans un instant ; si cela continue, écris-nous à bonjour@crochompte.com.";
   }
 
   /* Un champ de saisie. Les mots de passe ont un bouton « Afficher » : c'est
@@ -824,7 +831,7 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
         '<p class="auth-sous">Il remplacera l\'ancien sur tous tes appareils.</p>'+
         bandeaux(msg)+
         '<form id="sy-form" novalidate>'+
-          champ({id:"sy-np1", label:"Nouveau mot de passe", type:"password", auto:"new-password", aide:"8 caractères minimum."})+
+          champ({id:"sy-np1", label:"Nouveau mot de passe", type:"password", auto:"new-password", aide:"12 caractères minimum : une phrase courte que tu retiens facilement convient très bien."})+
           champ({id:"sy-np2", label:"Confirmer le mot de passe", type:"password", auto:"new-password"})+
           '<button type="submit" class="btn primary auth-btn" id="sy-np-valider">Enregistrer le mot de passe</button>'+
         '</form></div></div>';
@@ -840,7 +847,7 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
                    aide:"3 à 24 caractères : lettres, chiffres, tiret ou tiret bas, sans espace ni accent.", etat:"sy-i-pseudo-etat"})+
             champ({id:"sy-i-mail", label:"Adresse e-mail", type:"email", auto:"email", mode:"email", val:etat.brouillon.email,
                    aide:"Pour confirmer ton compte et, si besoin, réinitialiser ton mot de passe."})+
-            champ({id:"sy-i-mdp1", label:"Mot de passe", type:"password", auto:"new-password", aide:"8 caractères minimum."})+
+            champ({id:"sy-i-mdp1", label:"Mot de passe", type:"password", auto:"new-password", aide:"12 caractères minimum : une phrase courte que tu retiens facilement convient très bien."})+
             champ({id:"sy-i-mdp2", label:"Confirmer le mot de passe", type:"password", auto:"new-password"})+
             '<label class="auth-case"><input type="checkbox" id="sy-i-age"' + (etat.brouillon.age15 ? ' checked' : '') + '>'+
               '<span>J\'ai ' + AGE_MINIMUM + ' ans ou plus.</span></label>'+
@@ -994,7 +1001,7 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
     if (etat.session && etat.recuperation){
       soumettre(function(){
         var p1 = q("#sy-np1").value || "", p2 = q("#sy-np2").value || "";
-        if (p1.length < 8){ peindre({erreur:"Le mot de passe doit contenir au moins 8 caractères.", champ:"#sy-np1"}); return; }
+        if (p1.length < 12){ peindre({erreur:"Le mot de passe doit contenir au moins 12 caractères.", champ:"#sy-np1"}); return; }
         if (p1 !== p2){ peindre({erreur:"Les deux mots de passe ne sont pas identiques.", champ:"#sy-np2"}); return; }
         occupe(this, "Enregistrement…");
         sb.auth.updateUser({password: p1}).then(function(r){
@@ -1062,7 +1069,7 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
             peindre({erreur:"Cette adresse e-mail n'est pas valide.", detail:"Vérifie qu'elle est complète, par exemple prenom@domaine.fr.", champ:"#sy-i-mail"});
             return;
           }
-          if (p1.length < 8){ peindre({erreur:"Le mot de passe doit contenir au moins 8 caractères.", champ:"#sy-i-mdp1"}); return; }
+          if (p1.length < 12){ peindre({erreur:"Le mot de passe doit contenir au moins 12 caractères.", champ:"#sy-i-mdp1"}); return; }
           if (p1 !== p2){ peindre({erreur:"Les deux mots de passe ne sont pas identiques.", champ:"#sy-i-mdp2"}); return; }
           if (!age15){
             peindre({erreur:"Coche la case « J'ai " + AGE_MINIMUM + " ans ou plus » pour continuer.",
@@ -1151,7 +1158,7 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
           .select("id, maj, appareil, raison, cree")
           .eq("user_id", etat.session.user.id)
           .order("cree", {ascending:false})
-          .limit(20)
+          .limit(30)   /* autant que ce que le serveur garde (purger_versions) */
           .then(function(r){
             if (r.error){
               z.innerHTML = '<p class="hint" style="margin-top:12px">L\'historique n\'a pas pu être chargé. ' + echappe(traduire(r.error.message)) + '</p>';
@@ -1226,7 +1233,8 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
       q("#sy-mdp-ouvrir").addEventListener("click", function(){
         var z = q("#sy-secu");
         z.innerHTML = '<form id="sy-mdp-form" novalidate>'+
-          champ({id:"sy-m1", label:"Nouveau mot de passe", type:"password", auto:"new-password", aide:"8 caractères minimum."})+
+          champ({id:"sy-m0", label:"Mot de passe actuel", type:"password", auto:"current-password"})+
+          champ({id:"sy-m1", label:"Nouveau mot de passe", type:"password", auto:"new-password", aide:"12 caractères minimum : une phrase courte que tu retiens facilement convient très bien."})+
           champ({id:"sy-m2", label:"Confirmer le mot de passe", type:"password", auto:"new-password"})+
           '<p class="hint auth-etat ko" id="sy-m-err" role="alert"></p>'+
           '<div class="et-act"><button type="submit" class="btn primary">Enregistrer le mot de passe</button>'+
@@ -1238,20 +1246,32 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
             inp.type = voir ? "text" : "password"; b.textContent = voir ? "Masquer" : "Afficher";
           });
         });
-        z.querySelector("#sy-m1").focus();
+        z.querySelector("#sy-m0").focus();
         z.querySelector("#sy-m-annuler").addEventListener("click", function(){ peindre({complet:true, garderFocus:true}); });
         z.querySelector("#sy-mdp-form").addEventListener("submit", function(e){
           e.preventDefault();
+          var p0 = z.querySelector("#sy-m0").value || "";
           var p1 = z.querySelector("#sy-m1").value || "", p2 = z.querySelector("#sy-m2").value || "";
           var err = z.querySelector("#sy-m-err");
-          if (p1.length < 8){ err.textContent = "Le mot de passe doit contenir au moins 8 caractères."; z.querySelector("#sy-m1").focus(); return; }
+          if (!p0){ err.textContent = "Indique ton mot de passe actuel."; z.querySelector("#sy-m0").focus(); return; }
+          if (p1.length < 12){ err.textContent = "Le nouveau mot de passe doit contenir au moins 12 caractères."; z.querySelector("#sy-m1").focus(); return; }
           if (p1 !== p2){ err.textContent = "Les deux mots de passe ne sont pas identiques."; z.querySelector("#sy-m2").focus(); return; }
           var b = z.querySelector("button[type=submit]"); occupe(b, "Enregistrement…");
-          sb.auth.updateUser({password: p1}).then(function(r){
-            if (r.error){ err.textContent = traduire(r.error.message); b.disabled = false; b.textContent = "Enregistrer le mot de passe"; return; }
-            pont.toast("Mot de passe modifié");
-            peindre({complet:true, garderFocus:true});
-          });
+          function rendre(t){ err.textContent = t; b.disabled = false; b.textContent = "Enregistrer le mot de passe"; }
+          /* On vérifie d'abord le mot de passe actuel : sur un appareil laissé
+             ouvert, quelqu'un d'autre ne peut pas changer le tien. Puis on
+             ferme les sessions ouvertes sur tes autres appareils. */
+          var courriel = etat.session && etat.session.user && etat.session.user.email;
+          var verif = courriel ? sb.auth.signInWithPassword({email: courriel, password: p0}) : Promise.resolve({error:{message:"session"}});
+          verif.then(function(v){
+            if (v.error){ rendre("Le mot de passe actuel n'est pas le bon."); z.querySelector("#sy-m0").focus(); return; }
+            return sb.auth.updateUser({password: p1}).then(function(r){
+              if (r.error){ rendre(traduire(r.error.message)); return; }
+              try{ sb.auth.signOut({scope:"others"}); }catch(e){}
+              pont.toast("Mot de passe modifié. Tes autres appareils devront se reconnecter.");
+              peindre({complet:true, garderFocus:true});
+            });
+          }, function(){ rendre("Pas de connexion internet : réessaie une fois connectée."); });
         });
       });
 
@@ -1263,7 +1283,8 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
           texte: "Cette action est irréversible. Seront supprimés, sur le serveur et sur cet appareil :",
           details: ["ton compte " + (pseudo ? "« " + pseudo + " » " : "") + "et ton adresse e-mail",
                     "ton atelier : créations, pièces, commandes, patrons, matières et réglages",
-                    "tes photos et l'historique des versions"],
+                    "tes photos et l'historique des versions",
+                    "tes factures et avoirs : si tu en as émis, télécharge d'abord ton registre des factures (Commandes) et ta sauvegarde, car tu dois les conserver 10 ans"],
           saisie: pseudo || "SUPPRIMER",
           bouton: "Supprimer mon compte", danger: true
         }, function(){
@@ -1321,9 +1342,32 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
       return {numero: r.data};
     }, function(){ return {erreur:"reseau"}; });
   }
+  /* Émet une facture ou un avoir : le serveur donne le numéro ET garde la
+     facture figée dans la même opération (schema-factures.sql). Rien ne
+     peut ensuite la modifier ni la supprimer. */
+  function emettreFacture(annee, min, type, commande, donnees){
+    if (!etat.session) return Promise.resolve({erreur:"connexion"});
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return Promise.resolve({erreur:"reseau"});
+    return sb.rpc("emettre_facture", {p_annee: annee, p_min: min || 0, p_type: type, p_commande: commande || null, p_donnees: donnees})
+      .then(function(r){
+        if (r.error || typeof r.data !== "string") return {erreur: (r.error && r.error.message) || "serveur"};
+        return {numero: r.data};
+      }, function(){ return {erreur:"reseau"}; });
+  }
+  /* Le registre gardé sur le serveur : il survit à une restauration, une
+     remise à zéro ou un autre appareil. */
+  function listerFactures(){
+    if (!etat.session) return Promise.resolve({erreur:"connexion"});
+    return sb.from("factures").select("numero, type, emise_le, commande, donnees").order("emise_le", {ascending:false}).limit(2000)
+      .then(function(r){ return r.error ? {erreur: r.error.message} : {liste: r.data || []}; }, function(){ return {erreur:"reseau"}; });
+  }
   window.CrochompteSync = {signaler: signaler, deconnecter: deconnecter, photoEffacee: photoEffacee,
                            photoRestauree: photoRestauree, numeroFacture: numeroFacture,
+                           emettreFacture: emettreFacture, listerFactures: listerFactures,
                            connecte: function(){ return !!etat.session; },
+                           /* Pour la sauvegarde : le profil fait partie de tes données. */
+                           profil: function(){ return etat.session ? {pseudo: etat.pseudo || null, courriel: etat.session.user.email || null,
+                                                                      informations: etat.brouillonProfil || null} : null; },
                            /* Pour l'Accueil : un enregistrement qui échoue doit se voir. */
                            etatEnvoi: function(){ return {connecte: !!etat.session, enAttente: !!etat.sale,
                                                            erreur: etat.derniereErreur || null, dernier: etat.vuLe || null}; },
@@ -1388,14 +1432,20 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
   var BIBLIO = {
     disponible: function(){ return !!etat.session; },
     /* Les patrons visibles par toutes, les plus récents d'abord. */
-    lister: function(recherche){
-      var q = sb.from("patrons_publics")
-        .select("id,titre,auteur_affiche,famille,niveau,materiel,texte,notes,licence,cree,user_id")
-        .eq("retire", false)
-        .order("cree", {ascending:false})
-        .limit(200);
-      return q.then(function(r){
-        if (r.error) return {erreur: r.error.message, liste: []};
+    lister: function(recherche, page){
+      /* Les colonnes de modération n'existent que si schema-securite-moderation.sql
+         a été exécuté : sans elles, on relit avec l'ancienne liste de colonnes. */
+      var base = "id,titre,auteur_affiche,famille,niveau,materiel,texte,notes,licence,cree,user_id";
+      var debut = (page || 0) * 100;
+      function requete(cols){
+        return sb.from("patrons_publics").select(cols)
+          .order("cree", {ascending:false}).range(debut, debut + 99);
+      }
+      return requete(base + ",retire,en_revue,masque,decision,decision_motif,decision_le").then(function(r){
+        if (r.error && /column|colonne/i.test(r.error.message || "")) return requete(base + ",retire");
+        return r;
+      }).then(function(r){
+        if (r.error) return {erreur: messageServeur(r.error.message), liste: []};
         var l = r.data || [];
         if (recherche){
           var s = String(recherche).toLowerCase();
@@ -1403,7 +1453,10 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
             return (p.titre + " " + p.auteur_affiche + " " + (p.materiel||"")).toLowerCase().indexOf(s) !== -1;
           });
         }
-        return {liste: l, moi: etat.session ? etat.session.user.id : null};
+        var moi = etat.session ? etat.session.user.id : null;
+        /* Un patron retiré ou masqué n'apparaît que pour son autrice. */
+        l = l.filter(function(p){ return p.user_id === moi || (!p.retire && !p.masque); });
+        return {liste: l, moi: moi, suite: (r.data || []).length === 100};
       });
     },
     /* Publier : la déclaration de droits est exigée ici ET par la base.
@@ -1411,10 +1464,13 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
     publier: function(p){
       if (!etat.session) return Promise.resolve({erreur:"Connecte-toi d'abord."});
       if (!p.droits) return Promise.resolve({erreur:"La déclaration de droits est obligatoire."});
+      /* Le pseudo sert à se connecter : il n'est jamais publié à la place
+         d'un nom d'autrice que la personne n'a pas choisi. */
+      if (!String(p.auteur||"").trim()) return Promise.resolve({erreur:"Indique le nom d'autrice à afficher avec ce patron."});
       return sb.from("patrons_publics").insert({
         user_id: etat.session.user.id,
         titre: String(p.titre||"").trim(),
-        auteur_affiche: String(p.auteur||etat.pseudo||"").trim(),
+        auteur_affiche: String(p.auteur||"").trim(),
         famille: p.famille || null,
         niveau: p.niveau || null,
         materiel: String(p.materiel||"").trim() || null,
@@ -1431,15 +1487,31 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
        une tentative sur la ligne d'une autre ne supprime simplement rien. */
     retirer: function(id){
       return sb.from("patrons_publics").delete().eq("id", id).then(function(r){
-        return r.error ? {erreur:r.error.message} : {ok:true};
+        return r.error ? {erreur: messageServeur(r.error.message)} : {ok:true};
       });
     },
-    signaler: function(id){
-      return sb.rpc("signaler_patron", {p_id:id}).then(function(r){
-        return r.error ? {erreur:r.error.message} : {ok:true};
+    /* Signalement motivé (catégorie + explication), comme le prévoit le
+       règlement européen sur les services numériques. */
+    signaler: function(id, motif, detail){
+      return sb.rpc("signaler_patron", {p_id:id, p_motif:motif, p_detail:detail}).then(function(r){
+        if (r.error && /function|fonction/i.test(r.error.message || ""))   /* serveur pas encore mis à jour */
+          return sb.rpc("signaler_patron", {p_id:id}).then(function(r2){ return r2.error ? {erreur:messageServeur(r2.error.message)} : {ok:true}; });
+        return r.error ? {erreur:messageServeur(r.error.message)} : {ok:true, etat:r.data};
+      });
+    },
+    contester: function(id, texte){
+      return sb.rpc("contester_moderation", {p_id:id, p_texte:texte}).then(function(r){
+        return r.error ? {erreur:messageServeur(r.error.message)} : {ok:true};
       });
     }
   };
+  /* Les messages écrits en français par la base sont montrés tels quels ;
+     les autres sont remplacés par une phrase compréhensible. */
+  function messageServeur(brut){
+    var m = String(brut || "");
+    if (/^[A-ZÀ-Ý].*[.!]$/.test(m) && !/[_(]/.test(m)) return m;
+    return "L'opération n'a pas abouti. Réessaie dans un instant.";
+  }
   /* Les messages du serveur sont techniques ; ceux-ci disent quoi corriger. */
   function messagePublication(brut){
     var m = String(brut||"");
@@ -1450,10 +1522,16 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
       return "La déclaration de droits est obligatoire.";
     if (m.indexOf("patrons_publics_licence") !== -1)
       return "Choisis une des licences proposées.";
+    if (m.indexOf("patron_retire_republie") !== -1)
+      return "Ce patron a été retiré de la bibliothèque après examen : il ne peut pas être republié tel quel.";
+    if (m.indexOf("auteur_pseudo_autre") !== -1)
+      return "Ce nom d'autrice est le pseudo d'une autre utilisatrice : choisis ton pseudo ou ton propre nom de plume.";
     if (m.indexOf("relation") !== -1 && m.indexOf("does not exist") !== -1)
       return "La bibliothèque partagée n'est pas encore installée sur le serveur "+
              "(schema-patrons-publics.sql à exécuter dans Supabase).";
-    return m;
+    if (m.indexOf("trop_de_patrons") !== -1)
+      return "Tu as atteint le nombre maximal de patrons partagés (300). Retire ceux qui ne servent plus pour en publier d'autres.";
+    return messageServeur(m);
   }
   if (pont.definirBibliotheque) pont.definirBibliotheque(BIBLIO);
 

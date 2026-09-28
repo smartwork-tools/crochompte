@@ -11,7 +11,7 @@ async function page(b, vp, init){
   const p = await b.newPage({serviceWorkers:'block', viewport: vp || {width:1280, height:900}, acceptDownloads:true});
   p.on('pageerror', e=>errs.push(e.message));
   if (init) await p.addInitScript(init);
-  await p.route('**/cdn.jsdelivr.net/**', r=>r.fulfill({path:path.join(__dirname,'faux-supabase.js'),contentType:'application/javascript'}));
+  await p.route('**/vendor/supabase/**', r=>r.fulfill({path:path.join(__dirname,'faux-supabase.js'),contentType:'application/javascript'}));
   await p.route('**/functions/v1/connexion', r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({access_token:'AT',refresh_token:'RT'})}));
   await p.goto('http://127.0.0.1:8934/index.html'); await p.waitForTimeout(400);
   return p;
@@ -92,7 +92,7 @@ async function modeComplet(p){
       window.CrochomptePont.ecrire(s);
     });
     await onglet(p, 'Commandes');
-    await p.locator('#main').getByRole('button', {name:'Ouvrir'}).first().click(); await p.waitForTimeout(300);
+    await p.locator('#main').getByRole('button', {name:/^Ouvrir la commande/}).first().click(); await p.waitForTimeout(300);
     const bR = p.getByRole('button', {name:/J'ai remboursé/});
     R.remb_bouton = await bR.count() === 1;
     if (!R.remb_bouton) R.remb_ecran = (await p.textContent('#main')).slice(0, 600);
@@ -151,8 +151,10 @@ async function modeComplet(p){
     const emettre = async nom => {
       await onglet(p, 'Commandes');
       const ligne = p.locator('#main tr', {hasText: nom});
-      await ligne.getByRole('button', {name:'Ouvrir'}).click(); await p.waitForTimeout(250);
-      const [fen] = await Promise.all([p.waitForEvent('popup'), p.getByRole('button', {name:'Établir la facture'}).click()]);
+      await ligne.getByRole('button', {name:/^Ouvrir la commande/}).click(); await p.waitForTimeout(250);
+      await p.getByRole('button', {name:'Établir la facture'}).click(); await p.waitForTimeout(200);
+      R.facture_confirmation_demandee = (await p.textContent('.dlg h2')).includes('Émettre la facture');
+      const [fen] = await Promise.all([p.waitForEvent('popup'), p.click('.dlg [data-oui]')]);
       await p.waitForTimeout(400);
       const titre = await fen.title(); await fen.close();
       return titre;
@@ -168,9 +170,10 @@ async function modeComplet(p){
     /* Sans réseau : pas de numéro, un message clair, rien d'émis */
     await p.evaluate(()=>{ window.__fauxEchecFacture = true; });
     await onglet(p, 'Commandes');
-    await p.locator('#main tr', {hasText:'Ana'}).getByRole('button', {name:'Ouvrir'}).click(); await p.waitForTimeout(250);
+    await p.locator('#main tr', {hasText:'Ana'}).getByRole('button', {name:/^Ouvrir la commande/}).click(); await p.waitForTimeout(250);
     const pop = p.waitForEvent('popup').catch(()=>null);
-    await p.getByRole('button', {name:'Établir la facture'}).click(); await p.waitForTimeout(500);
+    await p.getByRole('button', {name:'Établir la facture'}).click(); await p.waitForTimeout(200);
+    await p.click('.dlg [data-oui]'); await p.waitForTimeout(500);
     n = await nums();
     R.facture_sans_reseau_rien_emis = n[3] === null;
     R.facture_sans_reseau_message = /Réessaie/.test(await p.textContent('body'));

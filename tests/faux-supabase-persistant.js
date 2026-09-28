@@ -48,6 +48,7 @@ export function createClient(url, key){
         var a = lireServeur().atelier;
         return {data: a ? {donnees:a.donnees, maj:a.maj} : null, error:null};
       }
+      if (table === "factures") return {data: (lireServeur().registre || []).slice(), error:null};
       if (table === "ateliers_versions"){
         if (q._del){ lireServeur().versions = []; garderServeur(); }
         return {data: q._fait || q._del ? null : lireServeur().versions.slice().reverse(), error:null};
@@ -82,7 +83,12 @@ export function createClient(url, key){
         return Promise.resolve({data:{session:session}, error:null});
       },
       updateUser: function(){ return Promise.resolve({data:{}, error:null}); },
-      signOut: function(){ session = null; garder(); if (cb) cb("SIGNED_OUT", null); return Promise.resolve({error:null}); }
+      /* Vérification du mot de passe actuel : « mauvais » est refusé. */
+      signInWithPassword: function(o){
+        if (!o || o.password === "mauvais") return Promise.resolve({data:{session:null}, error:{message:"Invalid login credentials"}});
+        return Promise.resolve({data:{session:session}, error:null});
+      },
+      signOut: function(o){ if (o && o.scope === "others") return Promise.resolve({error:null}); session = null; garder(); if (cb) cb("SIGNED_OUT", null); return Promise.resolve({error:null}); }
     },
     from: function(t){ return qb(t); },
     storage: { from: function(){ return {
@@ -94,6 +100,17 @@ export function createClient(url, key){
     rpc: function(name, params){
       if (name === "mon_pseudo") return Promise.resolve({data:"LaineTest", error:null});
       /* Comme schema-factures.sql : un code par compte, un compteur par année. */
+      if (name === "emettre_facture"){
+        if (window.__fauxEchecFacture) return Promise.resolve({data:null, error:{message:"réseau (test)"}});
+        var srvE = lireServeur(); srvE.factures = srvE.factures || {code:"K7R2M", annees:{}}; srvE.registre = srvE.registre || [];
+        var anE = String(params.p_annee), nE = Math.max(srvE.factures.annees[anE] || 0, params.p_min || 0) + 1;
+        srvE.factures.annees[anE] = nE;
+        var numE = srvE.factures.code + "-" + anE + "-" + String(nE).padStart(4, "0");
+        srvE.registre.unshift({numero:numE, type:params.p_type, emise_le:new Date().toISOString(), commande:params.p_commande,
+                               donnees:Object.assign({}, params.p_donnees, {numero:numE})});
+        garderServeur();
+        return Promise.resolve({data: numE, error:null});
+      }
       if (name === "prochain_numero_facture"){
         if (window.__fauxEchecFacture) return Promise.resolve({data:null, error:{message:"réseau (test)"}});
         var srvF = lireServeur(); srvF.factures = srvF.factures || {code:"K7R2M", annees:{}};

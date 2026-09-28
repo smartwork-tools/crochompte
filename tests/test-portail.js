@@ -8,7 +8,7 @@ const path = require('path');
   p.on('pageerror', e => erreurs.push('PAGEERROR: ' + e.message));
   p.on('console', m => { if (m.type() === 'error') erreurs.push('CONSOLE: ' + m.text()); });
 
-  await p.route('**/cdn.jsdelivr.net/**', route => {
+  await p.route('**/vendor/supabase/**', route => {
     route.fulfill({ path: path.join(__dirname,'faux-supabase.js'), contentType: 'application/javascript' });
   });
   await p.route('**/functions/v1/connexion', route => {

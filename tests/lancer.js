@@ -45,7 +45,9 @@ var echecs = 0;
       return /": false|_echec|PAGEERROR|Error:|TimeoutError/.test(l);
     });
     var jsErr = /"erreurs": \[\s*"[^]/.test(texte) || /ERREURS JS: (?!aucune)/.test(texte);
-    if (err || fautes.length || jsErr){ echecs++; console.log("✗ " + t + "\n   " + (fautes.slice(0,5).join("\n   ") || String(err))); }
+    if (err || fautes.length || jsErr){ echecs++;
+      var jsLigne = (texte.match(/ERREURS JS: .*/) || [""])[0].slice(0, 400);
+      console.log("✗ " + t + "\n   " + (fautes.slice(0,5).join("\n   ") || (err ? String(err).slice(0, 300) : "") || jsLigne)); }
     else console.log("✓ " + t);
     suivant(i + 1);
   });

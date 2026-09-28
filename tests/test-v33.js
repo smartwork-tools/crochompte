@@ -6,7 +6,7 @@ async function page(b, vp, init){
   const p = await b.newPage({serviceWorkers:'block', viewport: vp || {width:1280, height:900}});
   p.on('pageerror', e=>errs.push(e.message));
   if (init) await p.addInitScript(init);
-  await p.route('**/cdn.jsdelivr.net/**', r=>r.fulfill({path:path.join(__dirname,'faux-supabase.js'),contentType:'application/javascript'}));
+  await p.route('**/vendor/supabase/**', r=>r.fulfill({path:path.join(__dirname,'faux-supabase.js'),contentType:'application/javascript'}));
   await p.route('**/functions/v1/connexion', r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({access_token:'AT',refresh_token:'RT'})}));
   await p.goto('http://127.0.0.1:8934/index.html'); await p.waitForTimeout(400);
   return p;
@@ -87,14 +87,15 @@ async function connecter(p){
 
     // 5. Suppression d'une création : boîte de confirmation
     await p.click('.savebar button:has-text("Supprimer la création")'); await p.waitForTimeout(250);
-    R.dialogue_supprimer = (await p.textContent('.dlg h2')).includes('Supprimer');
-    R.focus_sur_annuler = await p.evaluate(()=> document.activeElement && document.activeElement.hasAttribute('data-non'));
+    /* V37 : une création qui a une commande en cours s'ARCHIVE (ses ventes
+       et commandes restent) au lieu d'être supprimée. */
+    R.dialogue_supprimer = (await p.textContent('.dlg h2')).includes('Archiver');
     await p.keyboard.press('Escape'); await p.waitForTimeout(600);
     R.echap_annule = !(await p.isVisible('.dlg')) && (await p.evaluate(()=>window.CrochomptePont.lire().creations.length)) === 3;
     await p.click('.savebar button:has-text("Supprimer la création")'); await p.waitForTimeout(250);
     await p.click('.dlg [data-oui]'); await p.waitForTimeout(700);
-    R.suppression_confirmee = (await p.evaluate(()=>window.CrochomptePont.lire().creations.length)) === 2;
-    R.commande_deliee = await p.evaluate(()=> { const s = window.CrochomptePont.lire(); return s.commandes.every(c=> c.cid === null || s.creations.some(x=>x.id===c.cid)) && s.commandes.some(c=>c.cid===null); });
+    R.archivage_confirme = await p.evaluate(()=>{ const s = window.CrochomptePont.lire(); return s.creations.length === 3 && s.creations.filter(c=>c.archive).length === 1; });
+    R.commande_garde_son_lien = await p.evaluate(()=> { const s = window.CrochomptePont.lire(); return s.commandes.every(c=> c.cid === null || s.creations.some(x=>x.id===c.cid)); });
 
     // 6. Tout remettre à zéro : il faut taper EFFACER
     await p.click('#nav >> text=Réglages'); await p.waitForTimeout(200);
@@ -125,11 +126,11 @@ async function connecter(p){
     await p.evaluate(()=>{ const s = window.CrochomptePont.lire(); s.reglages.mode = "complet";
       s.pieces = [{id:"pz", cid:"c1", prod:"encours", com:"atelier", cree:Date.now(), maj:Date.now(), termineLe:null, venduLe:null, prix:null, canal:"etsy", client:"", note:"", sortie:false, coutFige:0, mesure:{prep:0,crochet:0,assemb:0,finition:0,emball:0}, sessions:[]}];
       window.CrochomptePont.ecrire(s); });
-    await p.click('#menu-btn'); await p.click('#mm-liste >> text=Atelier'); await p.waitForTimeout(700);
+    await p.click('#menu-btn'); await p.click('#mm-liste >> text=Mes pièces'); await p.waitForTimeout(700);
     await p.click('tr[data-pid="pz"] [data-role="del"]'); await p.waitForTimeout(250);
     R.piece_supprimee = await p.evaluate(()=> window.CrochomptePont.lire().pieces.length === 0);
-    R.toast_annuler = await p.isVisible('.toast button');
-    await p.click('.toast button'); await p.waitForTimeout(250);
+    R.toast_annuler = await p.isVisible('.toast button:has-text("Annuler")');
+    await p.click('.toast button:has-text("Annuler")'); await p.waitForTimeout(250);
     R.piece_restauree = await p.evaluate(()=> window.CrochomptePont.lire().pieces.length === 1);
     R.pas_de_debordement = await p.evaluate(()=> document.documentElement.scrollWidth <= window.innerWidth + 1);
     await p.click('#brand'); await p.waitForTimeout(300);

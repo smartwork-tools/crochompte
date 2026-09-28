@@ -12,15 +12,19 @@ appareil à l'autre.
 
 | Fichier | Rôle |
 |---|---|
-| `index.html` | l'application entière. Elle fonctionne seule, sans rien d'autre |
+| `index.html` | la page : styles, structure, politique de sécurité |
+| `app.js` | l'application elle-même (calculs, écrans). Chargée par `index.html` |
+| `REGLES-METIER.md` | **les règles de calcul et de gestion**, à relire avant toute modification |
 | `sync.js` | comptes et synchronisation. **Facultatif** |
+| `vendor/supabase/` | la bibliothèque de connexion Supabase, servie par le site lui-même (plus de CDN extérieur) |
+| `schema-fiabilite.sql`, `schema-factures.sql`, `schema-securite-moderation.sql`, `schema-versions.sql` | compléments de la base : heure serveur, limites de tentatives, factures et avoirs, sécurité et modération |
 | `config.example.js` | modèle de `config.js` (adresse du projet Supabase et clé publique) |
 | `schema.sql` | les tables et les règles de sécurité, à coller dans Supabase |
 | `schema-pseudo.sql` | la table des pseudos et les fonctions de vérification, à coller dans Supabase |
 | `schema-patrons-publics.sql` | la bibliothèque de patrons partagés, à coller dans Supabase |
 | `LICENSE` | tous droits réservés — nécessaire parce que le dépôt GitHub est public |
 | `.gitignore` | fichiers à ne pas envoyer sur GitHub |
-| `confidentialite.html` | politique de confidentialité — **à compléter** |
+| `confidentialite.html` | politique de confidentialité (à relire à chaque changement de ce que l'application garde) |
 | `RGPD.md` | liste de contrôle : ce qui est fait, ce qui reste à ta charge |
 | `supabase/functions/inscription/` | fonction serveur : création du compte (pseudo, adresse e-mail, mot de passe, « 15 ans ou plus ») |
 | `supabase/functions/connexion/` | fonction serveur : connexion avec pseudo **ou** adresse e-mail + mot de passe |
@@ -33,9 +37,9 @@ appareil à l'autre.
 | `vendor/pdfjs/` | pdf.js (Mozilla, licence Apache 2.0) : lecture des PDF sur l'appareil, chargé seulement à l'import d'un PDF |
 | `tests/` | les tests automatiques (voir `tests/README.md`) |
 
-> Pas de `netlify.toml` dans ce dossier : ce fichier ne sert qu'avec l'hébergeur
-> Netlify. Comme tu utilises **GitHub Pages**, il ne t'est d'aucune utilité —
-> et un fichier inutile n'a rien à faire dans le dépôt.
+> `netlify.toml` ne sert qu'avec l'hébergeur Netlify. Avec **GitHub Pages**, il
+> est ignoré (comme `_headers`) : la politique de sécurité est donc aussi posée
+> dans `index.html` (balise `meta`), qui, elle, s'applique partout.
 
 **Sans `config.js`, l'application marche exactement comme avant** : tout reste
 dans le navigateur, rien ne part nulle part. C'est ce qui permet de servir la
@@ -57,8 +61,10 @@ Compte 30 minutes la première fois. Tout est gratuit à cette échelle.
 ### 1. Créer la base — Supabase
 
 1. Va sur **supabase.com**, crée un compte, puis un nouveau projet.
-   Choisis une région européenne (Francfort ou Paris) : les données d'artisanes
-   françaises n'ont aucune raison de traverser l'Atlantique.
+   Choisis une région européenne : les données d'artisanes françaises n'ont
+   aucune raison de traverser l'Atlantique. La politique de confidentialité
+   indique la région du projet : si tu en changes, mets-la à jour (la région
+   se lit dans *Project Settings → General*).
 2. Note le mot de passe de la base quand il s'affiche — il ne sera plus montré.
 3. Ouvre **SQL Editor**, colle tout le contenu de `schema.sql`, clique **Run**.
    Tu dois voir *Success*. Ça crée la table des ateliers, le stockage des
@@ -79,7 +85,18 @@ Compte 30 minutes la première fois. Tout est gratuit à cette échelle.
    > « Bibliothèque partagée » affiche simplement qu'elle n'est pas installée.
    > Lis la section correspondante de `RGPD.md` avant de l'ouvrir au public :
    > héberger les patrons d'autres personnes t'engage.
-6. Va dans **Project Settings → API** et copie deux valeurs :
+6. Colle ensuite, dans cet ordre, `schema-versions.sql`, `schema-signalements.sql`,
+   `schema-fiabilite.sql`, `schema-factures.sql` et **en dernier**
+   `schema-securite-moderation.sql` (chacun : coller, **Run**). Tous sont
+   rejouables sans risque, **à condition de toujours finir par
+   `schema-securite-moderation.sql`** : si tu rejoues un autre fichier plus
+   tard, rejoue celui-ci juste après (il remet les protections des fonctions).
+7. **Authentication → Sign In / Providers → Email** : règle la longueur
+   minimale du mot de passe à **12** et active la protection contre les mots
+   de passe divulgués si ton offre la propose. (L'application l'exige déjà ;
+   ce réglage l'impose aussi à quelqu'un qui appellerait le serveur
+   directement.)
+8. Va dans **Project Settings → API** et copie deux valeurs :
    - **Project URL** (`https://xxxx.supabase.co`)
    - **anon public** (une longue chaîne qui commence par `eyJ`)
 
@@ -117,10 +134,12 @@ supabase functions deploy mot-de-passe-oublie
 
 > **Important** : l'outil `supabase` exige que chaque fonction se trouve dans
 > `supabase/functions/<nom>/index.ts`, exactement à cet endroit — c'est pour
-> ça que ce dossier contient un sous-dossier `supabase/functions/`, et non
-> plus le dossier `edge/` d'une version antérieure de ce guide.
+> ça que ce dossier contient un sous-dossier `supabase/functions/`. Le dossier
+> `edge/` en est une **copie identique**, pratique pour copier-coller dans
+> l'éditeur du tableau de bord : si tu modifies une fonction, modifie les deux
+> (ou supprime `edge/` et colle depuis `supabase/functions/`).
 
-**Sans ces trois fonctions déployées, personne ne peut créer de compte ni se
+**Sans ces quatre fonctions déployées, personne ne peut créer de compte ni se
 connecter.** Fais-le avant d'annoncer le site à qui que ce soit.
 
 ### 3. Régler l'envoi des courriels
@@ -291,6 +310,22 @@ dans Réglages.
   `auth.uid()`, jamais sur un identifiant fourni par le navigateur.
 - **Âge minimum vérifié à deux niveaux** : un message clair dans la fonction
   `inscription`, et une contrainte dans la base en filet de sécurité.
+
+## Modération de la bibliothèque partagée
+
+Un signalement est motivé (catégorie + explication). Trois signalements
+mettent le patron **en revue** sans le retirer ; deux signalements graves
+(contenu illicite ou dangereux) le **masquent** en attendant. La décision
+t'appartient, avec un motif que l'autrice verra :
+
+1. **SQL Editor** → `select * from public.moderation_a_traiter;` (patrons à
+   examiner, avec le détail des signalements et les contestations).
+2. Pour décider :
+   `select public.decider_moderation('<id>', 'maintenu', 'Patron original, signalement non fondé.');`
+   ou
+   `select public.decider_moderation('<id>', 'retire', 'Reproduction du patron d''une autre créatrice.');`
+
+Seule l'administration (le SQL Editor) peut appeler cette fonction.
 
 ## Effacement du compte — une étape à ne pas oublier
 

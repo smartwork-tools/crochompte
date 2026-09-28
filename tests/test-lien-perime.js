@@ -4,7 +4,7 @@ const path = require('path');
   const b = await chromium.launch(require('./outils').lancement);
   const p = await b.newPage({serviceWorkers:'block', viewport:{width:1100, height:900}});
   const errs=[]; p.on('pageerror', e=>errs.push(e.message));
-  await p.route('**/cdn.jsdelivr.net/**', r=>r.fulfill({path:path.join(__dirname,'faux-supabase.js'),contentType:'application/javascript'}));
+  await p.route('**/vendor/supabase/**', r=>r.fulfill({path:path.join(__dirname,'faux-supabase.js'),contentType:'application/javascript'}));
   await p.goto('http://127.0.0.1:8934/index.html#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired');
   await p.waitForTimeout(900);
   const t = await p.textContent('#main');

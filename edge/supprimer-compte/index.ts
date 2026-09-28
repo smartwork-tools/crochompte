@@ -13,9 +13,17 @@
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
+function origineAutorisee(o: string | null): string {
+  const ok = !!o && (/^https:\/\/(www\.)?crochompte\.com$/.test(o) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(o));
+  return ok ? o! : "https://crochompte.com";
+}
+
 Deno.serve(async (req: Request) => {
   const cors = {
-    "Access-Control-Allow-Origin": "*",
+    // Seul le site Crochompte (et un poste de développement) peut appeler
+    // cette fonction depuis un navigateur.
+    "Access-Control-Allow-Origin": origineAutorisee(req.headers.get("origin")),
+    "Vary": "Origin",
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
   };
@@ -61,7 +69,8 @@ Deno.serve(async (req: Request) => {
 
   const { error: e2 } = await admin.auth.admin.deleteUser(user.id);
   if (e2) {
-    return new Response(JSON.stringify({ erreur: e2.message }), {
+    console.error("supprimer-compte : échec de deleteUser", e2.message);
+    return new Response(JSON.stringify({ erreur: "La suppression n'a pas pu aboutir. Réessaie, ou écris à bonjour@crochompte.com." }), {
       status: 500, headers: { ...cors, "Content-Type": "application/json" },
     });
   }

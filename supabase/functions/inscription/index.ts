@@ -65,9 +65,26 @@ function siteAutorise(v: unknown): string {
   return defaut;
 }
 
+function origineAutorisee(o: string | null): string {
+  const ok = !!o && (/^https:\/\/(www\.)?crochompte\.com$/.test(o) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(o));
+  return ok ? o! : "https://crochompte.com";
+}
+
+// Les messages techniques de Supabase ne sont jamais montrés tels quels.
+function messageInscription(brut: string): string {
+  const m = String(brut || "").toLowerCase();
+  if (m.includes("password")) return "Ce mot de passe n'est pas accepté : choisis-en un plus long ou moins courant.";
+  if (m.includes("rate limit") || m.includes("too many")) return "Trop d'inscriptions en peu de temps. Réessaie dans quelques minutes.";
+  if (m.includes("email")) return "Cette adresse de courriel n'est pas acceptée. Vérifie-la.";
+  return "L'inscription n'a pas pu aboutir. Réessaie dans un moment.";
+}
+
 Deno.serve(async (req: Request) => {
   const cors = {
-    "Access-Control-Allow-Origin": "*",
+    // Seul le site Crochompte (et un poste de développement) peut appeler
+    // cette fonction depuis un navigateur.
+    "Access-Control-Allow-Origin": origineAutorisee(req.headers.get("origin")),
+    "Vary": "Origin",
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
   };
@@ -126,8 +143,13 @@ Deno.serve(async (req: Request) => {
   if (!RE_COURRIEL.test(email)) {
     return json({ erreur: "Cette adresse ne ressemble pas à une adresse de courriel." }, 400);
   }
-  if (motDePasse.length < 8) {
-    return json({ erreur: "Le mot de passe doit faire au moins 8 caractères." }, 400);
+  // 12 caractères au moins (recommandation de la CNIL pour un mot de passe
+  // seul, protégé par une limite de tentatives).
+  if (motDePasse.length < 12) {
+    return json({ erreur: "Le mot de passe doit faire au moins 12 caractères. Une phrase courte que tu retiens facilement convient très bien." }, 400);
+  }
+  if (motDePasse.length > 200) {
+    return json({ erreur: "Ce mot de passe est trop long (200 caractères au plus)." }, 400);
   }
 
   const url = Deno.env.get("SUPABASE_URL")!;
@@ -194,7 +216,7 @@ Deno.serve(async (req: Request) => {
     email, password: motDePasse, options: { emailRedirectTo, data: donnees },
   });
   let { data, error } = await inscrire();
-  if (error) return json({ erreur: error.message }, 400);
+  if (error) return json({ erreur: messageInscription(error.message) }, 400);
 
   // Une adresse déjà enregistrée et confirmée renvoie un « succès » sans
   // identité : c'est le signal officiel de Supabase pour ce cas.
@@ -209,13 +231,15 @@ Deno.serve(async (req: Request) => {
   if (!data.user.email_confirmed_at && anciennete(data.user.created_at) > 60_000) {
     await admin.auth.admin.deleteUser(data.user.id);
     ({ data, error } = await inscrire());
-    if (error) return json({ erreur: error.message }, 400);
+    if (error) return json({ erreur: messageInscription(error.message) }, 400);
     if (!data.user) return json({ erreur: "Inscription impossible pour l'instant. Réessaie dans un moment." }, 500);
   }
 
   const { error: eRes } = await admin.from("pseudos").insert({
     user_id: data.user.id, pseudo, pseudo_cle: pseudo, courriel: email,
-    prenom: prenom || null, nom: nom || null, date_naissance: dateNaissance || null,
+    // La date de naissance sert seulement à vérifier l'âge ci-dessus : elle
+    // n'est pas conservée (minimisation des données).
+    prenom: prenom || null, nom: nom || null, date_naissance: null,
     ville: ville || null, pays: pays || null, type_activite: typeActivite || null,
   });
   if (eRes) {

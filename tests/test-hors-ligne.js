@@ -13,7 +13,7 @@ const R = {};
   /* ── 1. une première visite NORMALE, en ligne : la session est mémorisée ── */
   let p = await ctx.newPage();
   p.on('pageerror', e => errs.push('A:' + e.message));
-  await p.route('**/cdn.jsdelivr.net/**', r=>r.fulfill({path:path.join(__dirname,'faux-supabase-persistant.js'),contentType:'application/javascript'}));
+  await p.route('**/vendor/supabase/**', r=>r.fulfill({path:path.join(__dirname,'faux-supabase-persistant.js'),contentType:'application/javascript'}));
   await p.route('**/functions/v1/connexion', r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({access_token:'AT',refresh_token:'RT'})}));
   await p.goto('http://127.0.0.1:8936/index.html');
   await p.waitForTimeout(400);
@@ -29,7 +29,7 @@ const R = {};
   /* ── 2. retour SANS RÉSEAU : le module ne peut pas se charger du tout ── */
   p = await ctx.newPage();
   p.on('pageerror', e => errs.push('B:' + e.message));
-  await p.route('**/cdn.jsdelivr.net/**', r=>r.abort());   // plus de réseau
+  await p.route('**/vendor/supabase/**', r=>r.abort());   // plus de réseau
   await p.goto('http://127.0.0.1:8936/index.html');
   await p.waitForTimeout(8200);                            // au-delà du délai de 7 s
   const t = await p.textContent('#main');
@@ -58,7 +58,7 @@ const R = {};
   p = await ctx.newPage();
   p.on('pageerror', e => errs.push('C:' + e.message));
   let envoye = null;
-  await p.route('**/cdn.jsdelivr.net/**', r=>r.fulfill({path:path.join(__dirname,'faux-supabase-persistant.js'),contentType:'application/javascript'}));
+  await p.route('**/vendor/supabase/**', r=>r.fulfill({path:path.join(__dirname,'faux-supabase-persistant.js'),contentType:'application/javascript'}));
   await p.goto('http://127.0.0.1:8936/index.html');
   await p.waitForTimeout(1500);
   envoye = await p.evaluate(()=> window.__fauxEnvois || null);

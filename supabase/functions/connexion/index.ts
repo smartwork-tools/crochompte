@@ -19,9 +19,17 @@
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
+function origineAutorisee(o: string | null): string {
+  const ok = !!o && (/^https:\/\/(www\.)?crochompte\.com$/.test(o) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(o));
+  return ok ? o! : "https://crochompte.com";
+}
+
 Deno.serve(async (req: Request) => {
   const cors = {
-    "Access-Control-Allow-Origin": "*",
+    // Seul le site Crochompte (et un poste de développement) peut appeler
+    // cette fonction depuis un navigateur.
+    "Access-Control-Allow-Origin": origineAutorisee(req.headers.get("origin")),
+    "Vary": "Origin",
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
   };
@@ -54,9 +62,15 @@ Deno.serve(async (req: Request) => {
   // connexion fonctionne comme avant.)
   const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "inconnue";
   try {
-    const { data: n1 } = await admin.rpc("compter_tentative", { p_cle: "cx:" + identifiant.toLowerCase() });
+    // Trois compteurs : identifiant + adresse IP (10), adresse IP (50), et
+    // identifiant toutes adresses confondues (100). Une personne mal
+    // intentionnée qui tape le pseudo d'une autre ne bloque qu'elle-même ;
+    // une attaque répartie sur beaucoup d'adresses reste plafonnée.
+    const cle = identifiant.toLowerCase();
+    const { data: n1 } = await admin.rpc("compter_tentative", { p_cle: "cx:" + cle + "|" + ip });
     const { data: n2 } = await admin.rpc("compter_tentative", { p_cle: "cx-ip:" + ip });
-    if ((Number(n1) || 0) > 10 || (Number(n2) || 0) > 50) {
+    const { data: n3 } = await admin.rpc("compter_tentative", { p_cle: "cx:" + cle });
+    if ((Number(n1) || 0) > 10 || (Number(n2) || 0) > 50 || (Number(n3) || 0) > 100) {
       return json({ erreur: "Trop de tentatives de connexion. Patiente 15 minutes, puis réessaie." }, 429);
     }
   } catch (_e) { /* compteur indisponible : on continue */ }

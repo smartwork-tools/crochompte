@@ -5,7 +5,7 @@ const path = require('path');
   const b = await chromium.launch(require('./outils').lancement);
   const p = await b.newPage({serviceWorkers:'block', viewport:{width:420, height:1000}});
 
-  await p.route('**/cdn.jsdelivr.net/**', route => {
+  await p.route('**/vendor/supabase/**', route => {
     route.fulfill({ path: path.join(__dirname,'faux-supabase.js'), contentType: 'application/javascript' });
   });
   let appelsProfil = 0;

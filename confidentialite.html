@@ -58,15 +58,9 @@
 <a class="retour" href="index.html">← Retour à l'application</a>
 
 <h1>Politique de confidentialité</h1>
-<p class="date">Dernière mise à jour : 25 septembre 2026.</p>
+<p class="date">Dernière mise à jour : 27 septembre 2026.</p>
 
-<div class="todo">
-  <p><b>À COMPLÉTER AVANT LA MISE EN LIGNE.</b> Les passages entre crochets sont
-  les seuls que tu dois remplir. Ils sont obligatoires : le règlement impose que
-  la personne responsable des données soit identifiable, avec un moyen de la
-  joindre. Une politique sans nom ni adresse ne vaut rien.</p>
-  <p>Supprime ce bloc une fois les crochets remplis.</p>
-</div>
+
 
 <h2>Qui est responsable de tes données</h2>
 <p>
@@ -88,7 +82,7 @@
   <tr><th>Donnée</th><th>Pourquoi</th><th>Combien de temps</th></tr>
   <tr>
     <td data-l="Donnée">Ton pseudo</td>
-    <td data-l="Pourquoi">Te reconnaître à la connexion. Jamais montré à personne d'autre.</td>
+    <td data-l="Pourquoi">Te reconnaître à la connexion. Jamais montré à personne d'autre, sauf si tu choisis toi-même de l'écrire comme nom d'autrice d'un patron partagé.</td>
     <td data-l="Combien de temps">Jusqu'à l'effacement de ton compte</td>
   </tr>
   <tr>
@@ -126,7 +120,35 @@
     <td data-l="Pourquoi">Les afficher dans ton atelier</td>
     <td data-l="Combien de temps">Jusqu'à l'effacement de ton compte</td>
   </tr>
+  <tr>
+    <td data-l="Donnée">Les 30 dernières versions de ton atelier</td>
+    <td data-l="Pourquoi">Revenir en arrière après une erreur, ou si deux appareils ont modifié ton atelier en même temps</td>
+    <td data-l="Combien de temps">Les plus anciennes sont effacées au-delà de 30 ; toutes à l'effacement de ton compte</td>
+  </tr>
+  <tr>
+    <td data-l="Donnée">Tes factures et avoirs émis (copie figée)</td>
+    <td data-l="Pourquoi">Garantir une numérotation sans trou ni doublon, et te permettre de les retrouver</td>
+    <td data-l="Combien de temps">Jusqu'à l'effacement de ton compte. Tu dois toi-même conserver tes factures 10 ans : télécharge ton registre avant d'effacer ton compte</td>
+  </tr>
+  <tr>
+    <td data-l="Donnée">Tentatives de connexion : identifiant tapé et adresse IP</td>
+    <td data-l="Pourquoi">Bloquer les essais de mots de passe à répétition</td>
+    <td data-l="Combien de temps">Environ 24 heures (effacées automatiquement)</td>
+  </tr>
+  <tr>
+    <td data-l="Donnée">Si tu signales un patron : le motif et ton explication</td>
+    <td data-l="Pourquoi">Examiner le signalement et motiver la décision</td>
+    <td data-l="Combien de temps">Tant que le patron existe ; à l'effacement de ton compte</td>
+  </tr>
 </table>
+<h2>Les données de tes clientes</h2>
+<p>Si tu notes des commandes, tu y enregistres le nom, le moyen de contact et
+éventuellement l'adresse de tes clientes. Pour ces données-là, c'est
+<b>toi</b> la responsable : tu décides de ce que tu notes et pourquoi.
+Crochompte les conserve pour toi, dans ton compte, sans jamais les lire ni
+les utiliser (rôle de sous-traitant, article 28 du RGPD). N'y note que ce qui
+est utile à la commande et à la facture, et efface les commandes dont tu n'as
+plus besoin (les factures, elles, se gardent 10 ans).</p>
 <p>À l'inscription, on ne te demande que ton pseudo, ton adresse e-mail, un mot de passe
 et de confirmer que tu as 15 ans ou plus. Les informations facultatives s'ajoutent, se
 corrigent et s'effacent à tout moment dans Réglages, rubrique « Mon compte ».</p>
@@ -177,6 +199,11 @@ celles-ci restent privées, dans ton compte, et ne peuvent pas être publiées.<
         <i>Data Privacy Framework</i> UE–États-Unis.</td>
   </tr>
   <tr>
+    <td data-l="Prestataire">Wikimedia Commons et Project Gutenberg</td>
+    <td data-l="Rôle">Certaines photos d'illustration du catalogue sont affichées depuis leurs serveurs : ton navigateur leur transmet alors ton adresse IP, comme pour toute image d'un autre site. Aucune autre donnée.</td>
+    <td data-l="Lieu">États-Unis</td>
+  </tr>
+  <tr>
     <td data-l="Prestataire">Brevo (Sendinblue SAS)</td>
     <td data-l="Rôle">Envoi des e-mails liés à ton compte : confirmation de ton adresse
         et lien de changement de mot de passe. Aucun e-mail publicitaire.</td>
@@ -192,7 +219,7 @@ pour le compte du responsable ci-dessus, et pour rien d'autre.</p>
   <li><b>Consulter et emporter tes données</b> — l'export de sauvegarde, dans
       Réglages, te rend l'intégralité de ton atelier dans un fichier lisible.</li>
   <li><b>Corriger</b> ce qui est inexact — directement dans l'application.</li>
-  <li><b>Tout effacer</b> — le bouton « Effacer mon compte », dans Réglages,
+  <li><b>Tout effacer</b> — le bouton « Supprimer mon compte », dans Réglages › Mon compte,
       supprime définitivement ton atelier, tes photos et ton compte.
       C'est immédiat et irréversible.</li>
   <li><b>T'opposer</b> ou demander une limitation : écris à l'adresse ci-dessus.</li>
@@ -208,7 +235,9 @@ pour le compte du responsable ci-dessus, et pour rien d'autre.</p>
       dès qu'il arrive sur le serveur, par la brique d'authentification de
       Supabase. Personne — pas même nous — ne peut le consulter.</li>
   <li>Ton pseudo n'est <b>jamais montré à personne d'autre</b> qu'à toi : il
-      sert uniquement à te reconnecter, il n'est ni public ni partagé.</li>
+      sert uniquement à te reconnecter. Quand tu partages un patron, c'est toi
+      qui écris le nom d'autrice affiché ; ton pseudo n'est jamais mis à sa
+      place sans toi.</li>
   <li>Ton adresse e-mail sert à confirmer que le compte est le tien, à
       t'envoyer un lien en cas de mot de passe oublié, et — si tu le
       préfères à ton pseudo — à te reconnecter. Elle n'est jamais montrée à

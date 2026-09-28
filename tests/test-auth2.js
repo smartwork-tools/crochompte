@@ -8,7 +8,7 @@ const path = require('path');
   p.on('pageerror', e => erreurs.push('PAGEERROR: ' + e.message));
   p.on('console', m => { if (m.type() === 'error') erreurs.push('CONSOLE: ' + m.text()); });
 
-  await p.route('**/cdn.jsdelivr.net/**', route => {
+  await p.route('**/vendor/supabase/**', route => {
     route.fulfill({ path: path.join(__dirname,'faux-supabase.js'), contentType: 'application/javascript' });
   });
 
@@ -138,10 +138,18 @@ const path = require('path');
 
     // Changer le mot de passe
     await p.click('#sy-mdp-ouvrir');
-    await p.fill('#sy-m1', 'nouveaumdp1'); await p.fill('#sy-m2', 'nouveaumdp2');
+    await p.fill('#sy-m0', 'motdepasse123');
+    await p.fill('#sy-m1', 'court'); await p.fill('#sy-m2', 'court');
+    await p.click('#sy-mdp-form button[type=submit]'); await p.waitForTimeout(150);
+    resultats.changement_mdp_refuse_si_court = (await p.textContent('#sy-m-err')).includes('12 caractères');
+    await p.fill('#sy-m1', 'nouveau mot de passe 1'); await p.fill('#sy-m2', 'nouveau mot de passe 2');
     await p.click('#sy-mdp-form button[type=submit]'); await p.waitForTimeout(150);
     resultats.changement_mdp_refuse_si_differents = (await p.textContent('#sy-m-err')).includes('identiques');
-    await p.fill('#sy-m2', 'nouveaumdp1');
+    await p.fill('#sy-m2', 'nouveau mot de passe 1');
+    await p.fill('#sy-m0', 'mauvais');
+    await p.click('#sy-mdp-form button[type=submit]'); await p.waitForTimeout(300);
+    resultats.changement_mdp_refuse_si_actuel_faux = (await p.textContent('#sy-m-err')).includes('actuel');
+    await p.fill('#sy-m0', 'motdepasse123');
     await p.click('#sy-mdp-form button[type=submit]'); await p.waitForTimeout(300);
     resultats.changement_mdp_ok = (await p.textContent('body')).includes('Mot de passe modifié');
 

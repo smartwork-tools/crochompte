@@ -7,7 +7,7 @@ const {chromium} = require('./outils').playwright;
   // sync.js ne peut pas se charger (bibliothèque injoignable) : le portail
   // ne recevra jamais d'annonce d'état -> l'écran d'erreur doit apparaître
   // après le délai, plutôt qu'un spinner infini.
-  await p.route('**/cdn.jsdelivr.net/**', route => route.abort());
+  await p.route('**/vendor/supabase/**', route => route.abort());
 
   const resultats = {};
   try {

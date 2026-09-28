@@ -28,9 +28,17 @@ function siteAutorise(v: unknown): string {
   return defaut;
 }
 
+function origineAutorisee(o: string | null): string {
+  const ok = !!o && (/^https:\/\/(www\.)?crochompte\.com$/.test(o) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(o));
+  return ok ? o! : "https://crochompte.com";
+}
+
 Deno.serve(async (req: Request) => {
   const cors = {
-    "Access-Control-Allow-Origin": "*",
+    // Seul le site Crochompte (et un poste de développement) peut appeler
+    // cette fonction depuis un navigateur.
+    "Access-Control-Allow-Origin": origineAutorisee(req.headers.get("origin")),
+    "Vary": "Origin",
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
   };
@@ -66,8 +74,10 @@ Deno.serve(async (req: Request) => {
   // La réponse reste la même, pour ne rien révéler.
   const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "inconnue";
   try {
-    const { data: n1 } = await admin.rpc("compter_tentative", { p_cle: "mdp:" + identifiant.toLowerCase() });
+    const { data: n1 } = await admin.rpc("compter_tentative", { p_cle: "mdp:" + identifiant.toLowerCase() + "|" + ip });
     const { data: n2 } = await admin.rpc("compter_tentative", { p_cle: "mdp-ip:" + ip });
+    const { data: n3 } = await admin.rpc("compter_tentative", { p_cle: "mdp:" + identifiant.toLowerCase() });
+    if ((Number(n3) || 0) > 10) return json(REPONSE);
     if ((Number(n1) || 0) > 3 || (Number(n2) || 0) > 20) return json(REPONSE);
   } catch (_e) { /* compteur indisponible : on continue */ }
   const colonne = identifiant.includes("@") ? "courriel" : "pseudo_cle";

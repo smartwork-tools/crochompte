@@ -1,0 +1,7 @@
+Bibliothèque de connexion Supabase (supabase-js 2.116.0, licence MIT),
+regroupée en un seul fichier avec esbuild :
+  npm install @supabase/supabase-js@2.116.0 esbuild
+  echo 'export { createClient } from "@supabase/supabase-js";' > entree.js
+  npx esbuild entree.js --bundle --format=esm --minify --target=es2019 --platform=browser --legal-comments=eof --outfile=supabase.min.mjs
+Elle est servie par le site lui-même, et non plus par un CDN extérieur :
+personne d'autre ne peut modifier le code qui gère les connexions.
