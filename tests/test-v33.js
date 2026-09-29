@@ -64,7 +64,7 @@ async function connecter(p){
 
     // 3. Historique : fiche → précédent → liste
     await p.click('#nav >> text=Mes créations'); await p.waitForTimeout(300);
-    await p.locator('table tbody tr').first().click(); await p.waitForTimeout(300);
+    await p.locator('.crea-id').first().click(); await p.waitForTimeout(300);
     R.fiche_ouverte = (await p.textContent('#nav [aria-current="true"]')).includes('Fiche');
     await p.goBack(); await p.waitForTimeout(400);
     R.precedent_revient_liste = (await p.textContent('#nav [aria-current="true"]')).trim() === 'Mes créations';
@@ -74,10 +74,10 @@ async function connecter(p){
     R.suivant_fonctionne = (await p.textContent('#nav [aria-current="true"]')).trim() === 'Mes créations';
 
     // 4. Quitter une fiche modifiée : confirmation
-    await p.locator('table tbody tr').first().click(); await p.waitForTimeout(300);
+    await p.locator('.crea-id').first().click(); await p.waitForTimeout(300);
     await p.click('.savebar button:has-text("Fermer")'); await p.waitForTimeout(400);
     R.fermer_sans_modif_direct = (await p.textContent('#nav [aria-current="true"]')).trim() === 'Mes créations' && !(await p.isVisible('.dlg'));
-    await p.locator('table tbody tr').first().click(); await p.waitForTimeout(300);
+    await p.locator('.crea-id').first().click(); await p.waitForTimeout(300);
     const champNom = p.locator('#main input[type=text]').first();
     await champNom.fill('Nom modifié'); await p.waitForTimeout(150);
     await p.click('.savebar button:has-text("Fermer")'); await p.waitForTimeout(250);
@@ -126,7 +126,7 @@ async function connecter(p){
     await p.evaluate(()=>{ const s = window.CrochomptePont.lire(); s.reglages.mode = "complet";
       s.pieces = [{id:"pz", cid:"c1", prod:"encours", com:"atelier", cree:Date.now(), maj:Date.now(), termineLe:null, venduLe:null, prix:null, canal:"etsy", client:"", note:"", sortie:false, coutFige:0, mesure:{prep:0,crochet:0,assemb:0,finition:0,emball:0}, sessions:[]}];
       window.CrochomptePont.ecrire(s); });
-    await p.click('#menu-btn'); await p.click('#mm-liste >> text=Mes pièces'); await p.waitForTimeout(700);
+    await p.click('#menu-btn'); await p.click('#mm-liste >> text=Mes créations'); await p.waitForTimeout(700);
     await p.click('tr[data-pid="pz"] [data-role="del"]'); await p.waitForTimeout(250);
     R.piece_supprimee = await p.evaluate(()=> window.CrochomptePont.lire().pieces.length === 0);
     R.toast_annuler = await p.isVisible('.toast button:has-text("Annuler")');

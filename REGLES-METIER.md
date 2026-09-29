@@ -4,9 +4,9 @@ Ce document décrit ce que l'application calcule et comment elle se comporte.
 Il sert de référence : **toute modification du code qui change une de ces
 règles doit d'abord changer ce document**, et les tests correspondants
 (`tests/test-v37.js`, `tests/test-v37-lot10.js`, `tests/test-v37-lot11.js`,
-`tests/test-v38.js`, `tests/sql/`).
+`tests/test-v38.js`, `tests/test-v39.js`, `tests/sql/`).
 
-Dernière mise à jour : V38 (28 septembre 2026).
+Dernière mise à jour : V39 (28 septembre 2026).
 
 ---
 
@@ -199,6 +199,31 @@ figées une fois, avec les chiffres connus (marquées « estimé »).
 
 ## 5. Créations, pièces et commandes
 
+- **Un seul écran « Mes créations »** : chaque création (le modèle et sa
+  fiche de coût, l'estimation) avec, dessous, chaque **pièce** fabriquée
+  (la réalité). Il n'y a plus d'onglet « Mes pièces » ; l'onglet de la fiche
+  ouverte porte le nom de la création (« Fiche : Lapin »).
+- **Coût d'une pièce** (`coutPiece`) = matières (pesées si on l'a fait, sinon
+  celles de la fiche, + matières des retouches) + main-d'œuvre (temps
+  chronométré, complété par la fiche pour les postes non mesurés, au taux
+  visé) + part des frais fixes + frais de vente + cotisations. Le détail
+  montre à part conditionnement (emballage) et transport (expédition).
+  Prix de vente = celui saisi sur la pièce, sinon celui de la fiche ; prix
+  cible = prix juste de la fiche ; **gain** = prix − coût complet ; gain de
+  l'heure = (prix − coût hors main-d'œuvre) ÷ heures. Code couleur : vert
+  (≥ 90 % de l'objectif), orange (sous l'objectif), rouge (< 50 %, à perte,
+  ratée).
+- **Retouche** : passer une pièce « À retoucher » ouvre une note (motif,
+  matières ajoutées en €). Le temps chronométré pendant la retouche et ces
+  matières s'ajoutent au coût de la pièce (« dont retouches »).
+- **Pièce ratée** : son coût affiché = matières jetées (perte figée) + temps
+  passé ; gain = − ce coût. Les Indicateurs, eux, ne comptent en « pertes »
+  que les matières (voir §4).
+- **Accueil** : la phrase du mois dit l'encaissé et le nombre de pièces
+  terminées (ou le temps chronométré) ; le panneau « Reprendre » montre, dans
+  l'ordre : le chronomètre en cours, la fiche non enregistrée, la pièce en
+  cours ou à retoucher, sinon la dernière création touchée.
+
 - Une création qui a des **ventes ou des commandes** ne se supprime pas : elle
   s'**archive** (masquée des listes et des choix, historique intact,
   « Ressortir » possible).
@@ -206,6 +231,11 @@ figées une fois, avec les chiffres connus (marquées « estimé »).
   commande de la même création qui attend une pièce (la plus proche échéance
   d'abord, puis la plus ancienne) : l'argent est compté **une seule fois**,
   dans la commande — y compris dans l'« encaissé » de l'Atelier et de la fiche.
+- **Partager un patron** se fait depuis la liste « Mes patrons » (bouton
+  « Partager… »), jamais pendant la saisie, en deux temps : formulaire (nom
+  d'autrice, niveau, matériel, licence, déclaration de droits obligatoire),
+  puis rappel « visible par toutes » avec « Confirmer le partage » ou
+  « Annuler ». Sans texte (80 caractères), pas de partage.
 - **Patron d'une création** : au choix un patron personnel, ou un patron de
   la **bibliothèque partagée** (libre de droits, auteur et licence affichés) :
   il est d'abord copié dans « Mes patrons » puis relié à la fiche ; une
@@ -237,6 +267,10 @@ figées une fois, avec les chiffres connus (marquées « estimé »).
   (quantité × prix unitaire) + livraison facturée. Temps, bilan et besoins en
   matières s'additionnent sur tous les articles.
 - Une commande de N exemplaires d'une création relie **N pièces** au plus.
+- **Suivi** : la liste se filtre par étape (en cours, devis, livrées à
+  facturer, livrées et facturées, reste dû, annulées) et se cherche par
+  cliente, numéro ou article ; colonnes prix convenu, versé, reste dû ; une
+  commande livrée sans facture est marquée « à facturer ».
 - « Ce qu'il faut pour la fabriquer » : matières nécessaires, en stock, à
   acheter (avec le fournisseur le moins cher connu).
 - Cliente professionnelle : son **numéro de bon de commande** est repris sur

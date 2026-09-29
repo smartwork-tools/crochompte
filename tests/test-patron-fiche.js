@@ -21,7 +21,7 @@ const path = require('path');
   // ouvrir une création existante
   await p.click('#nav >> text=Mes créations'); await p.waitForTimeout(300);
   const cid = await p.evaluate(()=> window.CrochomptePont.lire().creations[0].id);
-  await p.locator('table tbody tr').first().click(); await p.waitForTimeout(400);
+  await p.locator('.crea-id').first().click(); await p.waitForTimeout(400);
   R.selecteur_present = await p.isVisible('#f-patron');
   R.options = (await p.$$eval('#f-patron option', os=>os.map(o=>o.textContent))).join(' | ');
   await p.selectOption('#f-patron', 'pp_1'); await p.waitForTimeout(400);
@@ -29,7 +29,7 @@ const path = require('path');
   await p.click('button:has-text("Enregistrer")'); await p.waitForTimeout(400);
   R.lien_enregistre = await p.evaluate((id)=> window.CrochomptePont.lire().creations.find(c=>c.id===id).patron, cid);
   // rouvrir : le lien est toujours là
-  await p.locator('table tbody tr').first().click(); await p.waitForTimeout(400);
+  await p.locator('.crea-id').first().click(); await p.waitForTimeout(400);
   R.rouvert_meme_patron = await p.inputValue('#f-patron');
   // côté Mes patrons, le lien apparaît aussi
   await p.screenshot({path:require('path').join(__dirname,'captures','patron-fiche.png'), clip:{x:0,y:100,width:1200,height:700}});

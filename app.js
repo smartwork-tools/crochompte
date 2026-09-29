@@ -1344,13 +1344,15 @@ function confirmer(o, siOui){
     '<div id="dlg-texte">'+
       String(o.texte || "").split("\n").filter(Boolean).map(function(x){ return '<p>'+esc(x)+'</p>'; }).join("")+
       (o.details && o.details.length ? '<ul>'+o.details.map(function(x){ return '<li>'+esc(x)+'</li>'; }).join("")+'</ul>' : '')+
-    '</div>'+
+    '</div><div class="dlg-contenu"></div>'+
     (o.saisie ? '<label class="f dlg-saisie"><span>Pour confirmer, tape <b>'+esc(o.saisie)+'</b></span>'+
       '<input type="text" id="dlg-champ" autocomplete="off" autocapitalize="off" spellcheck="false"></label>' : '')+
     '<div class="dlg-act">'+
-      '<button type="button" class="btn" data-non>'+esc(o.annuler || "Annuler")+'</button>'+
+      (o.sansAnnuler ? '' : '<button type="button" class="btn" data-non>'+esc(o.annuler || "Annuler")+'</button>')+
       '<button type="button" class="btn '+(o.danger ? 'danger-plein' : 'primary')+'" data-oui>'+esc(o.bouton || "Confirmer")+'</button>'+
     '</div></div>');
+  if (o.contenu) boite.querySelector(".dlg-contenu").appendChild(o.contenu);
+  if (o.large) boite.classList.add("large");
   fond.appendChild(boite);
   document.body.appendChild(fond);
   document.body.classList.add("menu-ouvert");
@@ -1376,7 +1378,7 @@ function confirmer(o, siOui){
     if (retourFocus && retourFocus.focus && document.contains(retourFocus)) try{ retourFocus.focus(); }catch(e){}
   }
   ouvrirCouche(retirer);
-  bNon.addEventListener("click", function(){ choix = "non"; fermerCouche(); });
+  if (bNon) bNon.addEventListener("click", function(){ choix = "non"; fermerCouche(); });
   fond.addEventListener("click", function(e){ if (e.target === fond) fermerCouche(); });
   boite.addEventListener("keydown", function(e){
     if (e.key === "Escape"){ e.preventDefault(); fermerCouche(); return; }
@@ -1392,7 +1394,7 @@ function confirmer(o, siOui){
     choix = "oui";
     fermerCouche(function(){ if (siOui) siOui(); });
   });
-  (champ || (o.danger ? bNon : bOui)).focus();
+  (champ || (o.danger && bNon ? bNon : bOui)).focus();
 }
 
 /* Boîte avec un champ de texte (et, au besoin, une liste de choix) :
@@ -1597,7 +1599,9 @@ var TABS = [
   {id:"creations",   nom:"Mes créations",  base:true},
   {id:"fiche",       nom:"Fiche en cours", brouillon:true},
   {id:"commandes",   nom:"Commandes",      base:true},
-  {id:"atelier",     nom:"Mes pièces"},
+  /* « Mes pièces » vit dans « Mes créations » depuis la V39 : l'entrée
+     reste connue pour les anciens liens, mais n'a plus d'onglet. */
+  {id:"atelier",     nom:"Mes pièces",     cache:true},
   {id:"patrons",     nom:"Mes patrons",    base:true},
   {id:"stock",       nom:"Matières",       base:true},
   {id:"indicateurs", nom:"Indicateurs",    base:true},
@@ -1608,6 +1612,7 @@ var TABS = [
 function onglets(){
   var complet = state.reglages.mode === "complet";
   return TABS.filter(function(t){
+    if (t.cache) return false;
     if (t.brouillon) return !!view.draft;
     /* La mise en route s'efface d'elle-même une fois tout renseigné :
        un onglet qui n'a plus rien à dire est du bruit. On y revient
@@ -1623,6 +1628,7 @@ function onglets(){
    exemple « ouvre CETTE commande », depuis un autre écran). */
 function aller(tab, opts){
   opts = opts || {};
+  if (tab === "atelier") tab = "creations";
   if (!opts.garderVue){
     if (tab !== "catalogue") view.modeleVu = null;
     if (tab !== "commandes") view.cmdVue = null;
@@ -1653,6 +1659,14 @@ function allerOnglet(id){
   }
   aller(id);
 }
+/* L'onglet de la fiche ouverte porte le nom de la création : « Fiche en
+   cours » ne disait pas de quoi il s'agissait. */
+function libelleOngletFiche(){
+  var d = view.draft; if (!d) return "Fiche en cours";
+  var nom = String(d.nom || "").trim();
+  if (!view.ficheId && !nom) return "Nouvelle fiche";
+  return "Fiche : " + (nom || "sans nom");
+}
 function renderNav(){
   var nav = document.getElementById("nav");
   var liste = document.getElementById("mm-liste");
@@ -1660,12 +1674,14 @@ function renderNav(){
   liste.innerHTML = "";
   document.body.classList.add("app-ouverte");
   onglets().forEach(function(t){
-    var b = el('<button type="button">'+esc(t.nom)+'</button>');
+    var nomT = t.brouillon ? libelleOngletFiche() : t.nom;
+    var b = el('<button type="button">'+esc(nomT)+'</button>');
     if (view.tab === t.id) b.setAttribute("aria-current","true");
+    if (t.brouillon) b.classList.add("ong-fiche");
     b.addEventListener("click", function(){ allerOnglet(t.id); });
     nav.appendChild(b);
     /* Même liste, en colonne, pour le menu du téléphone. */
-    var m = el('<button type="button">'+esc(t.nom)+'</button>');
+    var m = el('<button type="button">'+esc(nomT)+'</button>');
     if (view.tab === t.id) m.setAttribute("aria-current","true");
     m.addEventListener("click", function(){ fermerMenuMobile(function(){ allerOnglet(t.id); }); });
     liste.appendChild(m);
@@ -1897,8 +1913,9 @@ function render(){
   if (atelierFerme()) return;
   if (figerHistorique()) sauverTout();
   document.body.classList.remove("avec-barre");
+  if (view.tab === "atelier") view.tab = "creations";
   var ongletT = TABS.filter(function(t){ return t.id === view.tab; })[0];
-  document.title = (ongletT ? ongletT.nom + " · " : "") + "Crochompte";
+  document.title = (ongletT ? (ongletT.brouillon ? libelleOngletFiche() : ongletT.nom) + " · " : "") + "Crochompte";
   oublierIndex();
   nettoyerBrouillons();
   var place = repererChamp();
@@ -1914,7 +1931,6 @@ function render(){
   else if (view.tab === "catalogue") view.modeleVu ? renderModeleDetail(main) : renderCatalogue(main);
   else if (view.tab === "creations") renderCreations(main);
   else if (view.tab === "fiche")     renderFiche(main);
-  else if (view.tab === "atelier")   renderAtelier(main);
   else if (view.tab === "indicateurs") renderIndicateurs(main);
   else if (view.tab === "stock")     renderStock(main);
   else                               renderReglages(main);
@@ -2116,7 +2132,7 @@ function pointsAFaire(){
     var pc = piece(ch.pid), crc = pc ? creation(pc.cid) : null;
     var depuis = Math.round((Date.now() - ch.debut) / 60000);
     ajout(depuis > 240 ? "warn" : "info", "Chronomètre en marche depuis " + dureeTexte(depuis),
-      crc ? "Sur « " + crc.nom + " »." : "", "Voir", function(){ aller("atelier"); });
+      crc ? "Sur « " + crc.nom + " »." : "", "Voir", function(){ aller("creations"); });
   }
 
   var ouvertes = commandesOuvertes().filter(function(c){ return c.statut !== "devis"; });
@@ -2217,16 +2233,23 @@ function renderAccueil(main){
   var vitrine = meilleure || calcs[calcs.length - 1] || null;
   var bmH = bornesIndicateur("mois");
   var encMois = vend ? sommeEntre(encaissements(), bmH.debut, bmH.fin) : 0;
+  var termMois = (state.pieces||[]).filter(function(p){ return p.termineLe && p.termineLe >= bmH.debut; }).length;
+  var minMois = minutesTravaillees(bmH.debut, bmH.fin);
   var nbPoints = pointsAFaire().length;
   var objectif = Number(r.tauxHoraire) || 0;
 
   var titre, lede;
+  var etTermine = termMois ? ' et terminé <span class="chiffre">' + termMois + '</span> pièce' + (termMois > 1 ? 's' : '') : '';
   if (!calcs.length){
     titre = (qui ? 'Bonjour ' + esc(qui) + '.' : 'Tu sais crocheter.') + '<span class="suite">Sais-tu ce que ton crochet te rapporte&nbsp;?</span>';
     lede = "Le fil, les chutes, les yeux de sécurité, le pochon, la commission de la plateforme, les cotisations — et surtout "+
            "tes heures. Crochompte compte tout à ta place et te répond en un chiffre : ce que tu gagnes de l'heure.";
   } else if (vend && encMois > 0){
-    titre = 'Bonjour' + (qui ? ' ' + esc(qui) : '') + ',<span class="suite">ce mois-ci, tu as encaissé <span class="chiffre">' + esc(eur(encMois)) + '</span>.</span>';
+    titre = 'Bonjour' + (qui ? ' ' + esc(qui) : '') + ',<span class="suite">ce mois-ci, tu as encaissé <span class="chiffre">' + esc(eur(encMois)) + '</span>' + etTermine + '.</span>';
+    lede = texteResume(nbPoints);
+  } else if (termMois > 0){
+    titre = 'Bonjour' + (qui ? ' ' + esc(qui) : '') + ',<span class="suite">ce mois-ci, tu as terminé <span class="chiffre">' + termMois + '</span> pièce' + (termMois > 1 ? 's' : '') +
+            (minMois >= 30 ? ' en <span class="chiffre">' + esc(dureeTexte(Math.round(minMois))) + '</span> de travail' : '') + '.</span>';
     lede = texteResume(nbPoints);
   } else if (meilleure && vend){
     titre = 'Bonjour' + (qui ? ' ' + esc(qui) : '') + ',<span class="suite">ta meilleure création te paie <span class="chiffre">' +
@@ -2239,6 +2262,7 @@ function renderAccueil(main){
   function texteResume(n){
     var morceaux = [];
     morceaux.push(n ? n + " point" + (n>1?"s":"") + " à regarder aujourd'hui" : "Rien d'urgent aujourd'hui");
+    if (minMois >= 30 && !(termMois > 0 && !(vend && encMois > 0))) morceaux.push(dureeTexte(Math.round(minMois)) + " chronométrées ce mois-ci");
     morceaux.push(calcs.length + " création" + (calcs.length>1?"s":"") + " calculée" + (calcs.length>1?"s":""));
     if (vend){ var nc = commandesOuvertes().length; if (nc) morceaux.push(nc + " commande" + (nc>1?"s":"") + " en cours"); }
     return morceaux.join(" · ") + ".";
@@ -2261,6 +2285,7 @@ function renderAccueil(main){
 
   var pv = hero.querySelector(".preuve");
   var demo = !vitrine;
+  if (!demo){ pv.appendChild(panneauReprise(vend)); pv.classList.add("reprise-p"); }
   var cv = demo ? creationDepuisModele("ami_moyen", "Amigurumi moyen", 32, "etsy") : vitrine.c;
   var rv = demo ? calculer(cv) : vitrine.r;
   var prixV = Number(cv.prix) || 0;
@@ -2268,7 +2293,10 @@ function renderAccueil(main){
     ? 'Exemple : amigurumi de 20 cm vendu ' + esc(eur(32)) + ' sur une plateforme'
     : (meilleure === vitrine && avecPrix.length > 1 ? 'Ta création la mieux payée : ' : 'Ta création ') +
       '<b>« ' + esc(cv.nom || "Sans nom") + ' »</b>' + (prixV ? ', vendue ' + esc(eur(prixV)) + ' · ' + esc(canal(cv.canal).nom) : '');
-  if (vend && prixV > 0 && !(rv.minutes > 0)){
+  if (!demo){
+    /* Le panneau « Reprendre » remplace la vitrine d'une création : on
+       entre dans son atelier, pas dans une publicité. */
+  } else if (vend && prixV > 0 && !(rv.minutes > 0)){
     pv.innerHTML = '<div class="t">' + entete + '</div><div class="rows">'+
       '<div class="row"><span>Prix de vente</span><span>' + esc(eur(prixV)) + '</span></div>'+
       '<div class="row"><span>Reste après matières, frais et cotisations</span><span>' + esc(eur(rv.reste)) + '</span></div></div>'+
@@ -2295,11 +2323,6 @@ function renderAccueil(main){
       (vend ? '<div class="row"><span>Prix qui paie ton objectif</span><span>' + esc(rv.prixObjectif > 0 ? eur(rv.prixObjectif) : "—") + '</span></div>' : '')+
       '</div><div class="big ok">' + esc(eur(rv.matieres)) + '</div>'+
       '<div class="cap">' + (vend ? "de matières. Donne-lui un prix de vente pour voir ce qu'elle te paie de l'heure." : "de matières pour cette pièce.") + '</div>';
-  }
-  if (!demo){
-    var lienV = el('<button type="button" class="lien">Ouvrir la fiche →</button>');
-    lienV.addEventListener("click", function(){ ouvrirFiche(cv.id); });
-    pv.appendChild(lienV);
   }
   main.appendChild(hero);
 
@@ -2373,7 +2396,8 @@ function renderAccueil(main){
   var tl = cMois.querySelector(".tiles");
   if (vend) tl.appendChild(tuile("Encaissé", eur(encM), texteVariation(encM, encP, "au mois dernier à la même date") || "argent reçu ce mois-ci", "acc-good"));
   tl.appendChild(tuile("Achats de matières", eur(achM), "entrées de stock avec leur prix"));
-  if (r.mode === "complet") tl.appendChild(tuile("Pièces terminées", String(termM), "suivies dans « Mes pièces »"));
+  if (r.mode === "complet") tl.appendChild(tuile("Pièces terminées", String(termM), "suivies dans « Mes créations »"));
+  if (r.mode === "complet" && minMois >= 1) tl.appendChild(tuile("Temps chronométré", dureeTexte(Math.round(minMois)), "sur tes pièces ce mois-ci"));
   else tl.appendChild(tuile("Créations calculées", String(creationsActives().length), "dans « Mes créations »"));
   if (vend) tl.appendChild(tuile("Commandes à fabriquer", String(plan2.n),
     plan2.n ? dureeTexte(plan2.heures*60) + " de travail promis" : "aucune pour l'instant"));
@@ -2410,6 +2434,67 @@ function renderAccueil(main){
     '<p style="margin:10px 0 0"><a href="confidentialite.html" target="_blank" rel="noopener">Politique de confidentialité</a> · '+
     '<a href="mailto:bonjour@crochompte.com">Nous écrire</a></p>'+
     '<p style="margin:10px 0 0;font-size:12px">© 2026 Crochompte. Tous droits réservés.</p></footer>'));
+}
+
+
+/* Le panneau de droite de l'Accueil : reprendre là où on s'est arrêtée. */
+function panneauReprise(vend){
+  var z = el('<div class="reprise"></div>');
+  var rp = reprise();
+  var obj = Number(state.reglages.tauxHoraire) || 0;
+  function ligneChiffre(c){
+    var x = calculer(c), st = verdictCalcul(x);
+    return vend && x.prix > 0 && x.heures > 0 ? '<b class="' + st.k + '">' + esc(eur(x.gainHoraire)) + ' / h</b>' : '<b>' + esc(eur(x.matieres)) + ' de matières</b>';
+  }
+  if (rp){
+    var t, d, acts = [];
+    if (rp.type === "chrono"){
+      t = "Chronomètre en cours sur « " + rp.c.nom + " »";
+      d = dureeLisible(minutesMesurees(rp.p) + (Date.now() - chronoEnCours().debut) / 60000) + " passées sur cette pièce.";
+      acts.push(["■ Arrêter et noter le temps", function(){ arreterChrono(); render(); }]);
+      acts.push(["Voir la pièce", function(){ view.creaQ = rp.c.nom; aller("creations"); }]);
+    } else if (rp.type === "brouillon"){
+      t = "Fiche « " + (rp.nom || "sans nom") + " » pas encore enregistrée";
+      d = "Tu l'as laissée le " + new Date(rp.b.le).toLocaleDateString("fr-FR") + ". Rien n'est perdu.";
+      acts.push(["Reprendre la fiche", reprendreBrouillon, true]);
+    } else if (rp.type === "piece"){
+      var mm = minutesMesurees(rp.p);
+      t = (rp.p.prod === "retouche" ? "À retoucher : « " : rp.p.prod === "afaire" ? "À faire : « " : "En cours : « ") + rp.c.nom + " »";
+      d = (mm > 0.5 ? dureeLisible(mm) + " déjà passées" : "pas encore chronométrée") +
+          (rp.p.com === "commande" ? " · pour une commande" + (rp.p.client ? " de " + rp.p.client : "") : "") + ".";
+      acts.push(["▶ Chronométrer", function(){ demarrerChrono(rp.p.id); view.creaQ = rp.c.nom; aller("creations"); toast("Chronomètre lancé"); }, true]);
+      acts.push(["Voir mes pièces", function(){ view.creaQ = rp.c.nom; aller("creations"); }]);
+    } else {
+      t = "Ta dernière création : « " + rp.c.nom + " »";
+      var xr = calculer(rp.c);
+      d = vend && xr.prix > 0 && xr.heures > 0 ? "Elle te paie " + eur(xr.gainHoraire) + " de l'heure" + (obj > 0 ? " (objectif " + eur(obj) + ")" : "") + "."
+        : vend && !(xr.prix > 0) ? "Son prix reste à fixer." : eur(xr.matieres) + " de matières, " + dureeTexte(xr.minutes) + " de travail.";
+      acts.push(["Ouvrir la fiche", function(){ ouvrirFiche(rp.c.id); }, true]);
+      if (state.reglages.mode === "complet") acts.push(["+ Pièce", function(){ dialogueAjoutPieces(rp.c.id); }]);
+    }
+    var m = el('<div class="r-main">' + vignette(rp.c || {nom: rp.nom || "", modele: "vide"}, 44) + '<div><div class="eyebrow" style="opacity:.75">Reprendre</div><h3>' + esc(t) + '</h3><p>' + esc(d) + '</p></div></div>');
+    z.appendChild(m);
+    var ra = el('<div class="r-act"></div>');
+    acts.forEach(function(a){ var b = bouton(a[0], a[1], !!a[2]); b.classList.add("sm"); if (!a[2]) b.classList.add("alt"); ra.appendChild(b); });
+    z.appendChild(ra);
+  }
+  /* Les autres créations récentes, d'un geste. */
+  var autres = creationsActives().filter(function(c){ return !rp || !rp.c || c.id !== rp.c.id; })
+    .sort(function(a, b){ return derniereActivite(b) - derniereActivite(a); }).slice(0, 3);
+  if (autres.length){
+    var l = el('<div class="r-liste"></div>');
+    autres.forEach(function(c){
+      var b = el('<button type="button"><span>' + esc(c.nom) + '</span>' + ligneChiffre(c) + '</button>');
+      b.setAttribute("aria-label", "Ouvrir la fiche de " + c.nom);
+      b.addEventListener("click", function(){ ouvrirFiche(c.id); });
+      l.appendChild(b);
+    });
+    var tous = el('<button type="button"><span style="text-decoration:underline">Toutes mes créations →</span></button>');
+    tous.addEventListener("click", function(){ view.creaQ = ""; aller("creations"); });
+    l.appendChild(tous);
+    z.appendChild(l);
+  }
+  return z;
 }
 
 /* ═════ 8. CATALOGUE ═════ */
@@ -2549,16 +2634,22 @@ function renderCatalogue(main){
                 : (modeM ? " modèle affiché"  : " type affiché"))) +
       (view.filtre !== "tous" || q ? " sur " + nFiltre : "");
     grid.className = modeM ? "cards" : "types";
+    if (!modeM && liste.length) grid.appendChild(el('<div class="types-tete" aria-hidden="true"><span></span><span>Type d\'ouvrage</span><span>Niveau</span><span>Temps</span><span>Matières</span><span>Prix courant</span></div>'));
     liste.forEach(function(m){
       var r = coutRapide(m[0]);
       var four = m[7];
       if (!modeM){
+        /* La liste dit la même chose que la carte : niveau, temps, matières,
+           prix courant, patron — en une ligne, colonnes alignées. */
         var ligne = el(
-          '<button type="button" class="trow">'+
+          '<button type="button" class="trow trow-type" aria-label="'+esc(mNom(m))+' : '+esc(DIFF[m[4]-1])+', '+esc(dureeTexte(r.minutes))+', '+esc(eur(r.matieres))+' de matières'+(four[1] ? ', prix courant '+esc(fourchette(four)) : '')+'">'+
             '<span class="mot f-'+esc(m[1])+'">'+motif(m[0],26)+'</span>'+
-            '<span><h3>'+esc(mNom(m))+'</h3>'+
-            '<p class="m">'+esc(m[3])+' · '+esc(DIFF[m[4]-1])+' · '+esc(dureeTexte(r.minutes))+'</p></span>'+
+            '<span class="tt-nom"><h3>'+esc(mNom(m))+'</h3>'+
+            '<p class="m">'+esc(m[3])+(patronDe(m[0]) ? ' <span class="chip good">patron inclus</span>' : '')+'</p></span>'+
+            '<span class="tt-niv">'+niveau(m[4])+'<span>'+esc(DIFF[m[4]-1])+'</span></span>'+
+            '<span class="c tt-tps"><b>'+esc(dureeTexte(r.minutes))+'</b><span>de travail</span></span>'+
             '<span class="c"><b>'+esc(eur(r.matieres))+'</b><span>de matières</span></span>'+
+            '<span class="c pc"><b>'+esc(fourchette(four))+'</b><span>'+(four[1] ? 'prix courant' : 'pas de repère')+'</span></span>'+
           '</button>');
         ligne.addEventListener("click", function(){ view.modeleVu = m[0]; render(); });
         grid.appendChild(ligne);
@@ -2732,15 +2823,18 @@ function renderModeleDetail(main){
 /* ═════ 9. MES CRÉATIONS ═════ */
 
 function renderCreations(main){
+  var vend = state.reglages.profil !== "passion";
+  var complet = state.reglages.mode === "complet";
+  var bAjout = bouton("+ Ajouter des pièces", function(){ dialogueAjoutPieces(null); });
   main.appendChild(enTete("Mes créations",
-    "Chaque création que tu vends : ses matières, ton temps, et ce qu'elle te paie de l'heure.",
-    [bouton("Partir d'un type d'ouvrage", function(){ view.modeleVu=null; view.catMode="types"; aller("catalogue"); }),
-     bouton("+ Nouvelle création", nouvelleFiche, true)]));
+    vend ? "Tes modèles et chaque pièce que tu fabriques : ce qu'elle a coûté vraiment, ce que tu l'as vendue, et ce qu'il te reste."
+         : "Tes modèles et chaque pièce que tu fabriques : son temps, ses matières, ce qu'elle t'a coûté.",
+    [bouton("Partir d'un type d'ouvrage", function(){ view.modeleVu=null; view.catMode="types"; aller("catalogue"); })]
+      .concat(complet && creationsActives().length ? [bAjout] : [])
+      .concat([bouton("+ Nouvelle création", nouvelleFiche, true)])));
 
   var archivees = state.creations.filter(function(c){ return c.archive; });
   var calculs = creationsActives().map(function(c){ return {c:c, r:calculer(c)}; });
-  /* Une création sans prix de vente n'est pas « à perte » : son prix reste
-     à fixer. Elle n'entre ni dans les pertes ni dans la médiane. */
   var avecPrix = calculs.filter(function(x){ return Number(x.c.prix) > 0; });
   var aPerte = avecPrix.filter(function(x){ return x.r.reste < 0; }).length;
   var obj = Number(state.reglages.tauxHoraire)||0;
@@ -2753,20 +2847,26 @@ function renderCreations(main){
     median = gains.length%2 ? gains[mid] : (gains[mid-1]+gains[mid])/2;
   }
   var ms = statut(median);
+  var st = statsPieces();
 
   var tiles = el('<div class="tiles"></div>');
-  tiles.appendChild(el('<div class="tile"><div class="k">Créations suivies</div><div class="v">'+calculs.length+'</div></div>'));
+  tiles.appendChild(el('<div class="tile"><div class="k">Créations</div><div class="v">'+calculs.length+'</div>'+
+    (complet && st.total ? '<div class="s">'+esc(pluriel(st.total, "pièce suivie", "pièces suivies"))+'</div>' : '')+'</div>'));
   tiles.appendChild(el('<div class="tile"><div class="k">Gain de l\'heure habituel</div><div class="v '+ms.k+'">'+(gains.length ? esc(eur(median)) : '—')+'</div><div class="s">la moitié de tes créations font mieux · objectif '+esc(eur(obj))+' / h</div></div>'));
   tiles.appendChild(el('<div class="tile"><div class="k">À perte</div><div class="v '+(aPerte?"bad":"")+'">'+aPerte+'</div><div class="s">le prix ne couvre pas les frais</div></div>'));
   tiles.appendChild(el('<div class="tile"><div class="k">Sous-payées</div><div class="v '+(sousPayees?"warn":"")+'">'+sousPayees+'</div><div class="s">en dessous de ton objectif</div></div>'));
-  /* Rien à résumer tant qu'il n'y a aucune création : quatre zéros avant le
-     seul message utile ne font que du bruit. */
+  if (complet && st.total){
+    tiles.appendChild(el('<div class="tile"><div class="k">En fabrication</div><div class="v">'+(st.parProd.afaire + st.parProd.encours + st.parProd.retouche)+'</div>'+
+      (st.parProd.retouche ? '<div class="s warn">'+esc(pluriel(st.parProd.retouche, "à retoucher", "à retoucher"))+'</div>' : '')+'</div>'));
+    tiles.appendChild(el('<div class="tile"><div class="k">'+(vend ? 'Prêtes à vendre' : 'Terminées')+'</div><div class="v good">'+st.stock+'</div>'+
+      (vend ? '<div class="s">'+esc(eur(st.valStock))+' de coût immobilisé</div>' : '')+'</div>'));
+    if (vend) tiles.appendChild(el('<div class="tile"><div class="k">Vendues</div><div class="v">'+st.vendues+'</div><div class="s">'+esc(eur(st.ca))+' encaissés'+
+      (st.coutVendu > 0 ? ' · ' + esc(eur(cts(st.ca - st.coutVendu))) + (st.ca >= st.coutVendu ? ' en plus de ton salaire' : ' face au coût complet') : '')+'</div></div>'));
+  }
   if (calculs.length) main.appendChild(tiles);
 
-  var inv = inviteComplet("Suivre chaque pièce une par une, de la fabrication à la vente, dans un onglet « Mes pièces ».");
+  var inv = inviteComplet("Suivre chaque pièce une par une, de la fabrication à la vente : temps réel, coût réel, gain réel.");
   if (inv && calculs.length) main.appendChild(inv);
-
-  main.appendChild(el('<div class="sechead" style="margin-top:0"><h2>Le détail, création par création</h2></div>'));
 
   if (!calculs.length){
     main.appendChild(etatVide("Aucune création pour l'instant",
@@ -2776,46 +2876,77 @@ function renderCreations(main){
     return;
   }
 
-  calculs.sort(function(a,b){ return a.r.gainHoraire - b.r.gainHoraire; });
+  var alertes = complet ? alertesFinis() : [];
+  if (alertes.length){
+    main.appendChild(el('<div class="banner" style="background:var(--warn-soft);border-color:var(--warn)"><p>'+
+      '<b>Sous le stock de sécurité :</b> '+esc(alertes.map(function(c){
+        return c.nom + " (" + enStock(c.id) + "/" + (Number(c.seuilFini)||0) + ")"; }).join(" · "))+
+      '. Lance une fabrication pour reconstituer ton stock.</p></div>'));
+  }
 
-  var wrap = el('<div class="tablewrap resp"></div>');
-  var t = el('<table><thead><tr><th>Création</th><th class="n">Prix de vente</th><th class="n">Tes frais</th><th class="n">Il te reste</th><th class="n">Gain de l\'heure</th><th style="width:120px">Travail</th><th>État</th><th class="n">En stock</th></tr></thead><tbody></tbody></table>');
-  var tb = t.querySelector("tbody");
-  calculs.forEach(function(x){
-    var st = verdictCalcul(x.r);
-    var coul = st.k === "good" ? "var(--good)" : st.k === "warn" ? "var(--warn)" : "var(--bad)";
-    var sorties = x.r.prix - x.r.reste;
-    var tr = el(
-      '<tr style="cursor:pointer;--etat-c:'+coul+'" data-etat="'+st.k+'">'+
-        '<td><div style="display:flex;gap:12px;align-items:center">'+vignette(x.c,42)+
-          '<div><b>'+esc(x.c.nom)+'</b>'+
-          '<div class="hint" style="margin:2px 0 0">'+esc(dureeTexte(x.r.minutes))+' · '+esc(canal(x.c.canal).nom)+'</div></div></div></td>'+
-        '<td class="n" data-l="Prix de vente">'+esc(eur(x.c.prix))+'</td>'+
-        '<td class="n" data-l="Tes frais">− '+esc(eur(sorties))+'</td>'+
-        '<td class="n" data-l="Il te reste" style="color:'+(x.r.reste<0?'var(--bad)':'inherit')+';font-weight:600">'+esc(eur(x.r.reste))+'</td>'+
-        '<td class="n" data-l="Gain de l\'heure" style="font-weight:600;color:'+coul+'">'+(x.r.prix > 0 && x.r.heures > 0 ? esc(eur(x.r.gainHoraire)) : '—')+'</td>'+
-        '<td data-l="Travail en cours">'+(function(){
-          var pc = pieceEnCours(x.c.id);
-          if (!pc) return '<span class="hint">—</span>';
-          var ch2 = chronoEnCours();
-          var run = !!(ch2 && ch2.pid === pc.id);
-          var mm = minutesMesurees(pc);
-          return '<span class="etat '+(run?'e-ok':'e-bas')+'"><span class="pastille"></span>'+
-            (run ? 'en cours' : (mm>0.01 ? esc(dureeLisible(mm)) : 'commencée'))+'</span>';
-        })()+'</td>'+
-        '<td data-l="État"><span class="chip '+st.k+'">'+esc(st.t)+'</span></td>'+
-        '<td class="n" data-l="En stock"><div class="lignestock">'+
-          badgeEtat(etatFini(x.c), enStock(x.c.id) + (enStock(x.c.id) > 1 ? " pièces" : " pièce"))+jauge(etatFini(x.c))+'</div></td>'+
-      '</tr>'
-    );
-    tr.addEventListener("click", function(){ ouvrirFiche(x.c.id); });
-    /* Accessible au clavier : Tab jusqu'à la ligne, Entrée pour l'ouvrir. */
-    tr.tabIndex = 0; tr.setAttribute("role", "link"); tr.setAttribute("aria-label", "Ouvrir la création " + x.c.nom);
-    tr.addEventListener("keydown", function(e){ if (e.key === "Enter" || e.key === " "){ e.preventDefault(); ouvrirFiche(x.c.id); } });
-    tb.appendChild(tr);
-  });
-  wrap.appendChild(t);
-  main.appendChild(wrap);
+  /* --- filtres et tri --- */
+  var FILTRES = [
+    {k:"tous",     nom:"Tout"},
+    {k:"encours",  nom:"En fabrication", f:function(p){ return p.prod === "afaire" || p.prod === "encours"; }},
+    {k:"retouche", nom:"À retoucher",    f:function(p){ return p.prod === "retouche"; }},
+    {k:"stock",    nom: vend ? "En stock" : "Terminées", f:function(p){ return p.prod === "termine" && !horsStock(p); }},
+    {k:"vendu",    nom:"Vendues",        f:function(p){ return p.com === "vendu"; }, vend:true},
+    {k:"jete",     nom:"Ratées",         f:function(p){ return p.com === "jete"; }}
+  ];
+  var fk = view.fPieces || "tous";
+  var filtre = FILTRES.filter(function(x){ return x.k === fk; })[0] || FILTRES[0];
+  var barre = el('<div class="crea-barre"></div>');
+  if (complet && st.total){
+    var f = el('<div class="filters" style="margin:0"></div>');
+    FILTRES.forEach(function(x){
+      if (x.vend && !vend) return;
+      var n = x.f ? state.pieces.filter(x.f).length : st.total;
+      var b = el('<button type="button" class="fchip">'+esc(x.nom)+' <span class="n">'+n+'</span></button>');
+      b.setAttribute("aria-pressed", fk === x.k ? "true" : "false");
+      b.addEventListener("click", function(){ view.fPieces = x.k; view.creaTout = {}; render(); });
+      f.appendChild(b);
+    });
+    barre.appendChild(f);
+  }
+  var outils = el('<div class="crea-outils">'+
+    '<label class="f"><span class="sr-only">Rechercher une création</span><input type="search" id="crea-q" placeholder="Rechercher une création…"></label>'+
+    '<label class="f"><span class="sr-only">Trier</span><select id="crea-tri">'+
+      '<option value="recent">Activité récente d\'abord</option>'+
+      '<option value="gain">Gain de l\'heure, du plus bas</option>'+
+      '<option value="nom">Nom, de A à Z</option>'+
+    '</select></label></div>');
+  outils.querySelector("#crea-q").value = view.creaQ || "";
+  outils.querySelector("#crea-tri").value = view.creaTri || "recent";
+  outils.querySelector("#crea-q").addEventListener("input", function(e){ view.creaQ = e.target.value; peindre(); });
+  outils.querySelector("#crea-tri").addEventListener("change", function(e){ view.creaTri = e.target.value; peindre(); });
+  barre.appendChild(outils);
+  main.appendChild(barre);
+
+  var zone = el('<div class="crea-liste"></div>');
+  main.appendChild(zone);
+  var vide = el('<p class="hint" id="crea-vide" hidden></p>');
+  main.appendChild(vide);
+
+  function activite(x){ return derniereActivite(x.c); }
+  function peindre(){
+    zone.innerHTML = "";
+    var q = String(view.creaQ || "").trim().toLowerCase();
+    var tri = view.creaTri || "recent";
+    var liste = calculs.filter(function(x){
+      if (q && x.c.nom.toLowerCase().indexOf(q) === -1) return false;
+      if (filtre.f && !piecesDe(x.c.id).some(filtre.f)) return false;
+      return true;
+    });
+    if (tri === "gain") liste.sort(function(a,b){ return a.r.gainHoraire - b.r.gainHoraire; });
+    else if (tri === "nom") liste.sort(function(a,b){ return a.c.nom.localeCompare(b.c.nom, "fr"); });
+    else liste.sort(function(a,b){ return activite(b) - activite(a); });
+    liste.forEach(function(x){ zone.appendChild(carteCreation(x, filtre, vend, complet)); });
+    vide.hidden = liste.length > 0;
+    vide.textContent = liste.length ? "" : (q ? "Aucune création ne porte ce nom." : "Aucune pièce dans ce filtre.");
+    hydraterPhotos(zone);
+  }
+  peindre();
+
   if (archivees.length){
     var dA = el('<details class="card" style="margin-top:16px;padding:14px 18px"><summary style="cursor:pointer;font-weight:600">Créations archivées ('+archivees.length+')</summary>'+
       '<p class="hint" style="margin:8px 0">Elles ne sont plus proposées nulle part, mais leurs ventes et leurs commandes restent dans tes indicateurs.</p><div class="arch"></div></details>');
@@ -2832,13 +2963,240 @@ function renderCreations(main){
     '<span class="etat e-ok"><span class="pastille"></span>tu t\'y retrouves</span>'+
     '<span class="etat e-bas"><span class="pastille"></span>sous ton objectif horaire</span>'+
     '<span class="etat e-rupture"><span class="pastille"></span>très sous-payée ou à perte</span>'+
-    '<span class="legnote">La ligne se lit comme une soustraction : prix de vente − tes frais = ce qu\'il te reste, '+
-    'pour le temps indiqué. « Tes frais » réunissent les matières, les pertes, l\'emballage, les frais de vente, les cotisations et la part des frais fixes, '+
-    'pas ton travail, qui est justement ce qui reste.</span></div>'));
-  main.appendChild(el('<p class="hint" style="max-width:78ch">Classées de la moins payée à la mieux payée. Touche une ligne pour ouvrir la création.</p>'));
+    '<span class="legnote">Chaque création affiche le calcul de sa fiche (l\'estimation). '+
+    (complet ? 'Chaque pièce affiche ce qu\'elle a <b>vraiment</b> coûté : temps chronométré, matières pesées, retouches. Touche « détail » pour le poste par poste. '+
+      'Passer une pièce en <b>Terminée</b> sort ses matières de ton stock, une seule fois. ' +
+      (vend ? 'La passer en <b>Vendue</b> fige son prix : laisse le champ vide pour reprendre le prix de la fiche, ou saisis le prix réellement payé.' : '')
+      : '') + '</span></div>'));
+}
+
+/* Quand on a touché à cette création pour la dernière fois : sa fiche, ou
+   une de ses pièces. C'est ce qui trie « Mes créations » et l'Accueil. */
+function derniereActivite(c){
+  var t = Number(c.maj) || Number(c.cree) || 0;
+  piecesDe(c.id).forEach(function(p){ if (p.maj > t) t = p.maj; });
+  return t;
+}
+/* Minutes chronométrées entre deux dates, toutes pièces confondues. */
+function minutesTravaillees(debut, fin){
+  var t = 0;
+  (state.pieces || []).forEach(function(p){
+    (p.sessions || []).forEach(function(s){ if (s.d >= debut && s.d < fin) t += Number(s.min) || 0; });
+  });
+  return t;
+}
+/* Ce qu'on reprend en ouvrant l'application : le chronomètre qui tourne, la
+   fiche pas enregistrée, la pièce en cours, ou à défaut la dernière création. */
+function reprise(){
+  var ch = chronoEnCours();
+  if (ch){ var pc = piece(ch.pid), cc = pc ? creation(pc.cid) : null; if (cc) return {type:"chrono", p:pc, c:cc}; }
+  var b = brouillonGarde();
+  if (b && b.d) return {type:"brouillon", nom: b.d.nom || "", b: b};
+  var enCours = (state.pieces || []).filter(function(p){ return (p.prod === "encours" || p.prod === "retouche" || p.prod === "afaire") && creation(p.cid) && !creation(p.cid).archive; })
+    .sort(function(a, b2){ var ma = a.prod === "afaire" ? 1 : 0, mb = b2.prod === "afaire" ? 1 : 0; if (ma !== mb) return ma - mb; return b2.maj - a.maj; });
+  if (enCours.length) return {type:"piece", p: enCours[0], c: creation(enCours[0].cid)};
+  var actives = creationsActives().slice().sort(function(a, b2){ return derniereActivite(b2) - derniereActivite(a); });
+  if (actives.length) return {type:"creation", c: actives[0]};
+  return null;
+}
+/* Une création et ses pièces : le modèle en tête, chaque exemplaire dessous. */
+function carteCreation(x, filtre, vend, complet){
+  var c = x.c, r = x.r;
+  var stF = verdictCalcul(r);
+  var toutes = piecesDe(c.id).sort(function(a,b){ return b.maj - a.maj; });
+  var pieces = filtre.f ? toutes.filter(filtre.f) : toutes;
+  var ef = etatFini(c);
+  var card = el('<section class="crea-card" aria-label="'+esc(c.nom)+'">'+
+    '<div class="crea-tete">'+
+      '<button type="button" class="crea-id" aria-label="Ouvrir la fiche de '+esc(c.nom)+'">'+vignette(c, 46)+
+        '<span><h2>'+esc(c.nom)+'</h2><p class="m">'+esc(dureeTexte(r.minutes))+' de travail estimé · '+esc(canal(c.canal).nom)+
+        (c.modele && c.modele !== "vide" && modele(c.modele) ? ' · ' + esc(mNom(modele(c.modele))) : '')+'</p></span></button>'+
+      '<div class="crea-chiffres">'+
+        '<div><span class="k">Prix de vente</span><b>'+esc(r.prix > 0 ? eur(r.prix) : "—")+'</b></div>'+
+        (vend ? '<div><span class="k">Prix cible</span><b>'+esc(r.prixObjectif > 0 ? eur(r.prixObjectif) : "—")+'</b></div>' : '')+
+        '<div><span class="k">Coût complet</span><b>'+esc(eur(r.coutRevient))+'</b></div>'+
+        (vend ? '<div><span class="k">Gain de l\'heure</span><b class="'+stF.k+'">'+(r.prix > 0 && r.heures > 0 ? esc(eur(r.gainHoraire)) : '—')+'</b></div>' : '')+
+        '<div><span class="k">État</span><span class="chip '+stF.k+'">'+esc(stF.t)+'</span></div>'+
+        (complet ? '<div><span class="k">En stock</span><span class="lignestock">'+badgeEtat(ef, enStock(c.id) + (enStock(c.id) > 1 ? " pièces" : " pièce"))+jauge(ef)+'</span></div>' : '')+
+      '</div>'+
+      '<div class="crea-act"></div>'+
+    '</div></section>');
+  card.querySelector(".crea-id").addEventListener("click", function(){ ouvrirFiche(c.id); });
+  var act = card.querySelector(".crea-act");
+  var bF = bouton("Ouvrir la fiche", function(){ ouvrirFiche(c.id); }); bF.classList.add("sm"); act.appendChild(bF);
+  if (complet){ var bP = bouton("+ Pièce", function(){ dialogueAjoutPieces(c.id); }); bP.classList.add("sm"); act.appendChild(bP); }
+  if (!complet) return card;
+
+  if (!pieces.length){
+    card.appendChild(el('<p class="crea-vide">'+(toutes.length ? 'Aucune pièce dans ce filtre.' : 'Aucune pièce suivie pour l\'instant.')+'</p>'));
+    return card;
+  }
+  var LIM = 12;
+  var tout = view.creaTout && view.creaTout[c.id];
+  var visibles = tout ? pieces : pieces.slice(0, LIM);
+  var wrap = el('<div class="tablewrap resp"></div>');
+  var t = el('<table class="t-pieces" style="min-width:'+(vend?1080:760)+'px"><thead><tr>'+
+    '<th style="width:150px">Pièce</th><th style="width:156px">Fabrication</th>'+
+    (vend ? '<th style="width:170px">Destination</th>' : '')+
+    '<th style="width:170px">Temps réel</th>'+
+    '<th class="n" style="width:120px">Coût de revient</th>'+
+    (vend ? '<th class="n" style="width:100px">Prix de vente</th><th class="n" style="width:90px">Prix cible</th><th class="n" style="width:130px">Gain</th>' : '')+
+    '<th style="width:40px"><span class="sr-only">Actions</span></th></tr></thead><tbody></tbody></table>');
+  var tb = t.querySelector("tbody");
+  visibles.forEach(function(p, i){ tb.appendChild(lignePiece(p, c, toutes.length - toutes.indexOf(p), vend)); });
+  brancherPieces(tb);
+  wrap.appendChild(t);
+  card.appendChild(wrap);
+  if (pieces.length > visibles.length){
+    var plus = el('<div class="plus-lignes"><span class="hint" style="margin:0">'+visibles.length+' pièces sur '+pieces.length+', les plus récentes d\'abord.</span></div>');
+    plus.appendChild(bouton("Afficher les " + (pieces.length - visibles.length) + " autres", function(){
+      view.creaTout = view.creaTout || {}; view.creaTout[c.id] = true; render();
+    }));
+    card.appendChild(plus);
+  }
+  return card;
+}
+function lignePiece(p, cr, numero, vend){
+  var k = coutPiece(p, cr);
+  var couleur = "var(--muted)";
+  PROD.forEach(function(x){ if (x.k === p.prod) couleur = x.c; });
+  var ch = chronoEnCours();
+  var enCours = !!(ch && ch.pid === p.id);
+  var mesMin = minutesMesurees(p);
+  var quand = p.com === "vendu" && p.venduLe ? "vendue le " + new Date(p.venduLe).toLocaleDateString("fr-FR")
+            : p.termineLe ? "terminée le " + new Date(p.termineLe).toLocaleDateString("fr-FR")
+            : "créée le " + new Date(p.cree).toLocaleDateString("fr-FR");
+  var tr = el('<tr data-pid="'+esc(p.id)+'" data-etat="'+esc(p.prod)+'" style="--etat-c:'+couleur+'">'+
+    '<td data-l="Pièce"><b>N° '+numero+'</b>'+(p.com==="commande"?' <span class="chip warn">commande</span>':'')+(p.retouches && p.retouches.length ? ' <span class="chip neutre">'+esc(pluriel(p.retouches.length, "retouche"))+'</span>' : '')+
+      '<div class="hint" style="margin:2px 0 0">'+esc(quand)+(p.client ? ' · ' + esc(p.client) : '')+'</div></td>'+
+    '<td data-l="Fabrication"><select data-role="prod" aria-label="État de fabrication" style="border-left:3px solid '+couleur+'"></select></td>'+
+    (vend ? '<td data-l="Destination"><select data-role="com" aria-label="Destination"></select>'+
+      '<input type="text" class="cli" data-role="client" aria-label="Nom de la cliente" placeholder="cliente…" value="'+esc(p.client||"")+'"></td>' : '')+
+    '<td data-l="Temps réel"><div class="tps"><button type="button" class="btn sm chrono'+(enCours?' on':'')+'" data-role="chrono">'+(enCours ? '■ Arrêter' : '▶ Chrono')+'</button>'+
+      '<span class="num">'+(mesMin > 0.01 ? esc(dureeLisible(mesMin)) : '<span class="hint">est. '+esc(dureeLisible(k.minEst))+'</span>')+'</span></div></td>'+
+    '<td class="n" data-l="Coût de revient"><b class="num">'+esc(eur(k.total))+'</b>'+
+      '<div class="hint num">'+esc(eur(k.matieres))+' mat. · '+esc(eur(k.mainOeuvre))+' temps</div>'+
+      '<button type="button" class="lien-mini" data-role="cout" aria-label="Détail du coût de cette pièce">détail'+(k.pesee || k.tempsMesure ? ' · réel' : '')+'</button></td>'+
+    (vend ? '<td class="n" data-l="Prix de vente"><input type="number" inputmode="decimal" min="0" step="0.5" data-role="prix" aria-label="Prix de vente de cette pièce" value="'+(p.prix===null||p.prix===undefined?"":p.prix)+'" placeholder="'+(cr.prix||0)+'"></td>'+
+      '<td class="n num" data-l="Prix cible">'+esc(k.prixCible > 0 ? eur(k.prixCible) : "—")+'</td>'+
+      '<td class="n" data-l="Gain"><b class="num '+k.etat.k+'">'+esc(k.jete ? "− " + eur(k.total) : (k.prix > 0 ? eur(k.gain) : "—"))+'</b>'+
+        '<div class="hint num">'+(k.jete ? 'perte' : k.prix > 0 && k.heures > 0 ? esc(eur(k.gainH)) + ' / h' : esc(k.etat.t))+'</div></td>' : '')+
+    '<td><div class="act-col">'+
+      '<button type="button" class="btn sm ghost" data-role="reel" aria-label="Estimé et réel de cette pièce de '+esc(cr.nom)+'">'+(p.reel && Object.keys(p.reel).length ? 'Pesée ✓' : 'Peser')+'</button>'+
+      '<button type="button" class="btn ghost" data-role="del" aria-label="Supprimer cette pièce de '+esc(cr.nom)+'">✕</button></div></td></tr>');
+  var sp = tr.querySelector('[data-role=prod]');
+  PROD.forEach(function(x){ var o=document.createElement("option"); o.value=x.k; o.textContent=x.nom; sp.appendChild(o); });
+  sp.value = p.prod;
+  if (vend){
+    var sc = tr.querySelector('[data-role=com]');
+    COM.forEach(function(x){ var o=document.createElement("option"); o.value=x.k; o.textContent=x.nom; sc.appendChild(o); });
+    sc.value = p.com;
+  }
+  return tr;
+}
+function brancherPieces(tb){
+  tb.addEventListener("change", function(e){
+    var role = e.target.getAttribute("data-role");
+    if (role !== "prod" && role !== "com") return;
+    var pid = e.target.closest("tr").getAttribute("data-pid");
+    var p = piece(pid);
+    if (!p) return;
+    function appliquer(){
+      if (role === "prod") majProd(p, e.target.value);
+      else majCom(p, e.target.value);
+      sauverTout(); render();
+      toast(role === "prod" ? "Fabrication : " + libProd(p.prod) : "Statut : " + libCom(p.com));
+    }
+    if (role === "prod" && e.target.value === "retouche" && p.prod !== "retouche"){
+      majProd(p, "retouche"); sauverTout();
+      dialogueRetouche(p, function(){ sauverTout(); render(); toast("Retouche notée"); });
+      return;
+    }
+    /* Vendue « à part » alors qu'une commande de la même création attend
+       une pièce : c'est souvent la même vente. La relier évite de la
+       compter deux fois (la pièce ET les paiements de la commande). */
+    var attente = role === "com" && e.target.value === "vendu" && p.com !== "commande" && !p.cmdId
+      ? commandes().filter(function(c){ return attendPiece(c, p.cid); })
+      : [];
+    if (attente.length){
+      var c0 = attente[0];
+      confirmer({titre:"Cette pièce est-elle pour une commande ?",
+        texte:(attente.length > 1 ? attente.length + " commandes" : "La commande de " + ((c0.client && c0.client.nom) || "ta cliente")) +
+              " attend" + (attente.length > 1 ? "ent" : "") + " une pièce de cette création. Si c'est pour elle, relie-la : l'argent sera compté une seule fois, dans la commande.",
+        bouton:"Oui, la relier à la commande", annuler:"Non, vente à part",
+        siNon: appliquer, siAnnule: function(){ render(); }},
+        function(){ p.com = "commande"; appliquer(); });
+      return;
+    }
+    appliquer();
+  });
+  tb.addEventListener("input", function(e){
+    var role = e.target.getAttribute("data-role");
+    if (role !== "prix" && role !== "client") return;
+    var pid = e.target.closest("tr").getAttribute("data-pid");
+    var x = piece(pid); if (!x) return;
+    if (role === "prix"){
+      x.prix = e.target.value === "" ? null : (Number(e.target.value)||0);
+      if (x.com === "vendu" && !x.venduLe) x.venduLe = Date.now();
+      var crx = creation(x.cid);
+      if (x.com === "vendu" && crx) x.fige = x.fige ? reprixVente(x.fige, crx, Number(x.prix)||0, x.canal || crx.canal)
+                                                   : figerVente(crx, Number(x.prix)||0, x.canal || crx.canal, minutesMesurees(x) > 0 ? minutesReellesPiece(x, crx) : 0);
+      /* Le gain de la ligne suit le prix tapé, sans redessiner l'écran. */
+      if (crx){
+        var k = coutPiece(x, crx), tr = e.target.closest("tr"), cg = tr.querySelector('[data-l="Gain"]');
+        if (cg) cg.innerHTML = '<b class="num '+k.etat.k+'">'+esc(k.jete ? "− " + eur(k.total) : (k.prix > 0 ? eur(k.gain) : "—"))+'</b>'+
+          '<div class="hint num">'+(k.jete ? 'perte' : k.prix > 0 && k.heures > 0 ? esc(eur(k.gainH)) + ' / h' : esc(k.etat.t))+'</div>';
+      }
+    }
+    else x.client = e.target.value;
+    x.maj = Date.now();
+    sauver();
+  });
+  tb.addEventListener("click", function(e){
+    var b = e.target.closest("[data-role]"); if (!b) return;
+    var role = b.getAttribute("data-role");
+    var pid = b.closest("tr") ? b.closest("tr").getAttribute("data-pid") : null;
+    if (role === "chrono"){
+      var ch = chronoEnCours();
+      if (ch && ch.pid === pid) arreterChrono();
+      else { demarrerChrono(pid); toast("Chronomètre lancé"); }
+      render();
+      return;
+    }
+    if (role === "reel"){ var pr = piece(pid); if (pr) dialogueReel(pr); return; }
+    if (role === "cout"){ var pk = piece(pid); if (pk) dialogueCoutPiece(pk); return; }
+    if (role !== "del") return;
+    if (chronoEnCours() && chronoEnCours().pid === pid) arreterChrono(true);
+    avecAnnulation("Pièce supprimée du suivi", function(){ supprimerPiece(pid); });
+  });
+}
+/* Ajouter des pièces au suivi, depuis l'écran ou depuis une création. */
+function dialogueAjoutPieces(cid){
+  var actives = creationsActives();
+  if (!actives.length){ toast("Crée d'abord une fiche création"); return; }
+  var box = el('<div class="grid2">'+
+    '<label class="f"><span>Création</span><select id="ap-cid"></select></label>'+
+    '<label class="f"><span>Nombre de pièces</span><input id="ap-n" type="number" min="1" step="1" value="1" inputmode="numeric"></label>'+
+    '<label class="f"><span>État au départ</span><select id="ap-prod"></select></label>'+
+    (state.reglages.profil !== "passion" ? '<label class="f"><span>Destination</span><select id="ap-com"></select></label>'+
+      '<label class="f"><span>Cliente (facultatif)</span><input id="ap-client" type="text" maxlength="80" placeholder="Prénom, pseudo Instagram…"></label>' : '')+
+    '</div><p class="hint" style="margin:10px 0 0">Pour une pièce commandée : état « À faire », destination « Commande client ». La commande elle-même se gère dans l\'onglet Commandes.</p>');
+  var selC = box.querySelector("#ap-cid");
+  actives.forEach(function(c){ var o = document.createElement("option"); o.value = c.id; o.textContent = c.nom; selC.appendChild(o); });
+  if (cid) selC.value = cid;
+  var selP = box.querySelector("#ap-prod"), selCom = box.querySelector("#ap-com");
+  PROD.forEach(function(x){ var o=document.createElement("option"); o.value=x.k; o.textContent=x.nom; selP.appendChild(o); });
+  if (selCom) COM.forEach(function(x){ var o=document.createElement("option"); o.value=x.k; o.textContent=x.nom; selCom.appendChild(o); });
+  dialogueChamps({titre:"Ajouter des pièces au suivi", contenu: box, champs: [], bouton:"Ajouter", annuler:"Annuler"}, function(v, boite){
+    var n = Math.max(1, Number(box.querySelector("#ap-n").value)||1);
+    var cl = box.querySelector("#ap-client");
+    ajouterPieces(selC.value, n, selP.value, selCom ? selCom.value : "atelier", cl ? cl.value : "");
+    sauverTout(); render(); toast(n + " pièce" + (n>1?"s ajoutées":" ajoutée") + " au suivi");
+  });
 }
 
 /* ═════ 10. FICHE CRÉATION ═════ */
+
 
 /* Ouvrir une autre fiche alors que celle en cours a des modifications non
    enregistrées : on demande, comme tout éditeur. */
@@ -2947,6 +3305,12 @@ function renderFiche(main){
 
   /* Ce que des clientes attendent déjà sur cette création : c'est la première
      chose à savoir en ouvrant la fiche, avant même le prix de revient. */
+  /* Dire où l'on est : c'est la fiche de coût d'UNE création, pas un
+     écran de plus. */
+  var bRet = bouton("← Mes créations", quitterFiche); bRet.classList.add("sm");
+  main.appendChild(enTete(view.ficheId ? "Fiche de coût : « " + (d.nom || "sans nom") + " »" : "Nouvelle fiche de coût",
+    "C'est ici que tu calcules ce que cette création te coûte et ce qu'elle te rapporte : ses matières, ton temps, "+
+    "son prix. Enregistre-la pour la retrouver dans « Mes créations » et y suivre chaque pièce fabriquée.", [bRet]));
   var cmdLiees = carteCommandesLiees(view.ficheId);
   if (cmdLiees) main.appendChild(cmdLiees);
 
@@ -3108,14 +3472,14 @@ function renderFiche(main){
       bQ.style.marginTop = "12px";
       zMat.appendChild(bQ);
     } else {
-      zMat.appendChild(el('<p class="hint" style="margin:12px 0 0">Aucune pesée pour l\'instant. Dans « Mes pièces », le bouton <b>Estimé / réel</b> '+
+      zMat.appendChild(el('<p class="hint" style="margin:12px 0 0">Aucune pesée pour l\'instant. Dans « Mes créations », le bouton <b>Peser</b> de chaque pièce '+
         'd\'une pièce terminée te laisse noter le fil réellement utilisé : le coût réel devient exact, et ton stock est corrigé.</p>'));
     }
     left.appendChild(cPR);
   }
   if (!(bt && bt.n > 0) && view.ficheId){
     left.appendChild(el('<div class="card"><header><h2>Ton temps réel</h2>'+
-      '<p>Aucune pièce chronométrée pour l\'instant. Dans l\'onglet <b>Mes pièces</b>, le bouton '+
+      '<p>Aucune pièce chronométrée pour l\'instant. Dans « Mes créations », sur chaque pièce, le bouton '+
       '« ▶ Chronométrer » lance le compteur : il tourne même si tu changes d\'écran ou fermes l\'application, '+
       'et il s\'additionne d\'une séance à l\'autre. Deux ou trois pièces suffisent à savoir si ton estimation tient.</p>'+
       '</header><div class="body" style="padding-top:0"></div></div>'));
@@ -3157,7 +3521,7 @@ function renderFiche(main){
   if (view.ficheId){
     var b = bilanCreation(d.id);
     cProd = el(
-      '<div class="card"><header><h2>Mes pièces</h2>'+
+      '<div class="card"><header><h2>Les pièces de cette création</h2>'+
       '<p>Chaque pièce est suivie individuellement. Passer une pièce en « terminée » sort ses matières du stock.</p></header>'+
       '<div class="body">'+
         '<div class="grid3" style="align-items:end">'+
@@ -3175,7 +3539,7 @@ function renderFiche(main){
           '<div class="tile"><div class="k">Vendues</div><div class="v">'+b.vendues+'</div></div>'+
           '<div class="tile"><div class="k">Encaissé</div><div class="v good">'+esc(eur(b.ca))+'</div></div>'+
         '</div>'+
-        '<p class="hint" style="margin-top:12px">Le détail pièce par pièce, avec les changements d\'état, est dans l\'onglet <b>Mes pièces</b>.</p>'+
+        '<p class="hint" style="margin-top:12px">Le détail pièce par pièce, avec les changements d\'état, est dans « Mes créations », sous cette création.</p>'+
       '</div></div>'
     );
     var selP = cProd.querySelector("#p-prod"), selC = cProd.querySelector("#p-com");
@@ -3215,7 +3579,7 @@ function renderFiche(main){
       var nb = piecesDe(cid).length;
       var cmdL = commandesOuvertes().filter(function(c){ return commandeContient(c, cid); }).length;
       var details = [];
-      if (nb) details.push(nb + " pièce" + (nb>1?"s":"") + " suivie" + (nb>1?"s":"") + " dans « Mes pièces », et les ventes qui y sont notées");
+      if (nb) details.push(nb + " pièce" + (nb>1?"s":"") + " suivie" + (nb>1?"s":"") + " dans « Mes créations », et les ventes qui y sont notées");
       if (cr && cr.photo) details.push("sa photo");
       if (cmdL) details.push("le lien avec " + cmdL + " commande" + (cmdL>1?"s":"") + " en cours (les commandes elles-mêmes sont conservées)");
       confirmer({
@@ -3463,6 +3827,7 @@ function renderFiche(main){
     }
     delete d._forcer;
     if (!d.nom.trim()) d.nom = "Création sans nom";
+    d.maj = Date.now(); if (!d.cree) d.cree = d.maj;
     /* On enregistre selon l'identité du brouillon lui-même : c'est elle qui
        dit quelle création on modifie, quel que soit le chemin pris pour
        revenir sur la fiche. */
@@ -4691,23 +5056,23 @@ function renderReglages(main){
   });
   var cM = el('<div class="card" style="margin-bottom:16px"><header><h2>Suivi pièce par pièce</h2>'+
     '<p>Pour celles qui ont du stock, des séries ou des marchés.</p></header><div class="body">'+
-    '<label class="f" style="max-width:520px"><span>Onglet « Mes pièces »</span><select data-r2="mode">'+
+    '<label class="f" style="max-width:520px"><span>Suivi des pièces</span><select data-r2="mode">'+
     '<option value="simple">Non — je calcule mes prix et je gère mes matières</option>'+
     '<option value="complet">Oui — suivre chaque pièce, de la fabrication à la vente</option></select></label>'+
-    '<p class="hint"><b>Mes pièces</b> suit chaque pièce une par une : à faire, en cours, terminée, en vente, vendue. '+
+    '<p class="hint">Le <b>suivi des pièces</b>, dans « Mes créations », suit chaque pièce une par une : à faire, en cours, terminée, en vente, vendue. '+
     'Les <b>Indicateurs</b> restent toujours disponibles : ils se remplissent avec tes commandes, tes achats de matières '+
-    'et, si tu l\'actives, le suivi de « Mes pièces ». Rien n\'est perdu en le désactivant : les pièces restent, seul l\'onglet disparaît.</p></div></div>');
+    'et, si tu l\'actives, le suivi des pièces. Rien n\'est perdu en le désactivant : les pièces restent, seul leur suivi se masque.</p></div></div>');
   cM.querySelector("[data-r2]").value = r.mode || "simple";
   cM.querySelector("[data-r2]").addEventListener("change", function(e){
     state.reglages.mode = e.target.value; sauverTout(); render();
-    toast(e.target.value === "complet" ? "Onglet « Mes pièces » ajouté" : "Onglet « Mes pièces » retiré");
+    toast(e.target.value === "complet" ? "Suivi des pièces activé dans « Mes créations »" : "Suivi des pièces masqué");
   });
 
   var c0 = el('<div class="card" style="margin-bottom:16px"><header><h2>Comment tu utilises l\'outil</h2></header><div class="body">'+
     '<label class="f" style="max-width:460px"><span>Je crée…</span><select data-r2="profil">'+
     '<option value="vend">pour vendre (micro-entreprise, marchés, boutique en ligne)</option>'+
     '<option value="passion">pour le plaisir, sans vendre ou presque</option></select></label>'+
-    '<p class="hint">En mode « pour le plaisir », « Mes pièces » et les Indicateurs masquent tout ce qui touche à la vente '+
+    '<p class="hint">En mode « pour le plaisir », « Mes créations » et les Indicateurs masquent tout ce qui touche à la vente '+
     'et ne gardent que le suivi de tes pièces, tes stocks et ce que ton loisir te coûte. Les rubriques '+
     '« Canaux de vente » et « Facturation » disparaissent aussi des réglages.</p></div></div>');
   c0.querySelector("[data-r2]").value = r.profil || "vend";
@@ -5059,7 +5424,7 @@ function ajouterPieces(cid, n, prod, com, client){
       p.sortie = true; p.termineLe = Date.now(); sorties++;
     }
     /* Ajoutée directement « Vendue » : c'est une vente, datée d'aujourd'hui,
-       au prix de la fiche (modifiable ensuite dans « Mes pièces »). Sans ça, elle
+       au prix de la fiche (modifiable ensuite dans « Mes créations »). Sans ça, elle
        ne comptait ni dans l'encaissé ni dans le chiffre d'affaires. */
     if (p.com === "vendu"){ p.com = "atelier"; state.pieces.push(p); majCom(p, "vendu"); continue; }
     state.pieces.push(p);
@@ -5090,7 +5455,11 @@ function prevenirManques(manques){
 }
 function majProd(p, k){
   var cr = creation(p.cid);
+  var avantP = p.prod;
   p.prod = k; p.maj = Date.now();
+  /* Retouche : à partir de là, le temps chronométré et les matières
+     ajoutées s'additionnent au coût de la pièce (voir coutPiece). */
+  if (k === "retouche" && avantP !== "retouche"){ p.retouches = p.retouches || []; p.retouches.push({le: Date.now(), note: "", mat: 0, min: 0}); }
   if (k === "termine"){
     p.termineLe = p.termineLe || Date.now();
     if (!p.sortie && cr){
@@ -5163,6 +5532,91 @@ function estimeReelPiece(p, cr){
     coutEst: cts(r.matieres + fraisHorsMat + hEst * taux), coutReel: cts(matReel + fraisHorsMat + hReel * taux),
     gainEst: hEst > 0 ? resteEst / hEst : 0, gainReel: hReel > 0 ? resteReel / hReel : 0, prix: r.prix, prixPiece: prix
   };
+}
+
+/* ═════ COÛT D'UNE PIÈCE, POSTE PAR POSTE ═════
+   Ce que cette pièce précise a coûté : ses matières (pesées si on l'a fait),
+   son temps (chronométré si on l'a fait), son emballage, son transport, ses
+   frais de vente et cotisations, et ce qu'ont coûté ses retouches. Face à
+   son prix de vente et au prix cible de la fiche, on voit le gain réel. */
+function retouchesDe(p){
+  var r = {min: 0, mat: 0, n: 0};
+  (p.retouches || []).forEach(function(x){ r.n++; r.min += Number(x.min) || 0; r.mat += Number(x.mat) || 0; });
+  r.mat = cts(r.mat);
+  return r;
+}
+function coutPiece(p, cr){
+  var r = calculer(cr);
+  var er = estimeReelPiece(p, cr);
+  var ret = retouchesDe(p);
+  var taux = Number(state.reglages.tauxHoraire) || 0;
+  var fg = p.com === "vendu" && p.fige ? p.fige : null;
+  var prix = p.com === "vendu" && Number(p.prix) > 0 ? Number(p.prix) : (Number(p.prix) > 0 ? Number(p.prix) : r.prix);
+  var jete = p.com === "jete";
+  /* Matières : réelles si pesées, sinon celles de la fiche ; plus ce que les
+     retouches ont consommé. Une pièce ratée vaut ce qu'on a jeté. */
+  var matieres = jete ? cts(Number(p.perteFigee) || 0) : cts(er.matReel + ret.mat);
+  var emballage = jete ? 0 : r.emballage;
+  var transport = jete ? 0 : cts(Math.max(0, Number(cr.expedition) || 0));
+  var minutes = er.mesure ? er.minReel : er.minEst;   /* les minutes de retouche sont déjà dans le chronomètre */
+  var heures = (minutes + (r.minutesIndirectes || 0)) / 60;
+  var mainOeuvre = cts(heures * taux);
+  var frVente = jete ? 0 : (fg ? cts(fg.fraisVente) : cts(r.fraisVar + (r.fraisFixesVente - transport)));
+  var cotis = jete ? 0 : (fg ? cts(fg.cotisations) : r.cotisations);
+  var fixe = jete ? 0 : (fg ? cts(fg.fixe) : r.fixePiece);
+  var total = cts(matieres + mainOeuvre + fixe + frVente + cotis);
+  var vendu = p.com === "vendu";
+  var prixVente = jete ? 0 : prix;
+  var horsMO = cts(matieres + fixe + frVente + cotis);
+  var reste = cts(prixVente - horsMO);
+  var gain = cts(prixVente - total);
+  var gainH = heures > 0 ? reste / heures : 0;
+  var etat;
+  if (jete) etat = {k:"bad", t:"Perte"};
+  else if (!(prixVente > 0)) etat = {k:"neutre", t:"Prix à fixer"};
+  else if (reste < 0) etat = {k:"bad", t:"À perte"};
+  else etat = statut(gainH);
+  return {matieres: matieres, matieresHorsEmb: cts(matieres - emballage), emballage: emballage, transport: transport,
+          mainOeuvre: mainOeuvre, heures: heures, minutes: minutes, tempsMesure: er.mesure, pesee: er.pesee,
+          fraisVente: frVente, cotisations: cotis, fixe: fixe, total: total, prix: prixVente, prixCible: r.prixObjectif,
+          reste: reste, gain: gain, gainH: gainH, etat: etat, retouche: ret, vendu: vendu, jete: jete, taux: taux,
+          matEst: r.matieres, minEst: r.minutes};
+}
+function dialogueCoutPiece(p){
+  var cr = creation(p.cid); if (!cr) return;
+  var k = coutPiece(p, cr);
+  function l(lib, v, aide){ return '<div class="row"><span>'+esc(lib)+(aide ? '<small>'+esc(aide)+'</small>' : '')+'</span><span>'+esc(eur(v))+'</span></div>'; }
+  var h = '<div class="cout-piece">'+
+    l("Matières" + (k.pesee ? " (pesées)" : ""), k.matieresHorsEmb, k.pesee ? "" : "d'après la fiche") +
+    l("Conditionnement", k.emballage, "emballage de la fiche") +
+    l("Main-d'œuvre", k.mainOeuvre, dureeLisible(k.minutes) + (k.tempsMesure ? " chronométrées" : " estimées") + " à " + eur(k.taux) + " / h") +
+    (k.retouche.n ? l("dont retouches", cts(k.retouche.mat + (k.retouche.min / 60) * k.taux), pluriel(k.retouche.n, "retouche") + " : " + dureeLisible(k.retouche.min) + (k.retouche.mat ? " et " + eur(k.retouche.mat) + " de matières" : "")) : "") +
+    l("Transport", k.transport, "expédition de la fiche") +
+    l("Frais de vente", k.fraisVente, "commission, paiement, frais fixes du canal") +
+    l("Cotisations", k.cotisations, "") +
+    (k.fixe ? l("Part des frais fixes", k.fixe, "") : "") +
+    '<div class="row tot"><span>Coût de revient complet</span><span>'+esc(eur(k.total))+'</span></div>'+
+    '<div class="row"><span>Prix de vente' + (k.vendu ? " (vendue)" : "") + '</span><span>'+esc(k.prix > 0 ? eur(k.prix) : "—")+'</span></div>'+
+    '<div class="row"><span>Prix cible de la fiche</span><span>'+esc(k.prixCible > 0 ? eur(k.prixCible) : "—")+'</span></div>'+
+    '<div class="row tot"><span>Gain en plus de ton salaire</span><span class="'+k.etat.k+'">'+esc(eur(k.gain))+'</span></div>'+
+    '<div class="row"><span>Ce que cette pièce te paie de l\'heure</span><span class="'+k.etat.k+'">'+esc(k.heures > 0 && k.prix > 0 ? eur(k.gainH) + " / h" : "—")+'</span></div>'+
+    '</div>';
+  var box = el('<div></div>'); box.innerHTML = h;
+  confirmer({titre: "« " + cr.nom + " » : ce que cette pièce a coûté", contenu: box, bouton: "Fermer", sansAnnuler: true}, function(){});
+}
+/* Passer une pièce en retouche : on note pourquoi, et ce que la retouche
+   ajoute en matières. Le temps viendra du chronomètre. */
+function dialogueRetouche(p, suite){
+  var cr = creation(p.cid);
+  dialogueChamps({titre: "Retouche de « " + (cr ? cr.nom : "la pièce") + " »",
+    texte: "Ce que tu ajoutes s'additionne au coût de la pièce. Le temps de retouche se chronomètre comme le reste.",
+    champs: [{id:"note", lib:"Ce qu'il y a à reprendre (facultatif)", placeholder:"oreille décousue, taille à refaire…", max:120},
+             {id:"mat", lib:"Matières ajoutées (€, facultatif)", type:"number", inputmode:"decimal", placeholder:"0"}],
+    bouton: "Noter la retouche", annuler: "Annuler"}, function(v){
+    var ret = p.retouches && p.retouches.length ? p.retouches[p.retouches.length - 1] : null;
+    if (ret){ ret.note = v.note; ret.mat = Math.max(0, lireNombre(v.mat) || 0); }
+    if (suite) suite();
+  });
 }
 /* Moyenne réelle d'une création, sur ses pièces pesées ou chronométrées. */
 function bilanReel(cid){
@@ -5357,7 +5811,7 @@ function statsPieces(){
          paiements), comme dans les Indicateurs. */
       if (!commandeLiee(p)){ s.ca += Number(p.prix)||0; s.coutVendu += Number(p.coutFige)||0; }
     } else if (p.prod === "termine" && !horsStock(p)){
-      s.stock++; s.valStock += Number(p.coutFige)||0; s.valStockPrix += cr ? (Number(cr.prix)||0) : 0;
+      s.stock++; s.valStock += Number(p.coutFige) || (cr ? calculer(cr).coutRevient : 0); s.valStockPrix += cr ? (Number(cr.prix)||0) : 0;
     }
   });
   return s;
@@ -5439,235 +5893,6 @@ function bilanCreation(cid){
   });
   return b;
 }
-
-function renderAtelier(main){
-  var vend = state.reglages.profil !== "passion";
-  var st = statsPieces();
-  main.appendChild(enTete("Mes pièces",
-    vend ? "Chaque pièce que tu fabriques, suivie une par une : où elle en est, et si elle est en vente, réservée, commandée ou vendue."
-         : "Chaque pièce que tu fabriques, suivie une par une : à faire, en cours, à retoucher, terminée."));
-  if (!state.creations.length){
-    main.appendChild(etatVide("Il faut d'abord une fiche création",
-      "« Mes pièces » suit des exemplaires d'une création existante. Crée-en une : cela prend deux minutes depuis le catalogue.",
-      [bouton("Partir d'un type d'ouvrage", function(){ view.modeleVu=null; view.catMode="types"; aller("catalogue"); }, true)]));
-    return;
-  }
-  var alertes = alertesFinis();
-
-  var tiles = el('<div class="tiles"></div>');
-  tiles.appendChild(el('<div class="tile"><div class="k">À faire</div><div class="v">'+st.parProd.afaire+'</div>'+
-    '<div class="s">'+(st.parCom.commande ? esc(pluriel(st.parCom.commande, "pour une commande cliente", "pour des commandes clientes")) : 'aucune commande en attente')+'</div></div>'));
-  tiles.appendChild(el('<div class="tile"><div class="k">En cours</div><div class="v">'+st.parProd.encours+'</div></div>'));
-  tiles.appendChild(el('<div class="tile"><div class="k">À retoucher</div><div class="v '+(st.parProd.retouche?"warn":"")+'">'+st.parProd.retouche+'</div></div>'));
-  tiles.appendChild(el('<div class="tile"><div class="k">'+(vend?'Prêtes à vendre':'Terminées')+'</div><div class="v good">'+st.stock+'</div>'+
-    (vend?'<div class="s">'+st.parCom.envente+' en vente · '+esc(pluriel(st.parCom.reserve, "réservée"))+'</div>':'')+'</div>'));
-  if (vend) tiles.appendChild(el('<div class="tile"><div class="k">Vendues</div><div class="v">'+st.vendues+'</div>'+
-    '<div class="s">'+esc(eur(st.ca))+' encaissés</div></div>'));
-  main.appendChild(tiles);
-
-  if (alertes.length){
-    main.appendChild(el('<div class="banner" style="background:var(--warn-soft);border-color:var(--warn)"><p>'+
-      '<b>Sous le stock de sécurité :</b> '+esc(alertes.map(function(c){
-        return c.nom + " (" + enStock(c.id) + "/" + (Number(c.seuilFini)||0) + ")"; }).join(" · "))+
-      '. Lance une fabrication pour reconstituer ton stock.</p></div>'));
-  }
-
-  /* --- ajout rapide --- */
-  var cAdd = el('<div class="card" style="margin-bottom:20px"><header><h2>Ajouter des pièces au suivi</h2>'+
-    '<p>Pour une pièce commandée : état « À faire », destination « Commande client ». La commande elle-même se gère dans l\'onglet Commandes.</p></header>'+
-    '<div class="body"><div class="grid3" style="align-items:end">'+
-      '<label class="f"><span>Création</span><select id="a-cid"></select></label>'+
-      '<label class="f"><span>Nombre de pièces</span><input id="a-n" type="number" min="1" step="1" value="1"></label>'+
-      '<label class="f"><span>État</span><select id="a-prod"></select></label>'+
-      '<label class="f"><span>Destination</span><select id="a-com"></select></label>'+
-      '<label class="f"><span>Cliente (facultatif)</span><input id="a-client" type="text"></label>'+
-      '<div><button type="button" class="btn primary" id="a-go">Ajouter</button></div>'+
-    '</div></div></div>');
-  var selCid = cAdd.querySelector("#a-cid");
-  if (!creationsActives().length){
-    selCid.appendChild(el('<option value="">Crée d\'abord une fiche création</option>'));
-  }
-  creationsActives().forEach(function(c){
-    var o = document.createElement("option"); o.value = c.id; o.textContent = c.nom; selCid.appendChild(o);
-  });
-  var selAP = cAdd.querySelector("#a-prod"), selAC = cAdd.querySelector("#a-com");
-  PROD.forEach(function(x){ var o=document.createElement("option"); o.value=x.k; o.textContent=x.nom; selAP.appendChild(o); });
-  COM.forEach(function(x){ var o=document.createElement("option"); o.value=x.k; o.textContent=x.nom; selAC.appendChild(o); });
-  cAdd.querySelector("#a-go").addEventListener("click", function(){
-    var cid = selCid.value;
-    if (!cid){ toast("Crée d'abord une fiche création"); return; }
-    var n = Math.max(1, Number(cAdd.querySelector("#a-n").value)||1);
-    ajouterPieces(cid, n, selAP.value, selAC.value, cAdd.querySelector("#a-client").value);
-    sauverTout(); render(); toast(n + " pièce" + (n>1?"s ajoutées":" ajoutée"));
-  });
-  main.appendChild(cAdd);
-
-  /* --- filtres --- */
-  var f = el('<div class="filters"></div>');
-  function fchip(lib, val){
-    var b = el('<button type="button" class="fchip">'+esc(lib)+'</button>');
-    b.setAttribute("aria-pressed", view.fProd === val ? "true" : "false");
-    b.addEventListener("click", function(){ view.fProd = val; view.atLimite = 0; render(); });
-    return b;
-  }
-  f.appendChild(fchip("Toutes", "tous"));
-  PROD.forEach(function(x){ f.appendChild(fchip(x.nom + " (" + st.parProd[x.k] + ")", x.k)); });
-  if (vend){
-    COM.forEach(function(x){
-      if (x.k === "atelier") return;
-      var b = el('<button type="button" class="fchip">'+esc(x.nom)+' ('+st.parCom[x.k]+')</button>');
-      b.setAttribute("aria-pressed", view.fCom === x.k ? "true" : "false");
-      b.addEventListener("click", function(){ view.fCom = (view.fCom === x.k) ? "tous" : x.k; view.atLimite = 0; render(); });
-      f.appendChild(b);
-    });
-  }
-  main.appendChild(f);
-
-  /* --- tableau --- */
-  var liste = state.pieces.filter(function(p){
-    if (view.fProd !== "tous" && p.prod !== view.fProd) return false;
-    if (vend && view.fCom !== "tous" && p.com !== view.fCom) return false;
-    return true;
-  }).sort(function(a,b){ return b.maj - a.maj; });
-
-  if (!liste.length){
-    main.appendChild(el('<div class="card"><div class="body"><p style="margin:0;color:var(--muted)">'+
-      (state.pieces.length ? 'Aucune pièce dans ce filtre.' : 'Aucune pièce suivie pour l\'instant. Ajoute-en une ci-dessus, ou depuis une fiche création.')+
-      '</p></div></div>'));
-    return;
-  }
-
-  /* Au-delà de quelques dizaines de lignes, dessiner tout le tableau d'un
-     coup rendait l'écran très lent sur téléphone (plus de 10 secondes pour
-     3 000 pièces). On affiche les plus récentes, et la suite à la demande. */
-  var PAR_PAGE = 60;
-  var limite = Math.max(PAR_PAGE, Number(view.atLimite) || 0);
-  var total = liste.length;
-  liste = liste.slice(0, limite);
-
-  var wrap = el('<div class="tablewrap resp"></div>');
-  var t = el('<table style="min-width:'+(vend?960:740)+'px"><thead><tr><th>Création</th><th style="width:150px">Fabrication</th>'+
-    (vend?'<th style="width:160px">Destination</th><th style="width:100px" class="n">Prix</th><th style="width:130px">Cliente</th>':'')+
-    '<th style="width:118px">Temps passé</th>'+
-    '<th style="width:110px" class="n">Mise à jour</th><th style="width:40px"><span class="sr-only">Actions</span></th></tr></thead><tbody></tbody></table>');
-  var tb = t.querySelector("tbody");
-  liste.forEach(function(p){
-    var cr = creation(p.cid);
-    var nomCr = cr ? cr.nom : "Création supprimée";
-    var couleur = "var(--muted)";
-    PROD.forEach(function(x){ if (x.k === p.prod) couleur = x.c; });
-    var ch = chronoEnCours();
-    var enCours = !!(ch && ch.pid === p.id);
-    var mesMin = minutesMesurees(p);
-    var tr = el('<tr data-pid="'+esc(p.id)+'" data-etat="'+esc(p.prod)+'" style="--etat-c:'+couleur+'">'+
-      '<td><div style="display:flex;gap:12px;align-items:center">'+(cr?vignette(cr,40):'')+
-        '<div><b>'+esc(nomCr)+'</b>'+(p.com==="commande"?' <span class="chip warn">commande</span>':'')+
-        '<div class="hint" style="margin:2px 0 0">créée le '+new Date(p.cree).toLocaleDateString("fr-FR")+'</div></div></div></td>'+
-      '<td data-l="Fabrication"><select data-role="prod" aria-label="État de fabrication" style="border-left:3px solid '+couleur+'"></select></td>'+
-      (vend?'<td data-l="Destination"><select data-role="com" aria-label="Destination"></select></td>'+
-        '<td class="n" data-l="Prix"><input type="number" inputmode="decimal" min="0" step="0.5" data-role="prix" aria-label="Prix de vente de cette pièce" value="'+(p.prix===null?"":p.prix)+'" placeholder="'+(cr?cr.prix:0)+'" style="text-align:right"></td>'+
-        '<td data-l="Cliente"><input type="text" data-role="client" aria-label="Nom de la cliente" value="'+esc(p.client||"")+'"></td>':'')+
-      '<td data-l="Temps passé"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
-        '<button type="button" class="btn sm chrono'+(enCours?' on':'')+'" data-role="chrono">'+
-          (enCours ? '■ Arrêter' : '▶ Chronométrer')+'</button>'+
-        (mesMin > 0.01 ? '<span class="num" style="font-size:13px">'+esc(dureeLisible(mesMin))+'</span>' : '')+
-        (cr ? '<button type="button" class="btn sm ghost" data-role="reel" aria-label="Estimé et réel de cette pièce de '+esc(nomCr)+'">'+
-          (p.reel && Object.keys(p.reel).length ? 'Réel noté ✓' : 'Estimé / réel')+'</button>' : '')+
-      '</div></td>'+
-      '<td class="n" data-l="Mise à jour">'+new Date(p.maj).toLocaleDateString("fr-FR")+'</td>'+
-      '<td><button type="button" class="btn ghost" data-role="del" aria-label="Supprimer cette pièce de '+esc(nomCr)+'">✕</button></td></tr>');
-    var sp = tr.querySelector('[data-role=prod]');
-    PROD.forEach(function(x){ var o=document.createElement("option"); o.value=x.k; o.textContent=x.nom; sp.appendChild(o); });
-    sp.value = p.prod;
-    if (vend){
-      var sc = tr.querySelector('[data-role=com]');
-      COM.forEach(function(x){ var o=document.createElement("option"); o.value=x.k; o.textContent=x.nom; sc.appendChild(o); });
-      sc.value = p.com;
-    }
-    tb.appendChild(tr);
-  });
-
-  tb.addEventListener("change", function(e){
-    var role = e.target.getAttribute("data-role");
-    if (role !== "prod" && role !== "com") return;
-    var pid = e.target.closest("tr").getAttribute("data-pid");
-    var p = null;
-    state.pieces.forEach(function(x){ if (x.id === pid) p = x; });
-    if (!p) return;
-    function appliquer(){
-      if (role === "prod") majProd(p, e.target.value);
-      else majCom(p, e.target.value);
-      sauverTout(); render();
-      toast(role === "prod" ? "Fabrication : " + libProd(p.prod) : "Statut : " + libCom(p.com));
-    }
-    /* Vendue « à part » alors qu'une commande de la même création attend
-       une pièce : c'est souvent la même vente. La relier évite de la
-       compter deux fois (la pièce ET les paiements de la commande). */
-    var attente = role === "com" && e.target.value === "vendu" && p.com !== "commande" && !p.cmdId
-      ? commandes().filter(function(c){ return attendPiece(c, p.cid); })
-      : [];
-    if (attente.length){
-      var c0 = attente[0];
-      confirmer({titre:"Cette pièce est-elle pour une commande ?",
-        texte:(attente.length > 1 ? attente.length + " commandes" : "La commande de " + ((c0.client && c0.client.nom) || "ta cliente")) +
-              " attend" + (attente.length > 1 ? "ent" : "") + " une pièce de cette création. Si c'est pour elle, relie-la : l'argent sera compté une seule fois, dans la commande.",
-        bouton:"Oui, la relier à la commande", annuler:"Non, vente à part",
-        siNon: appliquer, siAnnule: function(){ render(); }},
-        function(){ p.com = "commande"; appliquer(); });
-      return;
-    }
-    appliquer();
-  });
-  tb.addEventListener("input", function(e){
-    var role = e.target.getAttribute("data-role");
-    if (role !== "prix" && role !== "client") return;
-    var pid = e.target.closest("tr").getAttribute("data-pid");
-    state.pieces.forEach(function(x){
-      if (x.id !== pid) return;
-      if (role === "prix"){
-        x.prix = e.target.value === "" ? null : (Number(e.target.value)||0);
-        if (x.com === "vendu" && !x.venduLe) x.venduLe = Date.now();
-        /* Correction du prix d'une vente : on refige avec le bon prix. */
-        var crx = creation(x.cid);
-        if (x.com === "vendu" && crx) x.fige = x.fige ? reprixVente(x.fige, crx, Number(x.prix)||0, x.canal || crx.canal)
-                                                     : figerVente(crx, Number(x.prix)||0, x.canal || crx.canal, minutesMesurees(x) > 0 ? minutesReellesPiece(x, crx) : 0);
-      }
-      else x.client = e.target.value;
-      x.maj = Date.now();
-    });
-    sauver();
-  });
-  tb.addEventListener("click", function(e){
-    var role = e.target.getAttribute("data-role");
-    var pid = e.target.closest("tr") ? e.target.closest("tr").getAttribute("data-pid") : null;
-    if (role === "chrono"){
-      var ch = chronoEnCours();
-      if (ch && ch.pid === pid) arreterChrono();
-      else { demarrerChrono(pid); toast("Chronomètre lancé"); }
-      render();
-      return;
-    }
-    if (role === "reel"){ var pr = piece(pid); if (pr) dialogueReel(pr); return; }
-    if (role !== "del") return;
-    if (chronoEnCours() && chronoEnCours().pid === pid) arreterChrono(true);
-    avecAnnulation("Pièce supprimée du suivi", function(){ supprimerPiece(pid); });
-  });
-
-  wrap.appendChild(t);
-  main.appendChild(wrap);
-  if (total > liste.length){
-    var suite = el('<div class="plus-lignes"><span class="hint" style="margin:0">'+liste.length+' pièces affichées sur '+total+', les plus récentes d\'abord.</span></div>');
-    suite.appendChild(bouton("Afficher " + Math.min(PAR_PAGE, total - liste.length) + " de plus", function(){
-      view.atLimite = limite + PAR_PAGE; render();
-    }));
-    main.appendChild(suite);
-  }
-  main.appendChild(el('<p class="hint" style="margin-top:14px;max-width:80ch">'+
-    'Passer une pièce en <b>Terminée</b> sort automatiquement ses matières de ton stock, une seule fois. '+
-    (vend ? 'La passer en <b>Vendue</b> fige son prix : laisse le champ vide pour reprendre le prix de la fiche, ou saisis le prix réellement payé. C\'est lui qui alimente tes indicateurs.' : '')+
-    '</p>'));
-}
-
 
 /* ═════ 18. GRAPHIQUES ═════
    Palette catégorielle validée (écarts CVD et vision normale vérifiés sur les deux fonds). */
@@ -5757,7 +5982,7 @@ function legende(series){
    il est trop tard pour ajuster ses prix ou étaler ses ventes. */
 function origineCA(ca){
   var parts = [];
-  if (ca.pieces > 0) parts.push(esc(eur(ca.pieces)) + " de pièces vendues dans « Mes pièces »");
+  if (ca.pieces > 0) parts.push(esc(eur(ca.pieces)) + " de pièces vendues dans « Mes créations »");
   if (ca.commandes > 0) parts.push(esc(eur(ca.commandes)) + " encaissés sur tes commandes (arrhes, acomptes, soldes)");
   return parts.length ? parts.join(" et ") : "aucun encaissement pour l'instant cette année";
 }
@@ -5811,7 +6036,7 @@ function carteSeuils(){
       "Au-delà, tu sors du régime micro-entreprise et passes au régime réel.")+
     '<p class="hint" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--rule)">'+
     '<b>Ce total vient de :</b> '+origineCA(ca)+'.'+
-    (ca.pieces > 0 && ca.commandes > 0 ? ' Une pièce suivie dans « Mes pièces » et faite pour une commande n\'est comptée qu\'une fois, dans la commande.' : '')+'</p>'+
+    (ca.pieces > 0 && ca.commandes > 0 ? ' Une pièce suivie dans « Mes créations » et faite pour une commande n\'est comptée qu\'une fois, dans la commande.' : '')+'</p>'+
     '<p class="hint">Seuils relevés le '+esc(SEUILS_DATE)+' sur service-public.gouv.fr. '+
     'Ils changent : en cas de doute au moment de la déclaration, vérifie-les.</p>'+
     '</div></div>');
@@ -5925,19 +6150,19 @@ function guideIndicateurs(vend){
     "Une entrée de stock saisie avec son prix compte dans tes achats du mois.",
     "Ouvrir le stock", function(){ view.sub = "stock"; aller("stock"); });
   etape(vend ? "Tes pièces vendues, une par une" : "Tes pièces terminées",
-    atelierActif ? "Chaque pièce passée en « terminée » ou « vendue » dans « Mes pièces » est comptée."
-                 : "Facultatif : « Mes pièces » suit chaque pièce de la fabrication à la vente.",
-    atelierActif ? "Ouvrir « Mes pièces »" : "Activer « Mes pièces »",
+    atelierActif ? "Chaque pièce passée en « terminée » ou « vendue » dans « Mes créations » est comptée."
+                 : "Facultatif : le suivi des pièces suit chaque pièce de la fabrication à la vente.",
+    atelierActif ? "Ouvrir « Mes créations »" : "Activer le suivi des pièces",
     function(){
-      if (!atelierActif){ state.reglages.mode = "complet"; sauverTout(); toast("L'onglet « Mes pièces » est apparu"); }
-      aller("atelier");
+      if (!atelierActif){ state.reglages.mode = "complet"; sauverTout(); toast("Le suivi des pièces est activé dans « Mes créations »"); }
+      aller("creations");
     });
   return g;
 }
 
 function origineEncaisse(nbAt, nbCmd){
   var parts = [];
-  if (nbAt) parts.push(nbAt + ' vente' + (nbAt > 1 ? 's notées' : ' notée') + ' dans « Mes pièces »');
+  if (nbAt) parts.push(nbAt + ' vente' + (nbAt > 1 ? 's notées' : ' notée') + ' dans « Mes créations »');
   if (nbCmd) parts.push(nbCmd + ' règlement' + (nbCmd > 1 ? 's' : '') + ' de commandes (arrhes, acomptes, soldes)');
   if (!parts.length) return '« Encaissé » est vide pour l\'instant : il additionnera tes ventes et les règlements de tes commandes, à leur date de paiement.';
   return '« Encaissé » additionne ' + parts.join(' et ') + ', chacun à sa date de paiement. C\'est aussi la base de ce que tu déclares en micro-entreprise.';
@@ -6020,7 +6245,7 @@ function renderIndicateurs(main){
   }
   if (pieces.length){
     t2.appendChild(tuile("Pièces terminées · " + per.nom.toLowerCase(), String(termP),
-      "passées en « terminée » dans « Mes pièces »", "acc-1"));
+      "passées en « terminée » dans « Mes créations »", "acc-1"));
   }
   if (vend){
     var plan = planDeCharge();
@@ -6155,7 +6380,7 @@ function renderIndicateurs(main){
     if (lignes.length){
       lignes.sort(function(a,b){ return b.ca - a.ca; });
       var cR = el('<div class="card" style="margin-bottom:18px"><header><h2>Ce qui te rapporte le plus</h2>'+
-        '<p>Tout ce que chaque création t\'a rapporté (ventes de « Mes pièces » et commandes) et ce qu\'elle te paie de l\'heure.</p>'+
+        '<p>Tout ce que chaque création t\'a rapporté (ventes de pièces et commandes) et ce qu\'elle te paie de l\'heure.</p>'+
         '</header><div class="body" style="padding-top:14px"></div></div>');
       var wR = el('<div class="tablewrap"></div>');
       var tR = el('<table style="min-width:560px"><thead><tr><th>Création</th><th class="n">Vendues</th>'+
@@ -6183,7 +6408,7 @@ function renderIndicateurs(main){
     PROD.forEach(function(x){ parProd[x.k] = 0; });
     pieces.forEach(function(p){ if (parProd[p.prod] !== undefined) parProd[p.prod]++; });
     var cO = el('<div class="card" style="margin-bottom:18px"><header><h2>Où en sont tes pièces</h2>'+
-      '<p>Toutes tes pièces suivies dans « Mes pièces », par étape de fabrication.</p></header>'+
+      '<p>Toutes tes pièces suivies dans « Mes créations », par étape de fabrication.</p></header>'+
       '<div class="body"><div id="gO"></div></div></div>');
     cO.querySelector("#gO").innerHTML = barreRepartition(PROD.map(function(x){
       return {lib:x.nom, val:parProd[x.k], couleur:x.c};
@@ -6197,7 +6422,7 @@ function renderIndicateurs(main){
   main.appendChild(el('<div class="ind-source"><p><b>D\'où viennent ces chiffres.</b> '+
     (vend ? origineEncaisse(nbAt, nbCmd) + ' ' : '')+
     '« Achats de matières » reprend les entrées de stock saisies avec leur prix. '+
-    (vend && nbAt && nbCmd ? 'Une pièce suivie dans « Mes pièces » et faite pour une commande (« Commande client ») n\'est comptée qu\'une fois, dans la commande. ' : '')+
+    (vend && nbAt && nbCmd ? 'Une pièce suivie dans « Mes créations » et faite pour une commande (« Commande client ») n\'est comptée qu\'une fois, dans la commande. ' : '')+
     'Les ventes passées sont figées au jour de la vente : un changement de prix ou de taux ne les modifie pas. '+
     '</p>'+
     '<p>Ce n\'est pas une comptabilité : c\'est ton tableau de bord. Il se met à jour tout seul, sur tous tes appareils.</p></div>'));
@@ -6401,9 +6626,9 @@ function bouton(libelle, action, primaire){
 function inviteComplet(raison){
   if (state.reglages.mode === "complet") return null;
   var d = el('<div class="banner"><p><b>Besoin de plus ?</b> '+esc(raison)+'</p></div>');
-  d.appendChild(bouton("Activer « Mes pièces »", function(){
+  d.appendChild(bouton("Activer le suivi des pièces", function(){
     state.reglages.mode = "complet"; sauverTout(); render();
-    toast("L'onglet « Mes pièces » est apparu");
+    toast("Le suivi des pièces est activé dans « Mes créations »");
   }));
   return d;
 }
@@ -7467,6 +7692,7 @@ function ajouterTemps(p, poste, min, debut){
     p.sessions.unshift({d:debut, poste:poste, min:Math.round(min*10)/10});
     if (p.sessions.length > 40) p.sessions.length = 40;
     p.maj = Date.now();
+    if (p.prod === "retouche" && p.retouches && p.retouches.length) p.retouches[p.retouches.length - 1].min = (Number(p.retouches[p.retouches.length - 1].min) || 0) + min;
     if (p.prod === "afaire" && min > 0.5) p.prod = "encours";   /* elle a commencé */
   }
 }
@@ -9971,13 +10197,53 @@ function renderCommandes(main){
     return ja - jb;
   });
 
+  /* Suivi : filtrer par étape, retrouver une cliente ou un numéro. */
+  var FCMD = [
+    {k:"tous",      nom:"Toutes"},
+    {k:"encours",   nom:"En cours",             f:function(c){ return c.statut === "acceptee" || c.statut === "encours" || c.statut === "terminee"; }},
+    {k:"devis",     nom:"Devis",                f:function(c){ return c.statut === "devis"; }},
+    {k:"afacturer", nom:"Livrées à facturer",   f:function(c){ return c.statut === "livree" && !c.factureNum; }},
+    {k:"facturees", nom:"Livrées et facturées", f:function(c){ return c.statut === "livree" && !!c.factureNum; }},
+    {k:"impayees",  nom:"Reste dû",             f:function(c){ return doitEtreEncaissee(c) && soldeDu(c) > 0; }},
+    {k:"annulees",  nom:"Annulées",             f:function(c){ return c.statut === "annulee"; }}
+  ];
+  var fck = view.fCmd || "tous";
+  var fc = FCMD.filter(function(x){ return x.k === fck; })[0] || FCMD[0];
+  var outils = el('<div class="cmd-outils"><div class="filters" style="margin:0"></div>'+
+    '<label class="f"><span class="sr-only">Rechercher une commande</span><input type="search" id="cmd-q" placeholder="Cliente, n° de commande, article…"></label></div>');
+  var fz = outils.querySelector(".filters");
+  FCMD.forEach(function(x){
+    var n = x.f ? liste.filter(x.f).length : liste.length;
+    if (x.k !== "tous" && !n) return;
+    var b = el('<button type="button" class="fchip">'+esc(x.nom)+' <span class="n">'+n+'</span></button>');
+    b.setAttribute("aria-pressed", fck === x.k ? "true" : "false");
+    b.addEventListener("click", function(){ view.fCmd = x.k; render(); });
+    fz.appendChild(b);
+  });
+  outils.querySelector("#cmd-q").value = view.cmdQ || "";
+  outils.querySelector("#cmd-q").addEventListener("input", function(e){ view.cmdQ = e.target.value; peindreCmd(); });
+  main.appendChild(outils);
+
   var wrap = el('<div class="tablewrap resp" style="margin-top:8px"></div>');
-  var t = el('<table style="min-width:900px"><thead><tr><th style="width:118px">N°</th><th>Cliente</th><th>Articles</th>'+
-    '<th style="width:120px">Promise pour</th><th style="width:130px">Statut</th>'+
-    '<th class="n" style="width:110px">Prix convenu</th><th class="n" style="width:110px">Reste dû</th>'+
+  var t = el('<table style="min-width:1000px"><thead><tr><th style="width:110px">N°</th><th>Cliente</th><th>Articles</th>'+
+    '<th style="width:118px">Promise pour</th><th style="width:150px">Statut</th>'+
+    '<th class="n" style="width:105px">Prix convenu</th><th class="n" style="width:95px">Versé</th><th class="n" style="width:105px">Reste dû</th>'+
     '<th style="width:70px"><span class="sr-only">Actions</span></th></tr></thead><tbody></tbody></table>');
   var tb = t.querySelector("tbody");
-  triees.forEach(function(c){
+  var videCmd = el('<p class="hint" hidden>Aucune commande dans ce filtre.</p>');
+  function peindreCmd(){
+  tb.innerHTML = "";
+  var q = String(view.cmdQ || "").trim().toLowerCase();
+  var affichees = triees.filter(function(c){
+    if (fc.f && !fc.f(c)) return false;
+    if (q){
+      var txt = [(c.num || ""), (c.client && c.client.nom) || "", c.refClient || ""].concat(articlesCommande(c).map(function(a){ return a.nom; })).join(" ").toLowerCase();
+      if (txt.indexOf(q) === -1) return false;
+    }
+    return true;
+  });
+  videCmd.hidden = affichees.length > 0;
+  affichees.forEach(function(c){
     var j = joursRestants(c);
     var fini = c.statut === "livree" || c.statut === "annulee";
     var urgence = "";
@@ -9996,18 +10262,23 @@ function renderCommandes(main){
           : c.variantes ? '<div class="hint" style="font-size:11px;margin-top:2px">'+esc(c.variantes)+'</div>' : '')+'</td>'+
       '<td data-l="Promise pour">'+(c.datePromise ? esc(new Date(dateVersTs(c.datePromise)).toLocaleDateString("fr-FR")) : '<span class="hint">non fixée</span>')+
         (urgence ? '<div style="margin-top:2px">'+urgence+'</div>' : '')+'</td>'+
-      '<td data-l="Statut">'+esc(statutCmd(c.statut).nom)+'</td>'+
-      '<td class="n" data-l="Prix convenu">'+esc(eur(totalDu(c)))+'</td>'+
-      '<td class="n" data-l="Reste dû">'+(solde > 0 ? '<b>'+esc(eur(solde))+'</b>'
+      '<td data-l="Statut"><span class="chip st-'+esc(c.statut)+'">'+esc(statutCmd(c.statut).nom)+'</span>'+
+        (c.factureNum ? '<div style="margin-top:3px"><span class="chip good">facturée</span></div>' : c.statut === "livree" ? '<div style="margin-top:3px"><span class="chip warn">à facturer</span></div>' : '')+'</td>'+
+      '<td class="n num" data-l="Prix convenu">'+esc(eur(totalDu(c)))+'</td>'+
+      '<td class="n num" data-l="Versé">'+(encaisse(c) > 0 ? esc(eur(encaisse(c))) : '<span class="hint">—</span>')+'</td>'+
+      '<td class="n num" data-l="Reste dû">'+(solde > 0 ? '<b>'+esc(eur(solde))+'</b>'
           : tropPercu(c) > 0 ? '<span class="warn">trop-perçu '+esc(eur(tropPercu(c)))+'</span>'
           : totalDu(c) > 0 ? '<span class="good">soldée</span>' : '<span class="hint">—</span>')+'</td>'+
       '<td><button type="button" class="btn sm">Ouvrir</button></td></tr>');
-    tr.querySelector("button").setAttribute("aria-label", "Ouvrir la commande " + (c.num || "") + (c.client && c.client.nom ? " de " + c.client.nom : ""));
-    tr.querySelector("button").addEventListener("click", function(){ view.cmdVue = c.id; render(); });
+    tr.querySelector("td:last-child button").setAttribute("aria-label", "Ouvrir la commande " + (c.num || "") + (c.client && c.client.nom ? " de " + c.client.nom : ""));
+    tr.querySelector("td:last-child button").addEventListener("click", function(){ view.cmdVue = c.id; render(); });
     tb.appendChild(tr);
   });
+  }
+  peindreCmd();
   wrap.appendChild(t);
   main.appendChild(wrap);
+  main.appendChild(videCmd);
   main.appendChild(carteRegistre());
 }
 /* Registre des factures et avoirs : tous les documents émis, même si la
@@ -11047,7 +11318,17 @@ function renderPatrons(main){
         (p.rang ? " · rang "+p.rang : "")+'</p></span>'+
       '<span class="m">ouvrir →</span></button>');
     c.addEventListener("click", function(){ view.patronVu = p.id; render(); });
-    box.appendChild(c);
+    if (!bibliothequePartagee){ box.appendChild(c); return; }
+    var w = el('<div class="pcard-wrap"></div>');
+    w.appendChild(c);
+    var pied = el('<div class="pcard-pied"><span>'+(p.publie ? '<span class="chip good">partagé</span> visible par les autres utilisatrices' : '<span class="chip neutre">privé</span> toi seule le vois')+'</span></div>');
+    if (!p.publie){
+      var bS = bouton("Partager…", function(){ dialoguePartage(p); }); bS.classList.add("sm"); bS.setAttribute("data-role", "partager");
+      bS.setAttribute("aria-label", "Partager le patron " + (p.titre || "sans titre") + " dans la bibliothèque");
+      pied.appendChild(bS);
+    }
+    w.appendChild(pied);
+    box.appendChild(w);
   });
   main.appendChild(box);
 }
@@ -11238,72 +11519,65 @@ function renderBibliotheque(main){
   }
 }
 
-/* Publier un patron : la déclaration de droits n'est pas une formalité, c'est
-   la condition. Sans elle, le bouton ne part pas — et le serveur refuserait. */
-function cartePublication(p){
-  if (!bibliothequePartagee) return null;
-  var c = el('<div class="card" style="margin-bottom:16px"><header><h2>Partager ce patron</h2>'+
-    '<p>Le rendre visible par les autres utilisatrices de Crochompte.</p></header><div class="body">'+
-    '<p style="margin:0 0 12px">Seul <b>le texte</b> du patron est publié. '+
-    'Tes pages photographiées restent privées : une page scannée est presque toujours '+
+/* Partager un patron se fait en deux temps, et jamais pendant la saisie :
+   1. un formulaire (nom d'autrice, niveau, matériel, licence, déclaration
+      de droits) ; 2. un rappel clair que le patron devient visible par
+      toutes, avec « Confirmer le partage » ou « Annuler ». La déclaration
+      de droits n'est pas une formalité : sans elle, rien ne part — et le
+      serveur refuserait. */
+function dialoguePartage(p){
+  if (!bibliothequePartagee) return;
+  var texte = String(p.texte || "").trim();
+  if (texte.length < 80){
+    toast("Pour partager un patron, colle d'abord son texte (80 caractères minimum) : seul le texte est publié, jamais les pages photographiées.",
+          {important:true, libelle:"Ouvrir le patron", fn:function(){ view.patronVu = p.id; render(); }});
+    return;
+  }
+  var box = el('<div>'+
+    '<p style="margin:0 0 12px">Seul <b>le texte</b> du patron est publié. Tes pages photographiées restent privées : une page scannée est presque toujours '+
     'la reproduction d\'un patron acheté, qui ne peut pas être partagé.</p>'+
     '<div class="grid2">'+
-      '<label class="f"><span>Nom d\'autrice affiché</span>'+
-        '<input id="pb-auteur" type="text" maxlength="60" value="'+esc(p.auteur||"")+'" placeholder="le nom que les autres verront"></label>'+
-      '<label class="f"><span>Niveau</span><select id="pb-niv">'+
-        '<option value="">—</option><option value="1">Facile</option>'+
-        '<option value="2">Intermédiaire</option><option value="3">Exigeant</option></select></label>'+
+      '<label class="f"><span>Nom d\'autrice affiché</span><input id="pb-auteur" type="text" maxlength="60" value="'+esc(p.auteur||"")+'" placeholder="le nom que les autres verront"></label>'+
+      '<label class="f"><span>Niveau</span><select id="pb-niv"><option value="">—</option><option value="1">Facile</option><option value="2">Intermédiaire</option><option value="3">Exigeant</option></select></label>'+
     '</div>'+
-    '<label class="f" style="margin-top:10px"><span>Matériel (fil, crochet, dimensions finies)</span>'+
-      '<input id="pb-mat" type="text" maxlength="200" placeholder="coton DK, crochet 3 mm, 18 cm de haut"></label>'+
-    '<label class="f" style="margin-top:10px"><span>Licence : ce que les autres ont le droit d\'en faire</span>'+
-      '<select id="pb-lic"></select></label>'+
+    '<label class="f" style="margin-top:10px"><span>Matériel (fil, crochet, dimensions finies)</span><input id="pb-mat" type="text" maxlength="200" placeholder="coton DK, crochet 3 mm, 18 cm de haut"></label>'+
+    '<label class="f" style="margin-top:10px"><span>Licence : ce que les autres ont le droit d\'en faire</span><select id="pb-lic"></select></label>'+
     '<p class="hint" id="pb-lic-aide" style="margin-top:4px"></p>'+
-    '<label style="display:flex;gap:10px;align-items:flex-start;margin-top:16px;cursor:pointer">'+
+    '<label style="display:flex;gap:10px;align-items:flex-start;margin-top:14px;cursor:pointer">'+
       '<input type="checkbox" id="pb-droits" style="margin-top:3px;width:18px;height:18px;flex:none">'+
-      '<span>Je certifie avoir écrit ce patron moi-même, ou détenir les droits qui me permettent '+
-      'de le partager. Je sais que publier le patron de quelqu\'un d\'autre sans son accord est '+
-      'une contrefaçon, et que <b>j\'en réponds seule</b> : Crochompte met l\'espace de partage '+
-      'à disposition entre utilisatrices, il ne relit ni ne valide ce qui y est publié.</span></label>'+
-    '<div class="savebar" style="margin-top:16px"></div>'+
-    '</div></div>');
-  var selLic = c.querySelector("#pb-lic"), aide = c.querySelector("#pb-lic-aide");
+      '<span>Je certifie avoir écrit ce patron moi-même, ou détenir les droits qui me permettent de le partager. Je sais que publier le patron '+
+      'de quelqu\'un d\'autre sans son accord est une contrefaçon, et que <b>j\'en réponds seule</b> : Crochompte met l\'espace de partage à '+
+      'disposition entre utilisatrices, il ne relit ni ne valide ce qui y est publié.</span></label></div>');
+  var selLic = box.querySelector("#pb-lic"), aide = box.querySelector("#pb-lic-aide");
   LICENCES_BIBLIO.forEach(function(l){ selLic.appendChild(el('<option value="'+esc(l.id)+'">'+esc(l.nom)+'</option>')); });
-  function majAide(){
-    var l = LICENCES_BIBLIO.filter(function(x){ return x.id === selLic.value; })[0];
-    aide.textContent = l ? l.aide : "";
-  }
+  function majAide(){ var l = LICENCES_BIBLIO.filter(function(x){ return x.id === selLic.value; })[0]; aide.textContent = l ? l.aide : ""; }
   selLic.addEventListener("change", majAide); majAide();
-  var bPub = bouton("Publier dans la bibliothèque", function(){
-    if (!c.querySelector("#pb-droits").checked){
-      toast("Coche la déclaration de droits pour publier"); return;
-    }
-    if (!c.querySelector("#pb-auteur").value.trim()){
-      toast("Indique le nom d'autrice à afficher : il sera visible par les autres utilisatrices");
-      c.querySelector("#pb-auteur").focus(); return;
-    }
-    var texte = (p.texte||"").trim();
-    if (texte.length < 80){
-      toast("Colle d'abord le texte du patron (80 caractères minimum)"); return;
-    }
-    bPub.disabled = true; bPub.textContent = "Publication…";
-    bibliothequePartagee.publier({
-      titre: p.titre || "Patron sans titre",
-      auteur: c.querySelector("#pb-auteur").value.trim(),
-      famille: null,
-      niveau: Number(c.querySelector("#pb-niv").value) || null,
-      materiel: c.querySelector("#pb-mat").value.trim(),
-      texte: texte, notes: p.notes || "",
-      licence: selLic.value, droits: true
-    }).then(function(r){
-      bPub.disabled = false; bPub.textContent = "Publier dans la bibliothèque";
-      if (r.erreur){ toast(r.erreur); return; }
-      p.publie = true; sauverTout(); render();
-      toast("Patron publié. Merci, les autres utilisatrices pourront s'en servir.");
+  dialogueChamps({titre:"Partager « " + (p.titre || "Patron sans titre") + " »", large:true, contenu: box, champs: [],
+    bouton:"Valider", annuler:"Annuler",
+    verifier:function(){
+      if (!box.querySelector("#pb-auteur").value.trim()){ box.querySelector("#pb-auteur").focus(); return "Indique le nom d'autrice à afficher : il sera visible par les autres utilisatrices."; }
+      if (!box.querySelector("#pb-droits").checked) return "Coche la déclaration de droits pour continuer.";
+      return null;
+    }}, function(){
+    var auteur = box.querySelector("#pb-auteur").value.trim(), lic = selLic.value;
+    var licNom = (LICENCES_BIBLIO.filter(function(x){ return x.id === lic; })[0] || {}).nom || lic;
+    var recap = el('<div class="partage-recap"><b>'+esc(p.titre || "Patron sans titre")+'</b>par '+esc(auteur)+' · licence : '+esc(licNom)+'</div>');
+    confirmer({titre:"Ce patron va devenir visible par toutes les utilisatrices",
+      texte:"Relis-le une dernière fois : une fois partagé, d'autres pourront le lire, le copier et le relier à leurs créations, selon la licence choisie.\n"+
+            "Tu confirmes en avoir les droits : ce n'est pas un patron acheté, reçu ou recopié.",
+      contenu: recap, bouton:"Confirmer le partage", annuler:"Annuler"}, function(){
+      bibliothequePartagee.publier({
+        titre: p.titre || "Patron sans titre", auteur: auteur, famille: null,
+        niveau: Number(box.querySelector("#pb-niv").value) || null,
+        materiel: box.querySelector("#pb-mat").value.trim(),
+        texte: texte, notes: p.notes || "", licence: lic, droits: true
+      }).then(function(r){
+        if (r.erreur){ toast(r.erreur); return; }
+        p.publie = true; p.auteur = p.auteur || auteur; sauverTout(); render();
+        toast("Patron partagé. Merci, les autres utilisatrices pourront s'en servir.");
+      });
     });
-  }, true);
-  c.querySelector(".savebar").appendChild(bPub);
-  return c;
+  });
 }
 
 /* Ajoute des fichiers (PDF ou images) à un patron, dans l'ordre choisi.
@@ -11447,9 +11721,13 @@ function renderPatronDetail(main, p){
   });
   main.appendChild(cT);
 
-  /* --- partage dans la bibliothèque commune --- */
-  var cPub = cartePublication(p);
-  if (cPub) main.appendChild(cPub);
+  /* --- partage : il ne se décide plus ici, en pleine saisie, mais depuis
+     la liste « Mes patrons », en deux temps (formulaire puis confirmation) --- */
+  if (bibliothequePartagee){
+    main.appendChild(el('<p class="hint" style="margin:-4px 0 16px">'+
+      (p.publie ? '<b>Ce patron est partagé dans la bibliothèque.</b> Pour le retirer : onglet « Bibliothèque partagée », ouvre-le, puis « Retirer de la bibliothèque ».'
+                : '<b>Ce patron est privé</b> : toi seule le vois. Pour le partager avec les autres utilisatrices, reviens à « Mes patrons » et touche « Partager… » sous ce patron.')+'</p>'));
+  }
 
   /* --- rattachement à une création --- */
   var cR = el('<div class="card" style="margin-bottom:16px"><header><h2>Relier à une création</h2>'+

@@ -843,6 +843,88 @@ if (window.top !== window.self){
   }
   .dlg.large{max-width:680px;}
   .dlg table{min-width:0;}
+  /* ═══ V39 : Mes créations (modèles + pièces) ═══ */
+  .crea-barre{display:flex;justify-content:space-between;gap:12px 18px;flex-wrap:wrap;align-items:center;margin-bottom:16px;}
+  .crea-outils{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-left:auto;}
+  .crea-outils .f{margin:0;} .crea-outils input,.crea-outils select{min-width:200px;}
+  .crea-liste{display:grid;gap:14px;}
+  .crea-card{background:var(--card);border:1px solid var(--rule);border-radius:14px;padding:14px 16px;}
+  .crea-tete{display:grid;grid-template-columns:minmax(220px,1.4fr) minmax(0,3fr) auto;gap:12px 20px;align-items:center;}
+  .crea-id{appearance:none;background:none;border:0;padding:0;font:inherit;color:inherit;text-align:left;cursor:pointer;
+    display:flex;gap:12px;align-items:center;min-width:0;border-radius:8px;}
+  .crea-id:hover h2{text-decoration:underline;}
+  .crea-id h2{margin:0;font-size:17px;line-height:1.3;} .crea-id .m{margin:2px 0 0;font-size:12.5px;color:var(--muted);}
+  .crea-chiffres{display:flex;gap:10px 22px;flex-wrap:wrap;align-items:flex-end;}
+  .crea-chiffres > div{display:flex;flex-direction:column;gap:3px;min-width:0;}
+  .crea-chiffres .k{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:500;}
+  .crea-chiffres b{font-size:16px;font-variant-numeric:tabular-nums;}
+  .crea-chiffres b.good{color:var(--good);} .crea-chiffres b.warn{color:var(--warn);} .crea-chiffres b.bad{color:var(--bad);}
+  .crea-act{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;}
+  .crea-vide{margin:10px 0 0;color:var(--muted);font-size:13px;}
+  .crea-card .tablewrap{margin-top:12px;}
+  .t-pieces td{vertical-align:top;}
+  .t-pieces .tps{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .t-pieces .cli{margin-top:6px;font-size:13px;}
+  .t-pieces select{width:100%;min-width:130px;}
+  .t-pieces .act-col{display:flex;gap:4px;align-items:center;justify-content:flex-end;}
+  .t-pieces b.good{color:var(--good);} .t-pieces b.warn{color:var(--warn);} .t-pieces b.bad{color:var(--bad);} .t-pieces b.neutre{color:var(--muted);}
+  .t-pieces input[data-role=prix]{text-align:right;max-width:110px;}
+  .cout-piece .row{display:flex;justify-content:space-between;gap:16px;padding:7px 0;border-bottom:1px solid var(--rule);font-size:14px;}
+  .cout-piece .row span:first-child{display:flex;flex-direction:column;} .cout-piece .row small{color:var(--muted);font-size:12px;}
+  .cout-piece .row span:last-child{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap;}
+  .cout-piece .row.tot{border-top:2px solid var(--rule-strong);font-weight:700;}
+  .cout-piece .good{color:var(--good);} .cout-piece .warn{color:var(--warn);} .cout-piece .bad{color:var(--bad);}
+  .dlg-contenu:empty{display:none;}
+  #nav button.ong-fiche{font-style:italic;}
+  @media (max-width:860px){
+    .crea-tete{grid-template-columns:1fr;}
+    .crea-act{justify-content:flex-start;}
+    .crea-outils{margin-left:0;width:100%;} .crea-outils .f{flex:1 1 160px;} .crea-outils input,.crea-outils select{min-width:0;width:100%;}
+  }
+  /* ═══ V39 : catalogue en liste ═══ */
+  .trow.trow-type{grid-template-columns:34px minmax(0,1.6fr) minmax(90px,.9fr) minmax(80px,.8fr) minmax(90px,.8fr) minmax(90px,.8fr);}
+  .trow-type .tt-niv{display:flex;flex-direction:column;gap:3px;font-size:12.5px;color:var(--muted);}
+  .trow-type .c span{display:block;}
+  .trow-type .chip{margin-top:4px;}
+  .types-tete{display:grid;grid-template-columns:34px minmax(0,1.6fr) minmax(90px,.9fr) minmax(80px,.8fr) minmax(90px,.8fr) minmax(90px,.8fr);gap:12px;
+    padding:0 14px 6px;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:500;}
+  .types-tete span:nth-child(n+4){text-align:right;}
+  @media (max-width:760px){
+    .trow.trow-type{grid-template-columns:34px 1fr auto;}
+    .trow-type .tt-niv,.trow-type .tt-tps{grid-column:2;}
+    .trow-type .c.pc{grid-column:3;}
+    .types-tete{display:none;}
+  }
+  /* ═══ V39 : accueil, reprendre ═══ */
+  .reprise{display:flex;flex-direction:column;gap:10px;}
+  .reprise .r-main{display:flex;gap:12px;align-items:center;}
+  .reprise .r-main h3{margin:0;font-size:16px;} .reprise .r-main p{margin:3px 0 0;font-size:13px;opacity:.85;}
+  .reprise .r-act{display:flex;gap:8px;flex-wrap:wrap;}
+  .reprise .r-act .btn{background:var(--hero-ink);color:var(--hero);border-color:var(--hero-ink);}
+  .reprise .r-act .btn.alt{background:transparent;color:var(--hero-ink);border-color:var(--hero-muted);}
+  .reprise .r-liste b.good{color:var(--hero-ok);} .reprise .r-liste b.warn,.reprise .r-liste b.bad{color:var(--hero-accent);}
+  .reprise .r-main .vig,.reprise .r-main .vignette{flex:none;}
+  .reprise .r-liste{display:flex;flex-direction:column;gap:6px;margin-top:4px;padding-top:10px;border-top:1px solid rgba(255,255,255,.18);}
+  .reprise .r-liste button{appearance:none;background:none;border:0;padding:4px 0;font:inherit;color:inherit;text-align:left;cursor:pointer;
+    display:flex;justify-content:space-between;gap:10px;align-items:center;font-size:13.5px;opacity:.92;}
+  .reprise .r-liste button:hover{opacity:1;text-decoration:underline;}
+  .reprise .r-liste b{font-variant-numeric:tabular-nums;white-space:nowrap;}
+  /* ═══ V39 : commandes ═══ */
+  .chip.st-devis{background:var(--surface-2);color:var(--muted);border:1px solid var(--rule);}
+  .chip.st-acceptee{background:var(--acc-1-soft,var(--good-soft));color:var(--primary);}
+  .chip.st-encours{background:var(--warn-soft);color:var(--warn);}
+  .chip.st-terminee{background:var(--good-soft);color:var(--good);}
+  .chip.st-livree{background:var(--good-soft);color:var(--good);}
+  .chip.st-annulee{background:var(--bad-soft);color:var(--bad);}
+  .cmd-outils{display:flex;justify-content:space-between;gap:12px 18px;flex-wrap:wrap;align-items:center;margin-bottom:12px;}
+  .cmd-outils .f{margin:0;} .cmd-outils input{min-width:220px;}
+  /* ═══ V39 : partage d'un patron ═══ */
+  .pcard-wrap{display:grid;gap:0;}
+  .pcard-wrap .pcard{border-radius:12px 12px 0 0;}
+  .pcard-pied{display:flex;gap:8px 14px;align-items:center;flex-wrap:wrap;justify-content:space-between;
+    border:1px solid var(--rule);border-top:0;border-radius:0 0 12px 12px;padding:8px 14px;background:var(--surface-2);font-size:12.5px;color:var(--muted);}
+  .partage-recap{margin:0 0 10px;padding:10px 12px;border-radius:10px;background:var(--surface-2);font-size:13.5px;}
+  .partage-recap b{display:block;margin-bottom:4px;}
 </style>
 </head>
 <body>
@@ -883,7 +965,7 @@ if (window.top !== window.self){
      Sans ce fichier (ou s'il ne se charge pas), rien ne change : l'objet
      global reste absent et l'application démarre hors ligne, comme avant. -->
 <script src="config.js" onerror="console.info('Crochompte : pas de config.js, mode hors ligne')"></script>
-<script src="app.js?v=40"></script>
+<script src="app.js?v=41"></script>
 
 <!-- ═══ Comptes et synchronisation — facultatifs quand config.js est absent ═══
      Sans config.js, l'application fonctionne hors ligne, exactement comme la

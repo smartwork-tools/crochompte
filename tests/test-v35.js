@@ -73,7 +73,7 @@ async function modeComplet(p){
     R.chrono_barre_visible = await p.locator('#barre-chrono').count() === 1;
     await onglet(p, 'Accueil');
     R.accueil_signale_chrono = /Chronomètre en marche depuis 5 h/.test(await p.textContent('.todo'));
-    R.accueil_bande_verte = (await p.locator('.acc-hero h1').count()) === 1 && (await p.locator('.acc-hero .preuve .big').count()) === 1;
+    R.accueil_bande_verte = (await p.locator('.acc-hero h1').count()) === 1 && (await p.locator('.acc-hero .preuve .big, .acc-hero .preuve .reprise').count()) === 1;
     /* Plus de 4 h : on demande avant d'ajouter */
     await p.click('#cb-stop'); await p.waitForTimeout(200);
     R.chrono_4h_demande = await p.locator('.dlg').count() === 1;

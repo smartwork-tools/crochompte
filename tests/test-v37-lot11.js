@@ -41,8 +41,8 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     await graine(p);
     await dans(p, function(){ state.reglages.mode = "complet"; sauverTout(); render(); });
 
-    /* 1. Onglet renommé : « Mes pièces » (et plus « Atelier ») */
-    R.onglet_mes_pieces = await p.evaluate(()=>{ const n=[...document.querySelectorAll('#nav button')].map(b=>b.textContent.trim()); return n.includes('Mes pièces') && !n.includes('Atelier'); });
+    /* 1. Plus d'onglet « Atelier » ni « Mes pièces » : les pièces vivent dans « Mes créations » (V39) */
+    R.onglet_mes_pieces = await p.evaluate(()=>{ const n=[...document.querySelectorAll('#nav button')].map(b=>b.textContent.trim()); return n.includes('Mes créations') && !n.includes('Atelier') && !n.includes('Mes pièces'); });
 
     /* 2. Pièce vendue « à part » alors qu'une commande attend : on propose de la relier */
     await dans(p, function(){

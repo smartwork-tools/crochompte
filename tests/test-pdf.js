@@ -37,7 +37,7 @@ const {graine} = require('./aide.js');
   R.precedent_ferme_visionneuse = !(await p.isVisible('.visio')) && (await p.textContent('#main')).includes('Les pages du patron');
   // 2. Photo d'une création depuis un PDF
   await p.click('#nav >> text=Mes créations'); await p.waitForTimeout(300);
-  await p.locator('table tbody tr').first().click(); await p.waitForTimeout(400);
+  await p.locator('.crea-id').first().click(); await p.waitForTimeout(400);
   const [fc2] = await Promise.all([p.waitForEvent('filechooser'), p.click('button:has-text("Ajouter une photo")')]);
   await fc2.setFiles(pdf);
   await p.waitForTimeout(3000);

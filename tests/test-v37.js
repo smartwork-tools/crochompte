@@ -39,7 +39,7 @@ const auj = () => { const d = new Date(); return d.getFullYear()+'-'+String(d.ge
 
     /* 1. Virgule décimale : 45,50 reste 45,50 */
     await onglet(p, 'Mes créations');
-    await p.locator('#main tr', {hasText:'Lapin Céleste'}).first().click(); await p.waitForTimeout(250);
+    await p.locator('.crea-card', {hasText:'Lapin Céleste'}).locator('.crea-id').click(); await p.waitForTimeout(250);
     await p.fill('#f-prix', '32,5'); await p.waitForTimeout(150);
     R.virgule_affichee = (await p.inputValue('#f-prix')) === '32,5';
     await p.getByRole('button', {name:'Enregistrer', exact:true}).click(); await p.waitForTimeout(300);
@@ -127,7 +127,7 @@ const auj = () => { const d = new Date(); return d.getFullYear()+'-'+String(d.ge
                       paiements:[], dateCommande:new Date().toISOString(), canal:'direct', note:'', variantes:'', libelle:'', datePromise:arg}];
       s.pieces = [{id:'pc', cid:'c1', prod:'termine', com:'commande', prix:null, mesure:{crochet:120}, sessions:[], cree:Date.now(), maj:Date.now()}];
     }, auj());
-    await onglet(p, 'Mes pièces');
+    await onglet(p, 'Mes créations');
     await p.selectOption('tr[data-pid="pc"] select[data-role="com"]', 'vendu'); await p.waitForTimeout(300);
     let s4 = await lire(p);
     R.piece_reliee_commande = s4.pieces[0].cmdId === 'k9' && s4.commandes[0].pieceId === 'pc';
@@ -140,17 +140,17 @@ const auj = () => { const d = new Date(); return d.getFullYear()+'-'+String(d.ge
     /* verdict à prix 0 */
     await ecrire(p, function(){ s.creations[0].prix = 0; });
     await onglet(p, 'Mes créations');
-    const ligne0 = await p.locator('#main tr', {hasText:'Lapin Céleste'}).first().textContent();
+    const ligne0 = await p.locator('.crea-card', {hasText:'Lapin Céleste'}).locator('.crea-tete').textContent();
     R.verdict_prix_a_fixer = ligne0.includes('Prix à fixer') && !ligne0.includes('À perte');
     /* archivage d'une création qui a des ventes */
-    await p.locator('#main tr', {hasText:'Lapin Céleste'}).first().click(); await p.waitForTimeout(250);
+    await p.locator('.crea-card', {hasText:'Lapin Céleste'}).locator('.crea-id').click(); await p.waitForTimeout(250);
     await p.getByRole('button', {name:'Supprimer la création'}).click(); await p.waitForTimeout(150);
     R.archivage_propose = (await p.textContent('.dlg h2')).includes('Archiver');
     await p.click('.dlg [data-oui]'); await p.waitForTimeout(300);
     s4 = await lire(p);
     R.archive_garde_ventes = s4.creations.find(c=>c.id==='c1').archive && s4.pieces.length === 1;
-    R.archive_masquee_liste = !(await p.locator('#main tbody tr', {hasText:'Lapin Céleste'}).count()) && (await p.textContent('#main')).includes('Créations archivées');
-    R.ligne_clavier = await p.evaluate(()=>{ const tr = document.querySelector('#main tbody tr[role="link"]'); return !!tr && tr.tabIndex === 0; });
+    R.archive_masquee_liste = !(await p.locator('#main .crea-card', {hasText:'Lapin Céleste'}).count()) && (await p.textContent('#main')).includes('Créations archivées');
+    R.ligne_clavier = await p.evaluate(()=>{ const b = document.querySelector('#main .crea-id'); return !!b && b.tagName === 'BUTTON' && /Ouvrir la fiche de/.test(b.getAttribute('aria-label')); });
 
     /* 5. Brouillon gardé après rechargement */
     await p.getByRole('button', {name:'+ Nouvelle création'}).click(); await p.waitForTimeout(250);
@@ -158,7 +158,7 @@ const auj = () => { const d = new Date(); return d.getFullYear()+'-'+String(d.ge
     await p.reload(); await p.waitForTimeout(1500);
     const acc = await p.textContent('#main');
     R.brouillon_propose = acc.includes('Bonnet du brouillon');
-    await p.getByRole('button', {name:'Reprendre'}).click(); await p.waitForTimeout(300);
+    await p.getByRole('button', {name:'Reprendre la fiche'}).click(); await p.waitForTimeout(300);
     R.brouillon_repris = (await p.inputValue('#f-nom')) === 'Bonnet du brouillon';
 
     /* 6. Unité protégée, achats conservés à la suppression */
@@ -210,10 +210,10 @@ const auj = () => { const d = new Date(); return d.getFullYear()+'-'+String(d.ge
     /* V-11 : temps 0 + heures hors crochet → « Temps à indiquer », pas un gain inventé */
     await ecrire(p, function(){ s.reglages.heuresIndirectesMois = 20; s.reglages.piecesParMois = 10; s.creations[0].temps = {prep:0,crochet:0,assemb:0,finition:0,emball:0}; });
     await onglet(p, 'Mes créations');
-    R.v11_temps_a_indiquer = (await p.locator('#main tr', {hasText:'Lapin Céleste'}).first().textContent()).includes('Temps à indiquer');
+    R.v11_temps_a_indiquer = (await p.locator('.crea-card', {hasText:'Lapin Céleste'}).locator('.crea-tete').textContent()).includes('Temps à indiquer');
     /* V-13 : vendre au « prix juste » affiché paie vraiment l'objectif */
     await ecrire(p, function(){ s.reglages.heuresIndirectesMois = 0; s.reglages.tauxHoraire = 18; s.creations[1].temps = {prep:17,crochet:233,assemb:31,finition:11,emball:7}; });
-    await p.locator('#main tr', {hasText:'Bonnet côtelé'}).first().click(); await p.waitForTimeout(300);
+    await p.locator('.crea-card', {hasText:'Bonnet côtelé'}).locator('.crea-id').click(); await p.waitForTimeout(300);
     const objTxt = await p.textContent('#r-obj');
     const m13 = objTxt.replace(/\u202f|\u00a0/g,' ').match(/vendre ([0-9 ]+,[0-9]{2}) €/);
     if (m13){ await p.fill('#f-prix', m13[1].replace(/ /g,'')); await p.waitForTimeout(250); }
@@ -223,7 +223,7 @@ const auj = () => { const d = new Date(); return d.getFullYear()+'-'+String(d.ge
       if (oeil){ oeil.stock = 10; s.creations[0].lignes.push({mid:oeil.id, qte:2}); } s.reglages.tauxPerte = 10; });
     const oeilId = (await lire(p)).__oeil;
     await ecrire(p, function(){ s.pieces = [{id:'po', cid:'c1', prod:'encours', com:'atelier', prix:null, mesure:{}, sessions:[], cree:Date.now(), maj:Date.now()}]; });
-    await onglet(p, 'Mes pièces');
+    await onglet(p, 'Mes créations');
     await p.selectOption('tr[data-pid="po"] select[data-role="prod"]', 'termine'); await p.waitForTimeout(300);
     R.v27_pas_de_perte_unite = !oeilId || (await lire(p)).matieres.find(m=>m.id===oeilId).stock === 8;
     await p.close();
@@ -238,7 +238,7 @@ const auj = () => { const d = new Date(); return d.getFullYear()+'-'+String(d.ge
     p = await page(b, {width:390, height:844});
     await graine(p);
     await p.click('#menu-btn'); await p.click('#mm-liste >> text=Mes créations'); await p.waitForTimeout(500);
-    await p.locator('#main tr', {hasText:'Panier'}).first().click(); await p.waitForTimeout(300);
+    await p.locator('.crea-card', {hasText:'Panier'}).locator('.crea-id').click(); await p.waitForTimeout(300);
     R.tel_barre_resultat = await p.isVisible('.barre-fiche') && (await p.textContent('#bf-g')).includes('/ h');
     await p.close();
   } catch (e) { R._echec = String(e && e.stack || e); }
