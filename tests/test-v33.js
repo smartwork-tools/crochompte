@@ -59,7 +59,7 @@ async function connecter(p){
     R.todo_stock = todo.includes('sous ton seuil');
     R.todo_ordre_rouge_en_premier = (await p.getAttribute('.todo li:first-child .ico', 'class')).includes('bad');
     R.tuiles_mois = (await p.textContent('#main')).includes('Encaissé');
-    R.creations_recentes = (await p.locator('.crea-mini .trow').count()) === 3;
+    R.creations_recentes = (await p.locator('.r-liste button').count()) >= 3;
     await p.screenshot({path:require('path').join(__dirname,'captures','accueil.png'), fullPage:true});
 
     // 3. Historique : fiche → précédent → liste

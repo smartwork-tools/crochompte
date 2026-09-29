@@ -82,7 +82,7 @@
   <tr><th>Donnée</th><th>Pourquoi</th><th>Combien de temps</th></tr>
   <tr>
     <td data-l="Donnée">Ton pseudo</td>
-    <td data-l="Pourquoi">Te reconnaître à la connexion. Jamais montré à personne d'autre, sauf si tu choisis toi-même de l'écrire comme nom d'autrice d'un patron partagé.</td>
+    <td data-l="Pourquoi">Te reconnaître à la connexion. Jamais montré à personne d'autre, sauf si tu choisis toi-même de l'écrire comme signature d'un patron partagé.</td>
     <td data-l="Combien de temps">Jusqu'à l'effacement de ton compte</td>
   </tr>
   <tr>
@@ -141,10 +141,10 @@
     <td data-l="Combien de temps">Tant que le patron existe ; à l'effacement de ton compte</td>
   </tr>
 </table>
-<h2>Les données de tes clientes</h2>
+<h2>Les données de ta clientèle</h2>
 <p>Si tu notes des commandes, tu y enregistres le nom, le moyen de contact et
-éventuellement l'adresse de tes clientes. Pour ces données-là, c'est
-<b>toi</b> la responsable : tu décides de ce que tu notes et pourquoi.
+éventuellement l'adresse des personnes qui te commandent. Pour ces données-là, c'est
+<b>toi</b> qui en as la responsabilité : tu décides de ce que tu notes et pourquoi.
 Crochompte les conserve pour toi, dans ton compte, sans jamais les lire ni
 les utiliser (rôle de sous-traitant, article 28 du RGPD). N'y note que ce qui
 est utile à la commande et à la facture, et efface les commandes dont tu n'as
@@ -159,19 +159,19 @@ L'application ne cherche pas à savoir ce que tu fais : elle t'aide à le compte
 
 <h2>Si tu partages un patron</h2>
 <p>
-  La <b>bibliothèque partagée</b> est un espace d'échange entre utilisatrices de
+  La <b>bibliothèque partagée</b> est un espace d'échange entre membres de
   Crochompte. Rien n'y arrive tout seul : un patron n'y figure que si tu as
   choisi de l'y mettre, patron par patron.
 </p>
-<p>Quand tu publies, deviennent <b>visibles par les autres utilisatrices</b> :
-le texte du patron, son titre, le nom d'autrice que tu as choisi d'afficher, la
+<p>Quand tu publies, deviennent <b>visibles par les autres membres</b> :
+le texte du patron, son titre, la signature que tu as choisi d'afficher, la
 licence retenue et la date. Rien d'autre : ni ton adresse e-mail, ni ton
 pseudo de connexion s'il diffère du nom affiché, ni tes pages photographiées —
 celles-ci restent privées, dans ton compte, et ne peuvent pas être publiées.</p>
 <p>
   Tu peux retirer un patron partagé à tout moment ; ta copie personnelle n'est
   pas touchée. Crochompte met l'espace à disposition : les patrons y sont
-  publiés tels quels par leurs autrices, qui en répondent, et ne sont ni relus
+  publiés tels quels par les personnes qui les partagent, et qui en répondent, et ne sont ni relus
   ni vérifiés. Un bouton <b>Signaler</b> figure sur chacun.
 </p>
 
@@ -236,12 +236,12 @@ pour le compte du responsable ci-dessus, et pour rien d'autre.</p>
       Supabase. Personne — pas même nous — ne peut le consulter.</li>
   <li>Ton pseudo n'est <b>jamais montré à personne d'autre</b> qu'à toi : il
       sert uniquement à te reconnecter. Quand tu partages un patron, c'est toi
-      qui écris le nom d'autrice affiché ; ton pseudo n'est jamais mis à sa
+      qui écris la signature affichée ; ton pseudo n'est jamais mis à sa
       place sans toi.</li>
   <li>Ton adresse e-mail sert à confirmer que le compte est le tien, à
       t'envoyer un lien en cas de mot de passe oublié, et — si tu le
       préfères à ton pseudo — à te reconnecter. Elle n'est jamais montrée à
-      d'autres utilisatrices.</li>
+      aux autres membres.</li>
   <li>La base applique une <b>séparation par compte au niveau du serveur</b>
       (row level security) : une requête ne peut renvoyer que les lignes de la
       personne connectée, quelle que soit la façon dont elle est formulée.</li>
@@ -252,7 +252,7 @@ pour le compte du responsable ci-dessus, et pour rien d'autre.</p>
 <h2>Cookies</h2>
 <p>
   Aucun cookie publicitaire ni de mesure d'audience. L'application conserve
-  seulement, dans ton navigateur, ton atelier et — si tu es connectée — un jeton
+  seulement, dans ton navigateur, ton atelier et — si ta session est ouverte — un jeton
   de session pour ne pas te redemander de te connecter à chaque visite. Ces
   éléments sont nécessaires au fonctionnement : ils ne demandent pas de
   consentement préalable. Quand tu te déconnectes, ton atelier et tes photos

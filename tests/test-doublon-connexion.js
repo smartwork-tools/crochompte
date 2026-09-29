@@ -18,7 +18,7 @@ const path = require('path');
   await p.waitForTimeout(400);
 
   // Compte le nombre d'appels à mon_profil (RPC) via le mock, et le nombre
-  // de toasts "Connectée" affichés.
+  // de mentions « Session ouverte » affichées (une seule : le menu du téléphone).
   await p.evaluate(() => { window.__compteurProfil = 0; });
 
   await p.fill('#sy-c-identifiant', 'LaineTest');
@@ -28,7 +28,7 @@ const path = require('path');
 
   const nbToasts = await p.locator('.toast').count();
   const texteBody = await p.textContent('body');
-  const occurrencesConnectee = (texteBody.match(/Connectée/g) || []).length;
+  const occurrencesConnectee = (texteBody.match(/Session ouverte/g) || []).length;
 
   console.log(JSON.stringify({
     nb_toasts_presents_apres_600ms: nbToasts,

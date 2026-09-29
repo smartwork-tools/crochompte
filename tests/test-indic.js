@@ -16,8 +16,8 @@ async function connecter(p){
   let p = await b.newPage({serviceWorkers:'block', viewport:{width:1280, height:1000}});
   p.on('pageerror', e=>errs.push('1:'+e.message));
   await connecter(p);
-  R.onglet_visible_mode_simple = (await p.textContent('#nav')).includes('Indicateurs');
-  await p.click('#nav >> text=Indicateurs'); await p.waitForTimeout(400);
+  R.onglet_visible_mode_simple = (await p.textContent('#nav')).includes('Mes chiffres');
+  await p.click('#nav >> text=Mes chiffres'); await p.waitForTimeout(400);
   let t = await p.textContent('#main');
   R.neuf_guide = t.includes('se remplissent tout seuls');
   R.neuf_pas_dargent_fictif = (await p.locator('#main .tile').count()) === 0;
@@ -50,7 +50,7 @@ async function connecter(p){
     window.CrochomptePont.ecrire(s);
   });
   await p.waitForTimeout(500);
-  await p.click('#nav >> text=Indicateurs'); await p.waitForTimeout(500);
+  await p.click('#nav >> text=Mes chiffres'); await p.waitForTimeout(500);
   t = await p.textContent('#main');
   R.cmd_encaisse_150 = t.includes('150,00');       // 40 + 80 + 30
   R.cmd_achats_25 = t.includes('25,00');
@@ -69,7 +69,7 @@ async function connecter(p){
   p = await b.newPage({serviceWorkers:'block', viewport:{width:390, height:844}, isMobile:true, hasTouch:true});
   p.on('pageerror', e=>errs.push('3:'+e.message));
   await connecter(p);
-  await p.click('#menu-btn'); await p.click('#mm-liste >> text=Indicateurs'); await p.waitForTimeout(400);
+  await p.click('#menu-btn'); await p.click('#mm-liste >> text=Mes chiffres'); await p.waitForTimeout(400);
   await p.screenshot({path:require('path').join(__dirname,'captures','ind-tel.png'), fullPage:true});
   R.tel_pas_de_debordement = await p.evaluate(()=> document.documentElement.scrollWidth <= window.innerWidth + 1);
   R.erreurs = errs;

@@ -66,7 +66,7 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     R.une_carte_par_creation = (await p.locator('.crea-card').count()) === 3;
     R.pieces_sous_la_creation = (await p.locator('.crea-card', {hasText:'Lapin Céleste'}).locator('tr[data-pid]').count()) === 2;
     const l1 = await p.locator('tr[data-pid="pa"]').textContent();
-    R.ligne_piece_complete = /Coût de revient|détail/.test(l1) && /5 h/.test(l1) && /Prix cible/.test(await p.locator('.crea-card', {hasText:'Lapin Céleste'}).locator('thead').textContent());
+    R.ligne_piece_complete = /Coût de revient|détail/.test(l1) && /5 h/.test(l1) && /conseillé/.test(l1) && /D'après ta fiche/.test(await p.locator('.crea-card', {hasText:'Lapin Céleste'}).textContent());
     /* filtre « Ratées » : seule la pièce jetée reste */
     await p.getByRole('button', {name:/^Ratées/}).click(); await p.waitForTimeout(300);
     R.filtre_ratees = (await p.locator('tr[data-pid]').count()) === 1 && (await p.locator('tr[data-pid="pj"]').count()) === 1;
@@ -107,10 +107,12 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     /* 6. Le gain de la ligne suit le prix tapé ; le détail s'ouvre */
     await p.fill('tr[data-pid="pa"] input[data-role="prix"]', '120'); await p.waitForTimeout(250);
     const g6 = await p.locator('tr[data-pid="pa"] [data-l="Gain"]').textContent();
-    R.gain_suit_le_prix = /\/ h/.test(g6) && !/−/.test(g6.split('€')[0]);
+    const att6 = await dans(p, function(){ var k = coutPiece(piece('pa'), creation('c1')); return eur(k.gain) + eur(k.gainH) + ' / h'; });
+    const nz = t => t.replace(/[\s\u00a0\u202f]/g,'');
+    R.gain_suit_le_prix = /\/ h/.test(g6) && nz(g6) === nz(att6) && (await dans(p, function(){ var k = coutPiece(piece('pa'), creation('c1')); return Math.abs(k.prix - 120) < 0.001; }));
     await p.click('tr[data-pid="pa"] [data-role="cout"]'); await p.waitForTimeout(250);
     const d6 = await p.textContent('.dlg');
-    R.detail_cout_complet = /Matières/.test(d6) && /Main-d'œuvre/.test(d6) && /Conditionnement/.test(d6) && /Transport/.test(d6) && /dont retouches/.test(d6) && /Prix cible/.test(d6) && /Coût de revient complet/.test(d6);
+    R.detail_cout_complet = /Matières/.test(d6) && /Main-d'œuvre/.test(d6) && /Conditionnement/.test(d6) && /Transport/.test(d6) && /dont retouches/.test(d6) && /Prix conseillé/.test(d6) && /Coût de revient complet/.test(d6);
     await p.click('.dlg [data-oui]'); await p.waitForTimeout(200);
 
     /* 7. Ajouter des pièces par la boîte */
@@ -151,8 +153,8 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
       sauverTout(); view.cmdVue = null; view.fCmd = 'tous'; view.cmdQ = ''; aller('commandes');
     });
     await p.waitForTimeout(300);
-    R.commandes_colonne_verse = /Versé/.test(await p.textContent('#main thead')) && /10,00/.test(await p.locator('#main tbody tr', {hasText:'Boutique Lina'}).locator('[data-l="Versé"]').textContent());
-    R.commandes_chip_facturee = (await p.locator('#main tbody tr', {hasText:'Marie'}).locator('.chip', {hasText:'facturée'}).count()) === 1 &&
+    R.commandes_colonne_verse = /Reçu/.test(await p.textContent('#main thead')) && /10,00/.test(await p.locator('#main tbody tr', {hasText:'Boutique Lina'}).locator('[data-l="Reçu"]').textContent());
+    R.commandes_chip_facturee = (await p.locator('#main tbody tr', {hasText:'Marie'}).locator('.chip', {hasText:'Payée en entier'}).count()) === 1 &&
                                 (await p.locator('#main tbody tr', {hasText:'Sophie'}).locator('.chip', {hasText:'à facturer'}).count()) === 1;
     await p.getByRole('button', {name:/^Livrées et facturées/}).click(); await p.waitForTimeout(300);
     R.commandes_filtre = (await p.locator('#main tbody tr[data-l], #main table:first-of-type tbody tr').count()) === 1;
@@ -172,12 +174,12 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     await p.locator('.pcard-wrap', {hasText:'Bonnet côtes faciles'}).locator('[data-role="partager"]').click(); await p.waitForTimeout(300);
     R.partage_formulaire = (await p.locator('.dlg #pb-droits').count()) === 1;
     await p.click('.dlg [data-oui]'); await p.waitForTimeout(200);
-    R.partage_exige_autrice = (await p.locator('.dlg').count()) === 1 && /nom d'autrice/.test(await p.textContent('#dlgc-aide'));
+    R.partage_exige_autrice = (await p.locator('.dlg').count()) === 1 && /signature/.test(await p.textContent('#dlgc-aide'));
     await p.fill('#pb-auteur', 'Anne'); await p.click('.dlg [data-oui]'); await p.waitForTimeout(200);
     R.partage_exige_droits = (await p.locator('.dlg').count()) === 1 && /déclaration de droits/.test(await p.textContent('#dlgc-aide'));
     await p.check('#pb-droits'); await p.click('.dlg [data-oui]'); await p.waitForTimeout(300);
     const d11 = await p.textContent('.dlg');
-    R.partage_confirmation = (await p.locator('.dlg').count()) === 1 && /visible par toutes/.test(d11) && /Bonnet côtes faciles/.test(d11) && /par Anne/.test(d11) &&
+    R.partage_confirmation = (await p.locator('.dlg').count()) === 1 && /visible par tous les membres/.test(d11) && /Bonnet côtes faciles/.test(d11) && /par Anne/.test(d11) &&
                              (await p.locator('.dlg [data-oui]').textContent()).trim() === 'Confirmer le partage';
     await p.click('.dlg [data-non]'); await p.waitForTimeout(200);
     R.partage_annulable = !(await lire(p)).patrons.find(x=>x.titre==='Bonnet côtes faciles').publie && (await p.evaluate(()=>!window.__publication));

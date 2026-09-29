@@ -1,7 +1,7 @@
 {
   "name": "Crochompte",
   "short_name": "Crochompte",
-  "description": "Le vrai prix de revient de tes créations au crochet, tes commandes, ton stock et tes ventes.",
+  "description": "Le vrai coût de revient de tes créations au crochet, tes commandes, ton stock et tes ventes.",
   "lang": "fr",
   "start_url": "./",
   "scope": "./",

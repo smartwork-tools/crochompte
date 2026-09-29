@@ -10,7 +10,85 @@ Dernière mise à jour : V39 (28 septembre 2026).
 
 ---
 
+## 0. Profils (V44)
+
+- Une seule question à la première ouverture, en tête de l'Accueil : « Qu'est-ce
+  qui te ressemble ? ». Cinq profils : **loisir**, **quelques ventes**,
+  **créateur qui vend**, **artisan en quantité**, **marchés**. Le profil règle
+  le mode (plaisir / vente), le suivi des pièces et les onglets. Un atelier
+  d'avant la V44 reçoit un profil deviné (toast avec « Changer »).
+- Onglets : loisir → Accueil, Mes créations, Mes patrons, Matières, Mes
+  chiffres, Réglages. Vente → + Commandes (+ Marché pour le profil marchés).
+  Catalogue, Mise en route et Marché n'apparaissent que pendant qu'on y est.
+- **Mode loisir** : la fiche dit ce que la pièce coûte en matières et combien
+  de temps elle prend, sans convertir le temps en euros ; pas de prix de
+  vente, de cotisations, de marges, de « à perte » ; le catalogue n'affiche
+  ni plancher ni prix conseillé ; pas de registres.
+
+## 0.1 Vendre (V45)
+
+- **Vendre une pièce** : quoi, prix, moyen de paiement (espèces, carte,
+  virement, PayPal, chèque, autre), où, quand, à qui. La pièce en stock la
+  plus ancienne passe en « Vendue » ; sans stock, une pièce terminée et
+  vendue est créée et ses matières sortent. Annulable depuis le message.
+- **Jour de marché** : un écran par date ; une touche « Vendu » par création
+  (prix modifiable), moyen de paiement choisi une fois ; total du jour,
+  espèces / carte et autres, frais du stand, caisse du soir ; annulation
+  d'une vente. Les ventes sont des pièces vendues (canal « Marché / salon »,
+  `p.marche` = date) ; `state.marches[]` garde lieu et frais.
+- Les règlements de commande ont un moyen de paiement en liste.
+
+## 0.2 Listes et commandes (V46–V47)
+
+- Mes créations : au-delà de trois créations, chaque création est une ligne
+  repliée ; vingt à la fois ; un filtre ou une recherche déplie. Les pièces
+  vendues, offertes ou ratées vont dans un historique replié. Pièces triées
+  par numéro décroissant. Cases à cocher et actions groupées (terminer,
+  vendre, remettre en stock, supprimer).
+- Nouvelle commande en quatre questions (qui, quoi, combien, pour quand ;
+  « déjà accepté » coché par défaut). Une frise d'étapes en tête de la fiche
+  avec un seul bouton pour l'étape suivante. Adresse, achat professionnel et
+  pièce personnalisée sont repliés. Un devis à date dépassée est « à
+  relancer », jamais en retard. La liste s'ouvre sur « En cours ». Le temps
+  d'une commande se saisit en heures et minutes.
+
+## 0.3 Registres (V49)
+
+- **Livre des recettes** : ventes au comptant (date, nature, montant, moyen),
+  acomptes et règlements de commandes (référence facture ou commande),
+  remboursements en négatif. **Registre des achats** : achats de matières
+  au prix noté (les achats estimés sont exclus), frais de stand. Par année,
+  en tableur (CSV) ou à imprimer (PDF). Sous le statut « pas encore
+  déclarée » : encart « Faut-il déclarer mes ventes ? » avec le guichet
+  unique et l'URSSAF.
+
 ## 1. Vocabulaire
+
+### 1.0 Un seul nom par notion, et une écriture pour tout le monde (V43)
+
+- L'outil s'adresse à tout le monde : tournures neutres, sans point médian,
+  tutoiement gardé. « Commandé par » (pas « cliente »), « achat professionnel /
+  achat personnel », « membres » de la bibliothèque, « Créé par » et
+  « Signature affichée » pour les patrons, « Session ouverte / fermée ».
+- **Prix conseillé** = le prix qui paie ton temps à ton objectif horaire
+  (anciens noms : prix juste, prix cible, prix pour atteindre ton objectif).
+  Pour une pièce : « Prix conseillé d'après son temps réel ».
+- **Création** = ce que tu fabriques et vends (ta fiche). « Modèle » et
+  « type d'ouvrage » ne désignent que le catalogue.
+- **Coût de revient** (prévu / réel), jamais « prix de revient ».
+- **Gain de l'heure** = ce que la création te rapporte réellement par heure.
+- Argent : **Reçu** / **Reste à recevoir** / **Payée en entier** (plus de
+  « versé », « soldée », « reste dû » à l'écran ; la facture garde « Reste à
+  régler »).
+- Une commande n'a qu'une suite d'étapes : Devis · À fabriquer · En
+  fabrication · Prête · Livrée (puis À facturer · Paiement à recevoir · Payée
+  en entier) · Annulée. Le sélecteur de statut utilise les mêmes mots.
+- Jargon remplacé : « Étape » (poste de travail), « Où tu la vends » (canal),
+  « Cotisations URSSAF (% de tes ventes) », « Historique du stock »
+  (mouvements), « Nom de l'article sur la facture » (désignation), « SIRET
+  (ton numéro d'entreprise, 14 chiffres) ».
+- À l'ouverture, aucun message quand tout va bien ; un seul message de stock
+  négatif, mis à jour, même quand plusieurs pièces sortent d'un coup.
 
 | Terme | Ce que c'est |
 |---|---|
@@ -206,13 +284,29 @@ figées une fois, avec les chiffres connus (marquées « estimé »).
 - **Coût d'une pièce** (`coutPiece`) = matières (pesées si on l'a fait, sinon
   celles de la fiche, + matières des retouches) + main-d'œuvre (temps
   chronométré, complété par la fiche pour les postes non mesurés, au taux
-  visé) + part des frais fixes + frais de vente + cotisations. Le détail
-  montre à part conditionnement (emballage) et transport (expédition).
-  Prix de vente = celui saisi sur la pièce, sinon celui de la fiche ; prix
-  cible = prix juste de la fiche ; **gain** = prix − coût complet ; gain de
+  visé) + part des frais fixes + transport (expédition) + frais de vente +
+  cotisations. **Le total est toujours la somme exacte des lignes
+  affichées** (le transport y est compté ; conditionnement = emballage,
+  inclus dans les matières). Commission et cotisations se calculent sur le
+  prix de la pièce, pas sur celui de la fiche.
+  **Pièce pas terminée (à faire / en cours) = chiffres « provisoires »** : le
+  chronomètre n'a compté que le début, donc chaque poste vaut au moins le
+  temps de la fiche (`minutesReellesPiece`) ; le temps chronométré prend la
+  place de l'estimation quand la pièce est terminée (ou vendue).
+  Prix de vente = celui saisi sur la pièce, sinon celui de la fiche ; **prix
+  cible d'une pièce** = le prix pour lequel son gain serait nul avec SON
+  coût réel (matières pesées, temps réel ou provisoire) : au-dessus, elle
+  paie plus que ton salaire ; le prix cible de l'en-tête est celui de la
+  fiche (estimation) ; **gain** = prix − coût complet ; gain de
   l'heure = (prix − coût hors main-d'œuvre) ÷ heures. Code couleur : vert
   (≥ 90 % de l'objectif), orange (sous l'objectif), rouge (< 50 %, à perte,
   ratée).
+- **Lecture de l'écran « Mes créations »** : en haut de chaque création,
+  l'**estimation** de la fiche (prix de vente, prix cible, gain de l'heure,
+  état) ; dans le tableau, le **réel** de chaque pièce (temps passé face au
+  temps prévu, coût réel, prix de vente avec sa cible, gain). Quatre tuiles
+  seulement (créations, gain habituel, à revoir, pièces) ; les filtres à
+  zéro ne s'affichent pas ; le mode d'emploi est replié.
 - **Retouche** : passer une pièce « À retoucher » ouvre une note (motif,
   matières ajoutées en €). Le temps chronométré pendant la retouche et ces
   matières s'ajoutent au coût de la pièce (« dont retouches »).
@@ -275,6 +369,21 @@ figées une fois, avec les chiffres connus (marquées « estimé »).
   acheter (avec le fournisseur le moins cher connu).
 - Cliente professionnelle : son **numéro de bon de commande** est repris sur
   la facture (obligatoire quand il existe, art. L441-9 du Code de commerce).
+- **Étape unique** (V42) : chaque commande affiche une seule étape (devis,
+  à faire, en cours, à livrer, à facturer, à encaisser, soldée, annulée) et
+  la prochaine action à faire.
+- **Tris** (V42) : commandes, registre, matières, patrons et catalogue se
+  trient par critère, en croissant ou décroissant ; le choix est gardé
+  pendant la session.
+- **Temps passé par pièce** (V42) : chaque pièce garde son propre temps
+  chronométré (numéro de pièce stable, par ordre de création) ; le chrono
+  indique « nom · pièce N° x ». Aucun cumul entre pièces d'une même création.
+- **Vérification des saisies** (V42) : sous chaque champ, contrôle en direct
+  (e-mail, téléphone ou @pseudo ; nombre entier ; prix ≥ 0 ; date existante
+  entre 2000 et 2100 ; SIREN à 9 chiffres avec clé de contrôle de Luhn).
+  Le bouton « Enregistrer » relit tout, amène sur le premier champ à
+  corriger, sinon enregistre et affiche l'heure. Un prix illisible ou vide
+  n'écrase jamais le prix gardé.
 
 ---
 

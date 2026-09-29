@@ -849,20 +849,96 @@ if (window.top !== window.self){
   .crea-outils .f{margin:0;} .crea-outils input,.crea-outils select{min-width:200px;}
   .crea-liste{display:grid;gap:14px;}
   .crea-card{background:var(--card);border:1px solid var(--rule);border-radius:14px;padding:14px 16px;}
-  .crea-tete{display:grid;grid-template-columns:minmax(220px,1.4fr) minmax(0,3fr) auto;gap:12px 20px;align-items:center;}
+  .crea-tete{display:grid;grid-template-columns:minmax(200px,1.2fr) minmax(0,3fr) minmax(120px,auto);gap:12px 16px;align-items:center;}
   .crea-id{appearance:none;background:none;border:0;padding:0;font:inherit;color:inherit;text-align:left;cursor:pointer;
     display:flex;gap:12px;align-items:center;min-width:0;border-radius:8px;}
   .crea-id:hover h2{text-decoration:underline;}
   .crea-id h2{margin:0;font-size:17px;line-height:1.3;} .crea-id .m{margin:2px 0 0;font-size:12.5px;color:var(--muted);}
+  .tri-barre{display:flex;gap:8px;align-items:center;flex-wrap:nowrap;}
+  .tri-barre .f{margin:0;min-width:0;} .tri-barre select{min-width:150px;}
+  .tri-barre .tri-sens{white-space:nowrap;}
+  .th-tri{appearance:none;background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer;text-transform:inherit;letter-spacing:inherit;font-weight:inherit;text-align:inherit;}
+  .th-tri:hover{text-decoration:underline;} .th-tri:focus-visible{outline:2px solid var(--accent,#0b5d50);outline-offset:2px;border-radius:3px;}
+  th.n .th-tri{text-align:right;}
+  .patron-ligne{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-top:12px;}
+  .patron-ligne .f{flex:1 1 260px;max-width:520px;margin:0;}
+  .pat-etat.err{color:var(--bad);}
+  .pat-ajout textarea{width:100%;}
+  .ch-pieces{display:flex;gap:8px 12px;flex-wrap:wrap;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--rule);width:100%;}
+  .ch-pieces em{font-style:normal;color:var(--muted);font-size:12px;} .ch-poste.cur{outline:2px solid var(--primary);}
+  .champ-err{display:block;margin-top:4px;color:var(--bad);font-size:12.5px;line-height:1.35;}
+  input[aria-invalid="true"],select[aria-invalid="true"],textarea[aria-invalid="true"]{border-color:var(--bad);box-shadow:0 0 0 1px var(--bad);}
+  .enreg{display:flex;gap:12px;align-items:center;flex-wrap:wrap;}
+  .enreg-etat{font-size:13px;color:var(--muted);} .enreg-etat.err{color:var(--bad);font-weight:600;}
+  .savebar-enreg{display:flex;gap:14px;align-items:center;flex-wrap:wrap;}
+  .pat-ajout .champ-err{margin-top:6px;}
+  .profils{display:grid;gap:10px;margin:6px 0 2px}
+  .profil-accueil .profils{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+  .profil-carte{display:flex;flex-direction:column;gap:3px;text-align:left;padding:12px 14px;border:1.5px solid var(--rule);border-radius:12px;background:var(--surface);cursor:pointer;font:inherit;color:inherit}
+  .profil-carte span{font-size:13px;color:var(--muted);line-height:1.35}
+  .profil-carte[aria-checked="true"]{border-color:var(--primary);background:var(--primary-soft);box-shadow:0 0 0 2px var(--primary) inset}
+  .profil-carte:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+  .stand{display:flex;flex-direction:column;gap:8px}
+  .stand-ligne{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--rule);border-radius:12px;background:var(--surface)}
+  .stand-nom{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+  .stand-nom b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .stand-prix{margin:0;width:96px;flex:none}
+  .stand-prix input{width:96px;text-align:right}
+  .stand-btn{flex:none;min-width:88px}
+  .ventes-jour{display:flex;flex-direction:column;gap:6px}
+  .vente-ligne{display:grid;grid-template-columns:52px 1fr auto auto auto;gap:10px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--rule)}
+  @media (max-width:600px){ .stand-ligne{flex-wrap:wrap} .stand-nom{flex-basis:calc(100% - 52px)} .stand-prix{width:auto;flex:1} .stand-btn{flex:1} .vente-ligne{grid-template-columns:44px 1fr auto;grid-auto-rows:auto} }
+  .crea-deplier{display:block;width:100%;text-align:left;padding:10px 16px;border:none;border-top:1px solid var(--rule);background:var(--surface-2);font:inherit;font-size:13.5px;color:var(--muted);cursor:pointer;border-radius:0 0 12px 12px}
+  .crea-deplier:hover{color:var(--ink)}
+  .crea-hist{border-top:1px solid var(--rule);padding:8px 16px 12px}
+  .crea-hist summary{cursor:pointer;font-size:13.5px;color:var(--muted);padding:6px 0}
+  .t-hist tbody tr{opacity:.8}
+  .t-hist .chrono{display:none}
+  .sel-cell{width:34px}
+  .t-pieces tr.sel{background:var(--primary-soft)}
+  .sel-barre{position:sticky;top:calc(var(--safe-top, 0px) + 8px);z-index:5;display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px 14px;margin:0 0 12px;border:1.5px solid var(--primary);border-radius:12px;background:var(--surface)}
+  .sel-barre .sel-n{font-weight:600}
+  .sel-barre .sel-act{display:flex;flex-wrap:wrap;gap:8px}
+  @media (max-width:720px){
+    .resp.t-pieces tbody tr, .tablewrap.resp .t-pieces tbody tr{padding:8px 12px}
+    .t-pieces td[data-l="Temps passé"] .hint, .t-pieces td[data-l="Coût réel"] .hint, .t-pieces td[data-l="Matières"] .hint, .t-pieces td[data-l="Prix de vente"] .hint{display:none}
+    .t-pieces td{padding:4px 0}
+    .t-cmd td[data-l="Articles"], .t-cmd td[data-l="Reçu"]{display:none}
+    .t-cmd td{padding:4px 0}
+  }
+  .frise-card{margin-bottom:16px}
+  .frise{list-style:none;margin:0 0 12px;padding:0;display:flex;gap:0;overflow-x:auto}
+  .frise li{flex:1;min-width:84px;display:flex;flex-direction:column;align-items:center;gap:6px;position:relative;font-size:12.5px;color:var(--muted);text-align:center}
+  .frise li::before{content:"";position:absolute;top:13px;left:-50%;width:100%;height:2px;background:var(--rule);z-index:0}
+  .frise li:first-child::before{display:none}
+  .frise li.faite::before, .frise li.cur::before{background:var(--primary)}
+  .frise .pt{position:relative;z-index:1;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:var(--surface);border:2px solid var(--rule);font-size:12px;font-weight:600}
+  .frise li.faite .pt{background:var(--primary);border-color:var(--primary);color:var(--on-primary,#fff)}
+  .frise li.cur .pt{border-color:var(--primary);color:var(--primary);box-shadow:0 0 0 3px var(--primary-soft)}
+  .frise li.cur .lb{color:var(--ink);font-weight:600}
+  .frise-act{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+  .cmd-plus summary{cursor:pointer;font-weight:600;font-size:14px;padding:8px 0}
+  .hm{display:flex;align-items:center;gap:6px}
+  .hm .f{margin:0;width:88px}
+  .hm input{width:88px;text-align:right}
+  .reg-2{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+  .reg-bloc{border:1px solid var(--rule);border-radius:12px;padding:12px 14px}
+  .reg-bloc h3{margin:0 0 4px;font-size:15px}
+  .reg-act{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+  .crea-bloc{display:flex;flex-direction:column;gap:6px;min-width:0;}
+  .crea-cap{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:600;}
+  .aide-liste{margin:10px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:14px;line-height:1.45;}
   .crea-chiffres{display:flex;gap:10px 22px;flex-wrap:wrap;align-items:flex-end;}
   .crea-chiffres > div{display:flex;flex-direction:column;gap:3px;min-width:0;}
   .crea-chiffres .k{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:500;}
   .crea-chiffres b{font-size:16px;font-variant-numeric:tabular-nums;}
   .crea-chiffres b.good{color:var(--good);} .crea-chiffres b.warn{color:var(--warn);} .crea-chiffres b.bad{color:var(--bad);}
-  .crea-act{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;}
+  .crea-act{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;max-width:240px;margin-left:auto;}
   .crea-vide{margin:10px 0 0;color:var(--muted);font-size:13px;}
   .crea-card .tablewrap{margin-top:12px;}
   .t-pieces td{vertical-align:top;}
+  .t-pieces .cel{display:flex;flex-direction:column;gap:2px;min-width:0;}
+  .t-pieces td.n .cel{align-items:flex-end;}
   .t-pieces .tps{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
   .t-pieces .cli{margin-top:6px;font-size:13px;}
   .t-pieces select{width:100%;min-width:130px;}
@@ -915,6 +991,17 @@ if (window.top !== window.self){
   .chip.st-encours{background:var(--warn-soft);color:var(--warn);}
   .chip.st-terminee{background:var(--good-soft);color:var(--good);}
   .chip.st-livree{background:var(--good-soft);color:var(--good);}
+  .chip.st-afacturer{background:var(--warn-soft);color:var(--warn);}
+  .chip.st-aencaisser{background:var(--bad-soft);color:var(--bad);}
+  .chip.st-soldee{background:var(--good-soft);color:var(--good);}
+  .etape-suite{margin:3px 0 0;font-size:12px;}
+  .etape-suite.urgent{color:var(--warn);font-weight:600;}
+  .cmd-outils-d{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+  details.registre > summary{cursor:pointer;list-style:none;padding:14px 18px;}
+  details.registre > summary::-webkit-details-marker{display:none;}
+  details.registre > summary h2{margin:0;font-size:17px;} details.registre > summary p{margin:4px 0 0;}
+  details.registre > summary h2::before{content:"▸ ";color:var(--muted);} details.registre[open] > summary h2::before{content:"▾ ";}
+  details.registre > .body{padding:0 18px 16px;}
   .chip.st-annulee{background:var(--bad-soft);color:var(--bad);}
   .cmd-outils{display:flex;justify-content:space-between;gap:12px 18px;flex-wrap:wrap;align-items:center;margin-bottom:12px;}
   .cmd-outils .f{margin:0;} .cmd-outils input{min-width:220px;}
@@ -965,7 +1052,7 @@ if (window.top !== window.self){
      Sans ce fichier (ou s'il ne se charge pas), rien ne change : l'objet
      global reste absent et l'application démarre hors ligne, comme avant. -->
 <script src="config.js" onerror="console.info('Crochompte : pas de config.js, mode hors ligne')"></script>
-<script src="app.js?v=41"></script>
+<script src="app.js?v=46"></script>
 
 <!-- ═══ Comptes et synchronisation — facultatifs quand config.js est absent ═══
      Sans config.js, l'application fonctionne hors ligne, exactement comme la

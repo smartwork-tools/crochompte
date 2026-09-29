@@ -32,7 +32,7 @@ const path = require('path');
     await p.click('#sy-c-valider');
     await p.waitForTimeout(500);
     resultats.nav_visible_apres_connexion = (await p.locator('#nav button').count()) > 0;
-    resultats.toast_connectee = (await p.textContent('body')).includes('Connectée');
+    resultats.session_ouverte = (await p.textContent('body')).includes('Session ouverte') && !(await p.textContent('body')).includes('connectée');
 
     // ── 3. Réglages : le panneau de compte connecté est toujours là ──
     await p.click('#menu-btn'); await p.click('#mm-liste >> text=Réglages'); await p.waitForTimeout(150); await p.click('.reg-item[data-section="compte"]');
@@ -44,7 +44,7 @@ const path = require('path');
     await p.waitForTimeout(400);
     resultats.retour_au_portail = await p.isVisible('#sy-c-identifiant');
     resultats.nav_de_nouveau_vide = (await p.locator('#nav button').count()) === 0;
-    resultats.toast_deconnectee = (await p.textContent('body')).includes('déconnectée');
+    resultats.toast_deconnectee = (await p.textContent('body')).includes('Session fermée');
 
   } catch (e) {
     resultats._echec = e.message;

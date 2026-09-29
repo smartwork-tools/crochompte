@@ -404,6 +404,7 @@ function assainir(s){
   });
   ["raisonSociale","adresse","siret","contact"].forEach(function(k){ if (r[k] !== undefined) r[k] = texte(r[k]); });
   s.canaux = objets(s.canaux);
+  s.marches = objets(s.marches).map(function(m){ return {id:texte(m.id) || ("mk_" + uid()), date:texte(m.date), lieu:texte(m.lieu), frais:borne(m.frais, 0, 100000), note:texte(m.note)}; });
   s.canaux.forEach(function(c){
     c.id = texte(c.id) || ("canal_" + uid()); c.nom = texte(c.nom);
     ["annonce","paieFixe"].forEach(function(f){ c[f] = borne(c[f], 0, 10000); });
@@ -438,6 +439,8 @@ function assainir(s){
     if (p.prix !== null && p.prix !== undefined) p.prix = borne(p.prix, 0, 1e7);
     p.coutFige = nombre(p.coutFige);
     p.client = texte(p.client);
+    if (p.paiement !== undefined) p.paiement = texte(p.paiement);
+    if (p.marche !== undefined && p.marche !== null) p.marche = texte(p.marche);
   });
   s.commandes = objets(s.commandes);
   s.commandes.forEach(function(c){
@@ -478,6 +481,7 @@ function migrer(s){
   var rd = {tauxHoraire:15, tauxPerte:8, cotisations:12.4, fraisFixes:0, piecesParMois:10, heuresIndirectesMois:0,
             baseCout:"dernier", profil:"vend", mode:"simple"};
   for (var k in rd) if (s.reglages[k] === undefined) s.reglages[k] = rd[k];
+  if (s.reglages.profilType !== undefined && !PROFILS.some(function(p){ return p.id === s.reglages.profilType; })) delete s.reglages.profilType;
   if (!Array.isArray(s.canaux) || !s.canaux.length) s.canaux = clone(CANAUX_DEFAUT);
   else {
     // complète les canaux anciens et ajoute les nouveaux
@@ -609,7 +613,7 @@ function ecrireLocal(){
       avertiMemoire = true;
       setTimeout(function(){
         toast("La mémoire de cet appareil est pleine : tes dernières modifications n'y sont pas enregistrées. "+
-              "Elles partent quand même en ligne tant que tu es connectée. Supprime des patrons ou des photos inutiles.");
+              "Elles partent quand même en ligne tant que ta session est ouverte. Supprime des patrons ou des photos inutiles.");
       }, 0);
     }
     return false;
@@ -1293,7 +1297,7 @@ function toast(msg, action){
     t.appendChild(b);
   }
   var bx = el('<button type="button" class="toast-x" aria-label="Fermer ce message">×</button>');
-  bx.addEventListener("click", function(){ if (t.parentNode) t.remove(); });
+  bx.addEventListener("click", function(){ if (t.parentNode) t.remove(); if (t.__manques) manquesEnAttente = []; });
   t.appendChild(bx);
   pile.appendChild(t);
   var duree = important ? 12000 : (action && action.fn) ? 8000 : 4500;
@@ -1301,6 +1305,7 @@ function toast(msg, action){
     if (t.matches(":hover") || t.contains(document.activeElement)){ minuteur = setTimeout(fin, 1500); return; }
     if (t.parentNode) t.remove();
   }, duree);
+  return t;
 }
 
 /* Supprimer sans filet, c'est ce qui fait peur dans un outil de gestion. Ici,
@@ -1335,6 +1340,62 @@ function avecAnnulation(message, action){
      danger   — bouton rouge, et le focus part sur « Annuler » par sécurité
      saisie   — mot à retaper pour les actions les plus lourdes
    siOui est appelé seulement si la personne confirme. */
+/* La question d'accueil : cinq cartes, une par façon de crocheter. Sert
+   aussi dans Réglages pour changer de profil. */
+var dialogueProfilOuvert = false;
+function dialogueProfil(o){
+  o = o || {};
+  if (dialogueProfilOuvert) return;
+  dialogueProfilOuvert = true;
+  var actuel = state.reglages.profilType || (o.premiere ? profilDeduit() : "");
+  var contenu = el('<div class="profils" role="radiogroup" aria-label="Ton profil"></div>');
+  PROFILS.forEach(function(p){
+    var b = el('<button type="button" class="profil-carte" role="radio" data-p="'+esc(p.id)+'" aria-checked="'+(p.id === actuel ? "true" : "false")+'">'+
+      '<b>'+esc(p.nom)+'</b><span>'+esc(p.d)+'</span></button>');
+    b.addEventListener("click", function(){
+      [].forEach.call(contenu.querySelectorAll(".profil-carte"), function(x){ x.setAttribute("aria-checked", x === b ? "true" : "false"); });
+      actuel = p.id;
+    });
+    contenu.appendChild(b);
+  });
+  confirmer({
+    titre: o.premiere ? "Qu'est-ce qui te ressemble ?" : "Changer de profil",
+    texte: o.premiere ? "Une seule question, pour n'afficher que ce qui te sert. Tu pourras changer d'avis dans Réglages › Mon activité."
+                      : "L'outil s'adapte : onglets, calculs, vocabulaire.",
+    contenu: contenu, large: true,
+    bouton: "C'est moi", annuler: o.premiere ? "Plus tard" : "Annuler", sansAnnuler: false,
+    siAnnule: function(){ dialogueProfilOuvert = false; if (o.premiere && !state.reglages.profilType) appliquerProfil(profilDeduit()); },
+    siNon: function(){ dialogueProfilOuvert = false; if (o.premiere && !state.reglages.profilType) appliquerProfil(profilDeduit()); }
+  }, function(){
+    dialogueProfilOuvert = false;
+    var avant = state.reglages.profilType;
+    if (actuel) appliquerProfil(actuel);
+    if (actuel !== avant) toast("Profil « " + (profilActuel() || {}).nom + " » : l'outil s'est adapté.");
+  });
+}
+/* La même question, posée dans la page (Accueil d'un atelier neuf). */
+function sectionProfil(){
+  var choix = profilDeduit();
+  var z = el('<section class="card profil-accueil" aria-label="Ton profil"><div class="body">'+
+    '<div class="eyebrow">Bienvenue</div><h2 style="margin:6px 0 4px">Qu\'est-ce qui te ressemble ?</h2>'+
+    '<p class="hint" style="margin:0 0 14px">Une seule question, pour n\'afficher que ce qui te sert. Tu pourras changer d\'avis dans Réglages › Mon activité.</p>'+
+    '<div class="profils" role="radiogroup" aria-label="Ton profil"></div><div class="savebar" style="margin-top:14px"></div></div></section>');
+  var grille = z.querySelector(".profils");
+  PROFILS.forEach(function(p){
+    var b = el('<button type="button" class="profil-carte" role="radio" data-p="'+esc(p.id)+'" aria-checked="'+(p.id === choix ? "true" : "false")+'">'+
+      '<b>'+esc(p.nom)+'</b><span>'+esc(p.d)+'</span></button>');
+    b.addEventListener("click", function(){
+      [].forEach.call(grille.querySelectorAll(".profil-carte"), function(x){ x.setAttribute("aria-checked", x === b ? "true" : "false"); });
+      choix = p.id;
+    });
+    grille.appendChild(b);
+  });
+  z.querySelector(".savebar").appendChild(bouton("C'est moi", function(){
+    appliquerProfil(choix);
+    toast("Profil « " + (profilActuel() || {}).nom + " » : l'outil s'est adapté.");
+  }, true));
+  return z;
+}
 function confirmer(o, siOui){
   o = o || {};
   var retourFocus = document.activeElement;
@@ -1443,9 +1504,10 @@ function dialogueChamps(o, siOk){
     '<button type="button" class="btn primary" data-oui>'+esc(o.bouton || "Enregistrer")+'</button></div></div>');
   if (o.contenu) boite.querySelector(".dlgc-contenu").appendChild(o.contenu);
   fond.appendChild(boite); document.body.appendChild(fond); document.body.classList.add("menu-ouvert");
-  var ferme = false;
+  var ferme = false, valide = false;
   function retirer(){
     if (ferme) return; ferme = true;
+    if (!valide && o.siAnnule) o.siAnnule();
     if (fond.parentNode) fond.remove();
     if (!document.querySelector(".dlg-fond") && document.getElementById("menu-mobile").hidden) document.body.classList.remove("menu-ouvert");
     if (retourFocus && retourFocus.focus && document.contains(retourFocus)) try{ retourFocus.focus(); }catch(e){}
@@ -1467,8 +1529,10 @@ function dialogueChamps(o, siOk){
     });
     if (manque){ boite.querySelector("#dlgc-aide").textContent = "Ce champ est nécessaire."; manque.focus(); return; }
     if (o.verifier){ var err = o.verifier(v, boite); if (err){ boite.querySelector("#dlgc-aide").textContent = err; return; } }
+    valide = true;
     fermerCouche(function(){ siOk(v, boite); });
   });
+  if (o.ouvert) o.ouvert(boite);
   setTimeout(function(){ var p1 = boite.querySelector("input,select,textarea"); if (p1) p1.focus(); }, 30);
 }
 
@@ -1569,7 +1633,7 @@ function invraisemblance(r){
   if (r.prix > 0 && r.heures > 0 && r.gainHoraire > Math.max(100, 5 * obj))
     return "Ce gain de l'heure est très élevé : vérifie le prix (une virgule oubliée ?) et le temps indiqué.";
   if (r.prix > 0 && r.prixObjectif > 0 && r.prix > 10 * r.prixObjectif)
-    return "Ce prix est plus de dix fois le prix juste : vérifie la saisie.";
+    return "Ce prix est plus de dix fois le prix conseillé : vérifie la saisie.";
   return "";
 }
 function verdictCalcul(r){
@@ -1582,8 +1646,8 @@ function statut(gain){
   var obj = Number(state.reglages.tauxHoraire)||0;
   if (gain < 0) return {k:"bad", t:"À perte"};
   if (obj <= 0) return {k:"warn", t:"Objectif non défini"};
-  if (gain < obj*0.5) return {k:"bad", t:"Très sous-payée"};
-  if (gain < obj*0.9) return {k:"warn", t:"Sous-payée"};
+  if (gain < obj*0.5) return {k:"bad", t:"Loin de ton objectif"};
+  if (gain < obj*0.9) return {k:"warn", t:"Sous ton objectif"};
   return {k:"good", t:"Tu t'y retrouves"};
 }
 
@@ -1592,32 +1656,82 @@ function statut(gain){
 /* Après un changement d'écran, le focus va au contenu : un lecteur d'écran
    annonce le nouvel écran, et Tab ne repasse pas par les 13 onglets. */
 var focusApresRendu = false;
+/* ═════ PROFILS ═════
+   Une seule question à la première ouverture : « Qu'est-ce qui te
+   ressemble ? ». La réponse règle d'un coup le mode (vente ou plaisir), le
+   suivi des pièces et les onglets affichés. Elle se change dans Réglages. */
+var PROFILS = [
+  {id:"loisir",   nom:"Je crochète pour le plaisir",
+   d:"Je veux suivre mes ouvrages, ma laine et ce que mon loisir me coûte. Je ne vends pas.",
+   profil:"passion", mode:"complet", onglets:["accueil","creations","patrons","stock","indicateurs","reglages"]},
+  {id:"quelques", nom:"Je vends quelques pièces",
+   d:"À des proches, sur Instagram… Je veux un prix qui ne me fasse pas perdre d'argent, et noter qui me doit quoi.",
+   profil:"vend", mode:"complet", onglets:["accueil","creations","commandes","patrons","stock","indicateurs","reglages"]},
+  {id:"createur", nom:"Je vends mes créations",
+   d:"Micro-entreprise, plateformes, marchés : des prix justes, des commandes et des factures en règle.",
+   profil:"vend", mode:"complet", onglets:["accueil","creations","commandes","patrons","stock","indicateurs","reglages"]},
+  {id:"artisan",  nom:"Je vends en quantité",
+   d:"Séries, boutiques, gros volume : je veux voir ce qui presse, agir sur plusieurs pièces d'un coup et sortir mes registres.",
+   profil:"vend", mode:"complet", onglets:["accueil","creations","commandes","patrons","stock","indicateurs","reglages"]},
+  {id:"marche",   nom:"Je vends surtout sur les marchés",
+   d:"Un stand, des ventes en espèces ou par carte : préparer le stand, noter chaque vente en une seconde, faire la caisse le soir.",
+   profil:"vend", mode:"complet", onglets:["accueil","creations","commandes","marche","patrons","stock","indicateurs","reglages"]}
+];
+function profilActuel(){
+  var id = state.reglages.profilType;
+  for (var i = 0; i < PROFILS.length; i++) if (PROFILS[i].id === id) return PROFILS[i];
+  return null;
+}
+/* Déduit un profil d'un atelier d'avant la V44, pour ne rien demander deux fois. */
+function profilDeduit(){
+  var r = state.reglages;
+  if (r.profil === "passion") return "loisir";
+  if ((state.commandes||[]).length > 40 || (state.pieces||[]).length > 300) return "artisan";
+  if (r.mode !== "complet" && (state.commandes||[]).length < 10) return "quelques";
+  return "createur";
+}
+function appliquerProfil(id, opts){
+  var p = null;
+  for (var i = 0; i < PROFILS.length; i++) if (PROFILS[i].id === id) p = PROFILS[i];
+  if (!p) return false;
+  state.reglages.profilType = p.id;
+  state.reglages.profil = p.profil;
+  state.reglages.mode = p.mode;
+  if (p.id === "loisir"){ state.reglages.statut = state.reglages.statut || "non_declare"; }
+  sauverTout();
+  if (!(opts && opts.sansRendu)) render();
+  return true;
+}
 var TABS = [
   {id:"accueil",     nom:"Accueil",        base:true},
-  {id:"demarrage",   nom:"Mise en route",  base:true, tantQueAFaire:true},
-  {id:"catalogue",   nom:"Catalogue",      base:true},
+  /* La mise en route et le catalogue s'ouvrent depuis l'Accueil ou une
+     création : leur onglet n'apparaît que pendant qu'on y est. */
+  {id:"demarrage",   nom:"Mise en route",  base:true, tantQueLa:true},
+  {id:"catalogue",   nom:"Catalogue",      base:true, tantQueLa:true},
   {id:"creations",   nom:"Mes créations",  base:true},
   {id:"fiche",       nom:"Fiche en cours", brouillon:true},
   {id:"commandes",   nom:"Commandes",      base:true},
+  {id:"marche",      nom:"Marché",         base:true, tantQueLa:true},
   /* « Mes pièces » vit dans « Mes créations » depuis la V39 : l'entrée
      reste connue pour les anciens liens, mais n'a plus d'onglet. */
   {id:"atelier",     nom:"Mes pièces",     cache:true},
   {id:"patrons",     nom:"Mes patrons",    base:true},
   {id:"stock",       nom:"Matières",       base:true},
-  {id:"indicateurs", nom:"Indicateurs",    base:true},
+  {id:"indicateurs", nom:"Mes chiffres",   base:true},
   {id:"reglages",    nom:"Réglages",       base:true}
 ];
 /* Les onglets visibles dépendent du mode choisi. Un brouillon non enregistré
    affiche toujours le sien : changer d'onglet perdait le travail saisi. */
 function onglets(){
   var complet = state.reglages.mode === "complet";
+  var p = profilActuel();
   return TABS.filter(function(t){
     if (t.cache) return false;
     if (t.brouillon) return !!view.draft;
-    /* La mise en route s'efface d'elle-même une fois tout renseigné :
-       un onglet qui n'a plus rien à dire est du bruit. On y revient
-       depuis les réglages. */
-    if (t.tantQueAFaire && view.tab !== "demarrage" && demarrageTermine()) return false;
+    if (p && p.onglets.indexOf(t.id) >= 0) return true;
+    if (t.tantQueLa) return view.tab === t.id;
+    if (p && p.onglets.indexOf(t.id) < 0) return false;
+    if (!p && t.id === "commandes" && state.reglages.profil === "passion") return false;
     return complet || t.base;
   });
 }
@@ -1744,7 +1858,7 @@ function renderEntete(){
   zone.appendChild(bNom); zone.appendChild(bOut);
 
   mm.appendChild(el('<div class="qui"><span class="avatar" aria-hidden="true">'+esc(initiale(nom))+'</span>'+
-    '<span>'+esc(nom)+'<small>Connectée</small></span></div>'));
+    '<span>'+esc(nom)+'<small>Session ouverte</small></span></div>'));
   var mCompte = el('<button type="button" class="btn">Mon compte</button>');
   mCompte.addEventListener("click", ouvrirMonCompte);
   var mOut = el('<button type="button" class="btn" id="menu-deconnexion">Se déconnecter</button>');
@@ -1927,6 +2041,7 @@ function render(){
   if (view.tab === "accueil")        renderAccueil(main);
   else if (view.tab === "patrons")   renderPatrons(main);
   else if (view.tab === "commandes") renderCommandes(main);
+  else if (view.tab === "marche")    renderMarche(main);
   else if (view.tab === "demarrage") renderDemarrage(main);
   else if (view.tab === "catalogue") view.modeleVu ? renderModeleDetail(main) : renderCatalogue(main);
   else if (view.tab === "creations") renderCreations(main);
@@ -2065,13 +2180,13 @@ function renderPortail(){
   var enveloppe = el(
     '<div class="portail">'+
       '<section class="portail-pres">'+
-        '<div class="eyebrow">Gestion pour créatrices au crochet</div>'+
+        '<div class="eyebrow">La gestion pensée pour le crochet</div>'+
         '<h1>Sache ce que chaque création te rapporte vraiment.</h1>'+
         '<p class="lede">Matières, frais de plateforme, cotisations et temps passé : Crochompte fait le calcul '+
         'et te donne ton vrai gain à l\'heure. Puis il t\'aide à suivre tes commandes, ton stock et tes ventes.</p>'+
         '<ul class="portail-points">'+
-          '<li><b>Ton vrai prix de revient</b><span>Le fil, les petites fournitures, les chutes, les frais de vente et les cotisations.</span></li>'+
-          '<li><b>Tes commandes sous contrôle</b><span>Arrhes ou acompte, date promise, reste à encaisser, factures conformes.</span></li>'+
+          '<li><b>Ton vrai coût de revient</b><span>Le fil, les petites fournitures, les chutes, les frais de vente et les cotisations.</span></li>'+
+          '<li><b>Tes commandes sous contrôle</b><span>Arrhes ou acompte, date promise, reste à recevoir, factures conformes.</span></li>'+
           '<li><b>Ton atelier sur tous tes appareils</b><span>Sur ton téléphone au marché, sur ton ordinateur à la maison.</span></li>'+
         '</ul>'+
         '<p class="portail-note">Sans publicité, sans revente de données. '+
@@ -2124,7 +2239,7 @@ function pointsAFaire(){
   /* Une fiche commencée et pas enregistrée (page rechargée, appli fermée). */
   var bg = !view.draft ? brouillonGarde() : null;
   if (bg) ajout("info", "Création en cours, pas encore enregistrée : « " + (bg.d.nom || "sans nom") + " »",
-    "Commencée le " + new Date(bg.le).toLocaleString("fr-FR", {day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"}) + ". Tu peux la reprendre là où tu t'étais arrêtée.",
+    "Commencée le " + new Date(bg.le).toLocaleString("fr-FR", {day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"}) + ". Tu peux la reprendre là où tu l'avais laissée.",
     "Reprendre", reprendreBrouillon);
   /* Un chronomètre oublié fausse le temps de travail. */
   var ch = chronoEnCours();
@@ -2164,7 +2279,7 @@ function pointsAFaire(){
   }
   var devis = commandes().filter(function(c){ return c.statut === "devis"; });
   if (devis.length) ajout("info", devis.length + " devis en attente de réponse",
-    "Relance ta cliente, ou passe la commande en « Acceptée » dès qu'elle a dit oui.", "Voir", versCommandes);
+    "Relance pour avoir une réponse, ou passe la commande en « À fabriquer » dès que c'est accepté.", "Voir", versCommandes);
 
   var negatifs = state.matieres.filter(function(m){ return (Number(m.stock)||0) < -1e-9; });
   if (negatifs.length) ajout("bad", pluriel(negatifs.length, "matière en stock négatif", "matières en stock négatif"),
@@ -2180,7 +2295,7 @@ function pointsAFaire(){
     finis.slice(0,3).map(function(c){ return c.nom; }).join(", ") + " : il reste moins de pièces prêtes que prévu.",
     "Voir", function(){ aller("creations"); });
 
-  var perte = creationsActives().filter(function(c){ return (Number(c.prix)||0) > 0 && calculer(c).reste < 0; });
+  var perte = vend ? creationsActives().filter(function(c){ return (Number(c.prix)||0) > 0 && calculer(c).reste < 0; }) : [];
   if (perte.length) ajout("bad", perte.length + " création" + (perte.length>1?"s":"") + " à perte",
     "Le prix de " + perte.slice(0,3).map(function(c){ return c.nom; }).join(", ") + (perte.length>3?"…":"") + " ne couvre pas les matières, les frais et les cotisations.",
     "Revoir", function(){ aller("creations"); });
@@ -2206,7 +2321,7 @@ function pointsAFaire(){
       eur(ca.total) + " encaissés en " + ca.annee + " : " + Math.round(pTva*100) + " % du seuil de " + eurRond(sl.tva) + ".",
       "Voir", function(){ aller("indicateurs"); });
   }
-  if (!r.confirmeLe) ajout("info", "Vérifie tes réglages de départ",
+  if (!r.confirmeLe && vend && state.creations.length > 0 && (state.commandes||[]).length > 0) ajout("info", "Vérifie tes réglages de départ",
     "Ton taux horaire, ton statut et tes frais servent à tous les calculs. Tant qu'ils ne sont pas confirmés, les prix affichés restent indicatifs.",
     "Ouvrir", function(){ view.regSection = "activite"; aller("reglages"); });
 
@@ -2219,9 +2334,18 @@ function renderAccueil(main){
   var r = state.reglages;
   var vend = r.profil !== "passion";
   var qui = (compteInfo.connecte && compteInfo.pseudo) ? compteInfo.pseudo : "";
+  /* Atelier neuf : la question est posée en tête de l'Accueil, à la place de
+     la bande verte, tant qu'on n'a pas répondu. Atelier déjà rempli (d'avant
+     la V44) : on devine, on le dit, et le profil se change dans Réglages. */
+  if (!r.profilType){
+    if (state.creations.length || (state.pieces||[]).length || (state.commandes||[]).length){
+      appliquerProfil(profilDeduit(), {sansRendu:true});
+      setTimeout(function(){ toast("Profil « " + (profilActuel() || {}).nom + " » choisi d'après ton atelier.", {libelle:"Changer", fn:function(){ dialogueProfil({}); }}); }, 60);
+    } else main.appendChild(sectionProfil());
+  }
 
   var aUneVente = (state.pieces||[]).some(function(p){ return p.com === "vendu"; }) || commandes().length > 0;
-  var nouvelleCmd = function(){ var c = nouvelleCommande(); view.cmdVue = c.id; aller("commandes", {garderVue:true}); };
+  var nouvelleCmd = function(){ dialogueNouvelleCommande(); };
 
   /* ── La bande verte ──
      Une phrase qui dit l'essentiel avec TES chiffres, et à droite le calcul
@@ -2282,6 +2406,22 @@ function renderAccueil(main){
   var bH2 = el('<button type="button" class="btn lg alt">' + (vend && calcs.length ? "Nouvelle commande" : "Parcourir le catalogue") + '</button>');
   bH2.addEventListener("click", vend && calcs.length ? nouvelleCmd : function(){ view.modeleVu = null; aller("catalogue"); });
   cta.appendChild(bH2);
+  /* Vendre en un geste, et le stand pour un jour de marché. */
+  if (vend && calcs.length){
+    var marcheProfil = r.profilType === "marche";
+    var bV = el('<button type="button" class="btn lg' + (marcheProfil ? '' : ' alt') + '">' + (marcheProfil ? "Jour de marché" : "Vendre une pièce") + '</button>');
+    bV.addEventListener("click", marcheProfil ? function(){ aller("marche"); } : function(){ dialogueVente(null); });
+    cta.appendChild(bV);
+    if (marcheProfil){
+      var bV2 = el('<button type="button" class="btn lg alt">Vendre une pièce</button>');
+      bV2.addEventListener("click", function(){ dialogueVente(null); });
+      cta.appendChild(bV2);
+    } else {
+      var bM = el('<button type="button" class="btn lg alt">Jour de marché</button>');
+      bM.addEventListener("click", function(){ aller("marche"); });
+      cta.appendChild(bM);
+    }
+  }
 
   var pv = hero.querySelector(".preuve");
   var demo = !vitrine;
@@ -2320,7 +2460,7 @@ function renderAccueil(main){
     pv.innerHTML = '<div class="t">' + entete + '</div><div class="rows">'+
       '<div class="row"><span>Matières et emballage</span><span>' + esc(eur(rv.matieres)) + '</span></div>'+
       '<div class="row"><span>Temps de travail</span><span>' + esc(dureeTexte(rv.minutes)) + '</span></div>'+
-      (vend ? '<div class="row"><span>Prix qui paie ton objectif</span><span>' + esc(rv.prixObjectif > 0 ? eur(rv.prixObjectif) : "—") + '</span></div>' : '')+
+      (vend ? '<div class="row"><span>Prix conseillé</span><span>' + esc(rv.prixObjectif > 0 ? eur(rv.prixObjectif) : "—") + '</span></div>' : '')+
       '</div><div class="big ok">' + esc(eur(rv.matieres)) + '</div>'+
       '<div class="cap">' + (vend ? "de matières. Donne-lui un prix de vente pour voir ce qu'elle te paie de l'heure." : "de matières pour cette pièce.") + '</div>';
   }
@@ -2328,9 +2468,12 @@ function renderAccueil(main){
 
   /* ── Premiers pas : trois cartes, cochées au fur et à mesure ── */
   var etapes = [
-    {fait: !!r.confirmeLe, t:"Règle tes chiffres",
+    vend ? {fait: !!r.confirmeLe, t:"Règle tes chiffres",
      d:"Ton statut, ce que tu veux gagner de l'heure et tes frais fixes. Deux minutes, une seule fois.",
-     lib:"Ouvrir les réglages", a:function(){ view.regSection = "activite"; aller("reglages"); }},
+     lib:"Ouvrir les réglages", a:function(){ view.regSection = "activite"; aller("reglages"); }}
+         : {fait: state.matieres.some(function(m){ return !m.prixIndicatif; }), t:"Note le prix de ta laine",
+     d:"Le prix de tes pelotes, tel qu'écrit sur le ticket : c'est ce qui rend le coût de tes ouvrages juste.",
+     lib:"Ouvrir mes matières", a:function(){ view.sub = "matieres"; aller("stock"); }},
     {fait: state.creations.length > 0, t:"Calcule ta première création",
      d:"Pars d'un type d'ouvrage du catalogue : matières et temps sont déjà remplis, tu corriges avec tes chiffres.",
      lib:"Commencer", a:function(){ view.modeleVu = null; view.catMode = "types"; aller("catalogue"); }},
@@ -2354,6 +2497,9 @@ function renderAccueil(main){
       else carte.appendChild(bouton(e.lib, e.a, k === prochaine));
       dg.appendChild(carte);
     });
+    var lienMer = el('<p class="hint" style="margin:8px 0 0"><a href="#" id="lien-mise-en-route">Voir la mise en route complète →</a></p>');
+    lienMer.querySelector("a").addEventListener("click", function(e){ e.preventDefault(); aller("demarrage"); });
+    dep.appendChild(lienMer);
     main.appendChild(dep);
   }
 
@@ -2401,30 +2547,13 @@ function renderAccueil(main){
   else tl.appendChild(tuile("Créations calculées", String(creationsActives().length), "dans « Mes créations »"));
   if (vend) tl.appendChild(tuile("Commandes à fabriquer", String(plan2.n),
     plan2.n ? dureeTexte(plan2.heures*60) + " de travail promis" : "aucune pour l'instant"));
-  var lienInd = el('<p style="margin:14px 0 0"><a href="#">Voir tous les indicateurs →</a></p>');
+  var lienInd = el('<p style="margin:14px 0 0"><a href="#">Voir tous mes chiffres →</a></p>');
   lienInd.querySelector("a").addEventListener("click", function(e){ e.preventDefault(); aller("indicateurs"); });
   cMois.querySelector(".body").appendChild(lienInd);
   col2.appendChild(cMois);
 
-  /* Mes créations : les dernières, pour y revenir d'un geste. */
-  var actives = creationsActives();
-  if (actives.length){
-    var cCrea = el('<div class="card"><header><h2>Mes créations</h2>'+
-      '<p>' + actives.length + ' création' + (actives.length>1?'s':'') + ' calculée' + (actives.length>1?'s':'') + '.</p></header><div class="body"><div class="crea-mini"></div></div></div>');
-    var zc = cCrea.querySelector(".crea-mini");
-    actives.slice(-4).reverse().forEach(function(c){
-      var x = calculer(c), st = verdictCalcul(x);
-      var b = el('<button type="button" class="trow">'+ vignette(c, 34) +
-        '<span><h3>'+esc(c.nom)+'</h3><p class="m">'+esc(canal(c.canal).nom)+'</p></span>'+
-        '<span class="c"><b class="'+st.k+'">'+esc(eur(x.gainHoraire))+'</b><span>de l\'heure</span></span></button>');
-      b.addEventListener("click", function(){ ouvrirFiche(c.id); });
-      zc.appendChild(b);
-    });
-    var lienC = el('<p style="margin:12px 0 0"><a href="#">Toutes mes créations →</a></p>');
-    lienC.querySelector("a").addEventListener("click", function(e){ e.preventDefault(); aller("creations"); });
-    cCrea.querySelector(".body").appendChild(lienC);
-    col1.appendChild(cCrea);
-  }
+  /* Les dernières créations sont déjà dans la bande verte (« Reprendre ») :
+     pas de seconde liste ici. */
 
   main.appendChild(grille);
 
@@ -2576,11 +2705,12 @@ function renderCatalogue(main){
     '<label class="f"><span>Rechercher un modèle</span><input type="text" id="cat-q" placeholder="lapin, bonnet, panier…"></label>'+
     '<label class="f"><span>Trier par</span><select id="cat-tri">'+
       '<option value="famille">Famille</option>'+
-      '<option value="temps">Temps de travail, du plus court</option>'+
-      '<option value="matieres">Coût des matières, du plus bas</option>'+
-      '<option value="prix">Prix courant, du plus bas</option>'+
-      '<option value="diff">Difficulté, de la plus facile</option>'+
+      '<option value="temps">Temps de travail</option>'+
+      '<option value="matieres">Coût des matières</option>'+
+      '<option value="prix">Prix courant</option>'+
+      '<option value="diff">Difficulté</option>'+
     '</select></label>'+
+    '<div class="f cat-sens"><span>Sens</span><button type="button" class="btn sm tri-sens" id="cat-sens"></button></div>'+
     '<label class="f"><span>Patron</span><select id="cat-pat">'+
       '<option value="tous">Tous les types</option>'+
       '<option value="avec">Avec patron uniquement</option>'+
@@ -2597,6 +2727,11 @@ function renderCatalogue(main){
   barre.querySelector("#cat-tri").addEventListener("change", function(e){
     view.tri = e.target.value; peindreCartes();
   });
+  var bSens = barre.querySelector("#cat-sens");
+  function peindreSensCat(){ bSens.textContent = view.triSens < 0 ? "↓ Décroissant" : "↑ Croissant"; bSens.setAttribute("aria-label", "Sens du tri : " + (view.triSens < 0 ? "décroissant" : "croissant") + ". Toucher pour inverser."); }
+  if (!view.triSens) view.triSens = 1;
+  peindreSensCat();
+  bSens.addEventListener("click", function(){ view.triSens = -view.triSens; peindreSensCat(); peindreCartes(); });
   main.appendChild(barre);
   var compte = el('<p class="compte" id="cat-compte"></p>');
   main.appendChild(compte);
@@ -2615,19 +2750,20 @@ function renderCatalogue(main){
       if (view.filtre !== "tous" && m[1] !== view.filtre) return false;
       if (q && (mNom(m)+" "+m[3]).toLowerCase().indexOf(q) === -1) return false;
       if (view.catPat === "avec" && !patronDe(m[0])) return false;
-      if (modeM && !aVraiePhoto(m[0])) return false;
+      if (modeM && !q && !aVraiePhoto(m[0])) return false;
       return true;
     });
     var tri = view.tri || "famille";
+    var sensCat = view.triSens < 0 ? -1 : 1;
     if (tri !== "famille"){
       liste = liste.slice().sort(function(a,b){
-        if (tri === "diff") return a[4] - b[4];
-        if (tri === "prix") return a[7][0] - b[7][0];
+        if (tri === "diff") return (a[4] - b[4]) * sensCat;
+        if (tri === "prix") return (a[7][0] - b[7][0]) * sensCat;
         var ra = coutRapide(a[0]), rb = coutRapide(b[0]);
-        if (tri === "temps") return ra.minutes - rb.minutes;
-        return ra.matieres - rb.matieres;
+        if (tri === "temps") return (ra.minutes - rb.minutes) * sensCat;
+        return (ra.matieres - rb.matieres) * sensCat;
       });
-    }
+    } else if (sensCat < 0) liste = liste.slice().reverse();
     var n = liste.length;
     compte.textContent = n === 0 ? "" :
       (n + (n>1 ? (modeM ? " modèles affichés" : " types affichés")
@@ -2698,7 +2834,20 @@ function renderModeleDetail(main){
 
   var back = el('<button type="button" class="btn sm" style="margin-bottom:16px">← Retour au catalogue</button>');
   back.addEventListener("click", function(){ retourParent(function(){ view.modeleVu = null; view.tab = "catalogue"; }); });
-  main.appendChild(back);
+  function creerFiche(){
+    siBrouillonLibre(function(){
+      view.draft = creationDepuisModele(m[0], mNom(m), prixSuggere, "direct");
+      view.draftRef = empreinteFiche(view.draft);
+      view.ficheId = null; view.modeleVu = null;
+      aller("fiche");
+    });
+  }
+  var hautBar = el('<div class="savebar" style="margin-bottom:16px;justify-content:space-between"></div>');
+  hautBar.appendChild(back); back.style.marginBottom = "0";
+  var bFicheHaut = el('<button type="button" class="btn primary">Créer ma fiche à partir de ce modèle</button>');
+  bFicheHaut.addEventListener("click", creerFiche);
+  hautBar.appendChild(bFicheHaut);
+  main.appendChild(hautBar);
 
   var fam = "";
   FAMILLES.forEach(function(f){ if (f.id === m[1]) fam = f.nom; });
@@ -2718,12 +2867,13 @@ function renderModeleDetail(main){
      ton temps à ton objectif. Afficher à côté un « coût de revient complet »
      calculé à un autre prix donnait deux montants presque égaux mais
      contradictoires. */
-  tiles.appendChild(el('<div class="tile"><div class="k">Plancher (sans ton temps)</div><div class="v">'+esc(eur(r.prixPlancher))+'</div><div class="s">en dessous, tu paies pour travailler</div></div>'));
-  tiles.appendChild(el('<div class="tile"><div class="k">Prix juste</div><div class="v good">'+esc(eur(r.prixObjectif))+'</div><div class="s">te paie '+esc(eur(state.reglages.tauxHoraire))+' / h en vente directe · '+(four[1] ? 'fourchette courante '+esc(eur(four[0]))+'–'+esc(eur(four[1]))
+  var vendCat = state.reglages.profil !== "passion";
+  if (vendCat) tiles.appendChild(el('<div class="tile"><div class="k">Plancher (sans ton temps)</div><div class="v">'+esc(eur(r.prixPlancher))+'</div><div class="s">en dessous, tu paies pour travailler</div></div>'));
+  if (vendCat) tiles.appendChild(el('<div class="tile"><div class="k">Prix conseillé</div><div class="v good">'+esc(eur(r.prixObjectif))+'</div><div class="s">te paie '+esc(eur(state.reglages.tauxHoraire))+' / h en vente directe · '+(four[1] ? 'fourchette courante '+esc(eur(four[0]))+'–'+esc(eur(four[1]))
       : 'aucun repère de marché relevé pour ce modèle')+'</div></div>'));
   main.appendChild(tiles);
 
-  if (four[1] && r.prixObjectif > four[1] * 1.15){
+  if (vendCat && four[1] && r.prixObjectif > four[1] * 1.15){
     main.appendChild(el(
       '<div class="banner" style="background:var(--warn-soft);border-color:var(--warn)"><p>'+
       '<b>Ton prix dépasse le prix du marché.</b> Le prix qui te paierait '+esc(eur(state.reglages.tauxHoraire))+' de l\'heure ('+esc(eur(r.prixObjectif))+') '+
@@ -2793,7 +2943,7 @@ function renderModeleDetail(main){
 
   /* temps */
   var wrap2 = el('<div class="tablewrap resp" style="margin-bottom:18px"></div>');
-  var t2 = el('<table style="min-width:420px"><thead><tr><th>Poste de travail</th><th class="n">Durée</th><th class="n">Valorisée à '+esc(eur(state.reglages.tauxHoraire))+' / h</th></tr></thead><tbody></tbody></table>');
+  var t2 = el('<table style="min-width:420px"><thead><tr><th>Étape</th><th class="n">Durée</th><th class="n">Payée à '+esc(eur(state.reglages.tauxHoraire))+' / h</th></tr></thead><tbody></tbody></table>');
   var tb2 = t2.querySelector("tbody");
   POSTES.forEach(function(p){
     var min = cr.temps[p.k]||0;
@@ -2804,20 +2954,17 @@ function renderModeleDetail(main){
   wrap2.appendChild(t2);
   main.appendChild(wrap2);
 
-  main.appendChild(blocPhotoModele(m, function(){ hydraterPhotos(document); render(); }));
-
   var bar = el('<div class="savebar"></div>');
   var bFiche = el('<button type="button" class="btn primary lg">Créer ma fiche à partir de ce modèle</button>');
-  bFiche.addEventListener("click", function(){
-    siBrouillonLibre(function(){
-      view.draft = creationDepuisModele(m[0], mNom(m), prixSuggere, "direct");
-      view.draftRef = empreinteFiche(view.draft);
-      view.ficheId = null; view.modeleVu = null;
-      aller("fiche");
-    });
-  });
+  bFiche.addEventListener("click", creerFiche);
   bar.appendChild(bFiche);
   main.appendChild(bar);
+
+  /* La photo et ses droits intéressent au moment d'illustrer, pas de calculer : repliés. */
+  var dPhoto = el('<details class="card" style="margin-top:18px;padding:12px 18px"><summary style="cursor:pointer;font-weight:600">Photo du modèle et droits</summary><div class="d-photo" style="margin-top:12px"></div></details>');
+  dPhoto.querySelector(".d-photo").appendChild(blocPhotoModele(m, function(){ hydraterPhotos(document); render(); }));
+  if (aPhotoModele(m[0])) dPhoto.open = true;
+  main.appendChild(dPhoto);
 }
 
 /* ═════ 9. MES CRÉATIONS ═════ */
@@ -2827,8 +2974,8 @@ function renderCreations(main){
   var complet = state.reglages.mode === "complet";
   var bAjout = bouton("+ Ajouter des pièces", function(){ dialogueAjoutPieces(null); });
   main.appendChild(enTete("Mes créations",
-    vend ? "Tes modèles et chaque pièce que tu fabriques : ce qu'elle a coûté vraiment, ce que tu l'as vendue, et ce qu'il te reste."
-         : "Tes modèles et chaque pièce que tu fabriques : son temps, ses matières, ce qu'elle t'a coûté.",
+    vend ? "Tes créations et chaque pièce que tu fabriques : ce qu'elle a coûté vraiment, ce que tu l'as vendue, et ce qu'il te reste."
+         : "Tes créations et chaque pièce que tu fabriques : son temps, ses matières, ce qu'elle t'a coûté.",
     [bouton("Partir d'un type d'ouvrage", function(){ view.modeleVu=null; view.catMode="types"; aller("catalogue"); })]
       .concat(complet && creationsActives().length ? [bAjout] : [])
       .concat([bouton("+ Nouvelle création", nouvelleFiche, true)])));
@@ -2852,16 +2999,21 @@ function renderCreations(main){
   var tiles = el('<div class="tiles"></div>');
   tiles.appendChild(el('<div class="tile"><div class="k">Créations</div><div class="v">'+calculs.length+'</div>'+
     (complet && st.total ? '<div class="s">'+esc(pluriel(st.total, "pièce suivie", "pièces suivies"))+'</div>' : '')+'</div>'));
-  tiles.appendChild(el('<div class="tile"><div class="k">Gain de l\'heure habituel</div><div class="v '+ms.k+'">'+(gains.length ? esc(eur(median)) : '—')+'</div><div class="s">la moitié de tes créations font mieux · objectif '+esc(eur(obj))+' / h</div></div>'));
-  tiles.appendChild(el('<div class="tile"><div class="k">À perte</div><div class="v '+(aPerte?"bad":"")+'">'+aPerte+'</div><div class="s">le prix ne couvre pas les frais</div></div>'));
-  tiles.appendChild(el('<div class="tile"><div class="k">Sous-payées</div><div class="v '+(sousPayees?"warn":"")+'">'+sousPayees+'</div><div class="s">en dessous de ton objectif</div></div>'));
+  if (vend) tiles.appendChild(el('<div class="tile"><div class="k">Gain de l\'heure habituel</div><div class="v '+ms.k+'">'+(gains.length ? esc(eur(median)) : '—')+'</div><div class="s">objectif '+esc(eur(obj))+' / h</div></div>'));
+  var aRevoir = aPerte + sousPayees;
+  if (!vend){
+    var matTot = calculs.reduce(function(a, x){ return a + x.r.matieres; }, 0);
+    tiles.appendChild(el('<div class="tile"><div class="k">Matières par pièce</div><div class="v">'+esc(eur(calculs.length ? matTot / calculs.length : 0))+'</div><div class="s">en moyenne, d\'après tes fiches</div></div>'));
+  }
+  if (vend) tiles.appendChild(el('<div class="tile"><div class="k">À revoir</div><div class="v '+(aPerte ? "bad" : aRevoir ? "warn" : "good")+'">'+aRevoir+'</div>'+
+    '<div class="s">'+(aRevoir ? esc(aPerte ? pluriel(aPerte, "à perte", "à perte") + (sousPayees ? " · " + sousPayees + " sous ton objectif" : "") : sousPayees + " sous ton objectif") : "toutes paient ton temps")+'</div></div>'));
   if (complet && st.total){
-    tiles.appendChild(el('<div class="tile"><div class="k">En fabrication</div><div class="v">'+(st.parProd.afaire + st.parProd.encours + st.parProd.retouche)+'</div>'+
-      (st.parProd.retouche ? '<div class="s warn">'+esc(pluriel(st.parProd.retouche, "à retoucher", "à retoucher"))+'</div>' : '')+'</div>'));
-    tiles.appendChild(el('<div class="tile"><div class="k">'+(vend ? 'Prêtes à vendre' : 'Terminées')+'</div><div class="v good">'+st.stock+'</div>'+
-      (vend ? '<div class="s">'+esc(eur(st.valStock))+' de coût immobilisé</div>' : '')+'</div>'));
-    if (vend) tiles.appendChild(el('<div class="tile"><div class="k">Vendues</div><div class="v">'+st.vendues+'</div><div class="s">'+esc(eur(st.ca))+' encaissés'+
-      (st.coutVendu > 0 ? ' · ' + esc(eur(cts(st.ca - st.coutVendu))) + (st.ca >= st.coutVendu ? ' en plus de ton salaire' : ' face au coût complet') : '')+'</div></div>'));
+    var morceaux = [];
+    var enFab = st.parProd.afaire + st.parProd.encours + st.parProd.retouche;
+    if (enFab) morceaux.push(enFab + " en fabrication" + (st.parProd.retouche ? " (dont " + st.parProd.retouche + " à retoucher)" : ""));
+    if (st.stock) morceaux.push(st.stock + (vend ? " prête" + (st.stock > 1 ? "s" : "") + " à vendre" : " terminée" + (st.stock > 1 ? "s" : "")));
+    if (vend && st.vendues) morceaux.push(st.vendues + " vendue" + (st.vendues > 1 ? "s" : "") + " · " + eur(st.ca));
+    tiles.appendChild(el('<div class="tile"><div class="k">Tes pièces</div><div class="v">'+st.total+'</div><div class="s">'+esc(morceaux.join(" · ") || "aucune pour l'instant")+'</div></div>'));
   }
   if (calculs.length) main.appendChild(tiles);
 
@@ -2901,6 +3053,7 @@ function renderCreations(main){
     FILTRES.forEach(function(x){
       if (x.vend && !vend) return;
       var n = x.f ? state.pieces.filter(x.f).length : st.total;
+      if (x.f && n === 0 && fk !== x.k) return;   /* pas de filtre vide qui encombre */
       var b = el('<button type="button" class="fchip">'+esc(x.nom)+' <span class="n">'+n+'</span></button>');
       b.setAttribute("aria-pressed", fk === x.k ? "true" : "false");
       b.addEventListener("click", function(){ view.fPieces = x.k; view.creaTout = {}; render(); });
@@ -2910,37 +3063,51 @@ function renderCreations(main){
   }
   var outils = el('<div class="crea-outils">'+
     '<label class="f"><span class="sr-only">Rechercher une création</span><input type="search" id="crea-q" placeholder="Rechercher une création…"></label>'+
-    '<label class="f"><span class="sr-only">Trier</span><select id="crea-tri">'+
-      '<option value="recent">Activité récente d\'abord</option>'+
-      '<option value="gain">Gain de l\'heure, du plus bas</option>'+
-      '<option value="nom">Nom, de A à Z</option>'+
-    '</select></label></div>');
+    '</div>');
   outils.querySelector("#crea-q").value = view.creaQ || "";
-  outils.querySelector("#crea-tri").value = view.creaTri || "recent";
   outils.querySelector("#crea-q").addEventListener("input", function(e){ view.creaQ = e.target.value; peindre(); });
-  outils.querySelector("#crea-tri").addEventListener("change", function(e){ view.creaTri = e.target.value; peindre(); });
+  outils.appendChild(barreTri({cle:"crea", defaut:"recent", sens:-1, quand:function(){ peindre(); }, options:
+    [["recent","Dernière activité"],["nom","Nom"]].concat(vend ? [["gain","Gain de l'heure"],["prix","Prix de vente"]] : []).concat([["pieces","Nombre de pièces"]])}));
   barre.appendChild(outils);
   main.appendChild(barre);
 
+  if (complet) main.appendChild(barreSelection(vend));
   var zone = el('<div class="crea-liste"></div>');
   main.appendChild(zone);
   var vide = el('<p class="hint" id="crea-vide" hidden></p>');
   main.appendChild(vide);
+  var plusCrea = el('<div class="plus-lignes" hidden></div>');
+  main.appendChild(plusCrea);
 
   function activite(x){ return derniereActivite(x.c); }
   function peindre(){
     zone.innerHTML = "";
     var q = String(view.creaQ || "").trim().toLowerCase();
-    var tri = view.creaTri || "recent";
+    var tri = etatTri("crea", "recent", -1);
     var liste = calculs.filter(function(x){
       if (q && x.c.nom.toLowerCase().indexOf(q) === -1) return false;
       if (filtre.f && !piecesDe(x.c.id).some(filtre.f)) return false;
       return true;
     });
-    if (tri === "gain") liste.sort(function(a,b){ return a.r.gainHoraire - b.r.gainHoraire; });
-    else if (tri === "nom") liste.sort(function(a,b){ return a.c.nom.localeCompare(b.c.nom, "fr"); });
-    else liste.sort(function(a,b){ return activite(b) - activite(a); });
-    liste.forEach(function(x){ zone.appendChild(carteCreation(x, filtre, vend, complet)); });
+    liste = trierListe(liste, tri, {
+      recent: function(x){ return activite(x); },
+      nom:    function(x){ return x.c.nom; },
+      gain:   function(x){ return x.r.prix > 0 && x.r.heures > 0 ? x.r.gainHoraire : null; },
+      prix:   function(x){ return x.r.prix > 0 ? x.r.prix : null; },
+      pieces: function(x){ return piecesDe(x.c.id).length; }
+    });
+    /* Peu de créations : tout est déplié. Beaucoup : une ligne chacune, et
+       vingt à la fois. Un filtre ou une recherche déplie ce qui correspond. */
+    var deplie = liste.length <= 3 || !!filtre.f || !!q;
+    var PAGE = 20, nMax = view.creaPage ? PAGE * view.creaPage : PAGE;
+    liste.slice(0, nMax).forEach(function(x){ zone.appendChild(carteCreation(x, filtre, vend, complet, {ouvert: deplie})); });
+    plusCrea.innerHTML = "";
+    plusCrea.hidden = liste.length <= nMax;
+    if (liste.length > nMax){
+      plusCrea.appendChild(el('<span class="hint" style="margin:0">'+nMax+' créations sur '+liste.length+'.</span>'));
+      plusCrea.appendChild(bouton("Afficher les " + Math.min(PAGE, liste.length - nMax) + " suivantes", function(){ view.creaPage = (view.creaPage || 1) + 1; peindre(); hydraterPhotos(zone); }));
+    }
+    majBarreSelection();
     vide.hidden = liste.length > 0;
     vide.textContent = liste.length ? "" : (q ? "Aucune création ne porte ce nom." : "Aucune pièce dans ce filtre.");
     hydraterPhotos(zone);
@@ -2959,15 +3126,22 @@ function renderCreations(main){
     main.appendChild(dA);
   }
 
-  main.appendChild(el('<div class="legetat" style="margin-top:14px">'+
+  if (vend) main.appendChild(el('<div class="legetat" style="margin-top:14px">'+
     '<span class="etat e-ok"><span class="pastille"></span>tu t\'y retrouves</span>'+
     '<span class="etat e-bas"><span class="pastille"></span>sous ton objectif horaire</span>'+
-    '<span class="etat e-rupture"><span class="pastille"></span>très sous-payée ou à perte</span>'+
-    '<span class="legnote">Chaque création affiche le calcul de sa fiche (l\'estimation). '+
-    (complet ? 'Chaque pièce affiche ce qu\'elle a <b>vraiment</b> coûté : temps chronométré, matières pesées, retouches. Touche « détail » pour le poste par poste. '+
-      'Passer une pièce en <b>Terminée</b> sort ses matières de ton stock, une seule fois. ' +
-      (vend ? 'La passer en <b>Vendue</b> fige son prix : laisse le champ vide pour reprendre le prix de la fiche, ou saisis le prix réellement payé.' : '')
-      : '') + '</span></div>'));
+    '<span class="etat e-rupture"><span class="pastille"></span>loin de ton objectif ou à perte</span>'+
+    '<span class="legnote">En haut de chaque création : l\'<b>estimation</b> de ta fiche. Dans le tableau : ce que chaque pièce a <b>vraiment</b> coûté'+
+    (complet ? ' (temps chronométré, matières pesées, retouches).' : '.')+'</span></div>'));
+  if (complet){
+    main.appendChild(el('<details class="card" style="margin-top:12px;padding:12px 18px"><summary style="cursor:pointer;font-weight:600">Comment ça marche</summary>'+
+      '<ul class="aide-liste">'+
+      '<li><b>Détail</b> : ouvre le coût de la pièce poste par poste (matières, main-d\'œuvre, emballage, transport, frais de vente, cotisations). Les lignes s\'additionnent exactement.</li>'+
+      (vend ? '<li><b>Conseillé</b> : le prix qui paierait le temps réel de cette pièce à ton objectif horaire. Au-dessus, la pièce te rapporte plus que ton objectif.</li>' : '')+
+      '<li><b>Provisoire</b> : tant qu\'une pièce n\'est pas terminée, on compte au moins le temps de la fiche.</li>'+
+      '<li>Passer une pièce en <b>Terminée</b> sort ses matières de ton stock, une seule fois.'+
+      (vend ? ' La passer en <b>Vendue</b> fige son prix : laisse le champ vide pour reprendre le prix de la fiche, ou saisis le prix réellement payé.' : '')+'</li>'+
+      '</ul></details>'));
+  }
 }
 
 /* Quand on a touché à cette création pour la dernière fois : sa fiche, ou
@@ -2999,11 +3173,62 @@ function reprise(){
   if (actives.length) return {type:"creation", c: actives[0]};
   return null;
 }
+/* Actions groupées : cocher des pièces, puis un seul geste pour toutes. */
+function piecesSelectionnees(){
+  var ids = view.selPieces || {};
+  return (state.pieces || []).filter(function(p){ return ids[p.id]; });
+}
+function majBarreSelection(){
+  var bar = document.getElementById("sel-barre"); if (!bar) return;
+  var l = piecesSelectionnees();
+  bar.hidden = !l.length;
+  var n = bar.querySelector(".sel-n"); if (n) n.textContent = l.length + (l.length > 1 ? " pièces sélectionnées" : " pièce sélectionnée");
+}
+function barreSelection(vend){
+  var bar = el('<div class="sel-barre" id="sel-barre" hidden><span class="sel-n"></span><div class="sel-act"></div></div>');
+  var act = bar.querySelector(".sel-act");
+  function pour(lib, fn, primaire){
+    var b = bouton(lib, function(){
+      var l = piecesSelectionnees(); if (!l.length) return;
+      fn(l);
+    }, primaire); b.classList.add("sm"); act.appendChild(b);
+  }
+  pour("Marquer terminées", function(l){
+    l.forEach(function(p){ if (p.prod !== "termine") majProd(p, "termine"); });
+    view.selPieces = {}; sauverTout(); render(); toast(pluriel(l.length, "pièce terminée", "pièces terminées"));
+  }, true);
+  if (vend) pour("Marquer vendues", function(l){
+    dialogueChamps({titre:"Vendre " + pluriel(l.length, "pièce"), texte:"Au prix de la fiche de chaque création, sauf si tu indiques un prix unique.",
+      champs:[{id:"prix", lib:"Prix unique (€, facultatif)", type:"number", inputmode:"decimal"}],
+      contenu: el('<label class="f"><span>Payé comment</span><select id="sel-moyen">'+optionsMoyens("especes")+'</select></label>'), bouton:"C'est vendu"}, function(v, boite){
+      var prix = v.prix !== "" ? Number(lireNombre(v.prix)) : null, moyen = boite.querySelector("#sel-moyen").value;
+      l.forEach(function(p){ if (p.prod !== "termine") majProd(p, "termine"); if (prix !== null) p.prix = prix; p.paiement = moyen; if (p.com !== "vendu") majCom(p, "vendu", prix); });
+      view.selPieces = {}; sauverTout(); render(); toast(pluriel(l.length, "pièce vendue", "pièces vendues"));
+    });
+  });
+  pour("Remettre en stock", function(l){
+    l.forEach(function(p){ if (p.com !== "atelier") majCom(p, "atelier"); });
+    view.selPieces = {}; sauverTout(); render(); toast(pluriel(l.length, "pièce remise", "pièces remises") + " en stock");
+  });
+  pour("Supprimer", function(l){
+    confirmer({titre:"Supprimer " + pluriel(l.length, "pièce") + " ?", texte:"Leur temps chronométré et leurs ventes disparaîtront de tes chiffres.", bouton:"Supprimer", danger:true}, function(){
+      var ids = {}; l.forEach(function(p){ ids[p.id] = true; });
+      state.pieces = state.pieces.filter(function(p){ return !ids[p.id]; });
+      view.selPieces = {}; sauverTout(); render(); toast(pluriel(l.length, "pièce supprimée", "pièces supprimées"));
+    });
+  });
+  var bx = el('<button type="button" class="btn sm">Tout décocher</button>');
+  bx.addEventListener("click", function(){ view.selPieces = {}; render(); });
+  act.appendChild(bx);
+  return bar;
+}
 /* Une création et ses pièces : le modèle en tête, chaque exemplaire dessous. */
-function carteCreation(x, filtre, vend, complet){
+function carteCreation(x, filtre, vend, complet, opts){
+  opts = opts || {};
   var c = x.c, r = x.r;
   var stF = verdictCalcul(r);
-  var toutes = piecesDe(c.id).sort(function(a,b){ return b.maj - a.maj; });
+  /* Du numéro le plus récent au plus ancien : l'ordre dans lequel on les a faites. */
+  var toutes = piecesDe(c.id).sort(function(a,b){ return numeroPiece(b) - numeroPiece(a); });
   var pieces = filtre.f ? toutes.filter(filtre.f) : toutes;
   var ef = etatFini(c);
   var card = el('<section class="crea-card" aria-label="'+esc(c.nom)+'">'+
@@ -3011,48 +3236,100 @@ function carteCreation(x, filtre, vend, complet){
       '<button type="button" class="crea-id" aria-label="Ouvrir la fiche de '+esc(c.nom)+'">'+vignette(c, 46)+
         '<span><h2>'+esc(c.nom)+'</h2><p class="m">'+esc(dureeTexte(r.minutes))+' de travail estimé · '+esc(canal(c.canal).nom)+
         (c.modele && c.modele !== "vide" && modele(c.modele) ? ' · ' + esc(mNom(modele(c.modele))) : '')+'</p></span></button>'+
-      '<div class="crea-chiffres">'+
-        '<div><span class="k">Prix de vente</span><b>'+esc(r.prix > 0 ? eur(r.prix) : "—")+'</b></div>'+
-        (vend ? '<div><span class="k">Prix cible</span><b>'+esc(r.prixObjectif > 0 ? eur(r.prixObjectif) : "—")+'</b></div>' : '')+
-        '<div><span class="k">Coût complet</span><b>'+esc(eur(r.coutRevient))+'</b></div>'+
+      '<div class="crea-bloc"><span class="crea-cap">D\'après ta fiche (estimation)</span><div class="crea-chiffres">'+
+        (vend ? '<div><span class="k">Prix de vente</span><b>'+esc(r.prix > 0 ? eur(r.prix) : "—")+'</b></div>'
+              : '<div><span class="k">Matières</span><b>'+esc(eur(r.matieres))+'</b></div><div><span class="k">Temps</span><b>'+esc(dureeTexte(r.minutes))+'</b></div>')+
+        (vend ? '<div><span class="k">Prix conseillé</span><b>'+esc(r.prixObjectif > 0 ? eur(r.prixObjectif) : "—")+'</b></div>' : '')+
         (vend ? '<div><span class="k">Gain de l\'heure</span><b class="'+stF.k+'">'+(r.prix > 0 && r.heures > 0 ? esc(eur(r.gainHoraire)) : '—')+'</b></div>' : '')+
-        '<div><span class="k">État</span><span class="chip '+stF.k+'">'+esc(stF.t)+'</span></div>'+
+        (vend ? '<div><span class="k">État</span><span class="chip '+stF.k+'">'+esc(stF.t)+'</span></div>' : '')+
         (complet ? '<div><span class="k">En stock</span><span class="lignestock">'+badgeEtat(ef, enStock(c.id) + (enStock(c.id) > 1 ? " pièces" : " pièce"))+jauge(ef)+'</span></div>' : '')+
-      '</div>'+
+      '</div></div>'+
       '<div class="crea-act"></div>'+
     '</div></section>');
   card.querySelector(".crea-id").addEventListener("click", function(){ ouvrirFiche(c.id); });
   var act = card.querySelector(".crea-act");
   var bF = bouton("Ouvrir la fiche", function(){ ouvrirFiche(c.id); }); bF.classList.add("sm"); act.appendChild(bF);
   if (complet){ var bP = bouton("+ Pièce", function(){ dialogueAjoutPieces(c.id); }); bP.classList.add("sm"); act.appendChild(bP); }
+  if (vend){ var bV = bouton("Vendre", function(){ dialogueVente(c.id); }); bV.classList.add("sm"); act.appendChild(bV); }
   if (!complet) return card;
 
   if (!pieces.length){
     card.appendChild(el('<p class="crea-vide">'+(toutes.length ? 'Aucune pièce dans ce filtre.' : 'Aucune pièce suivie pour l\'instant.')+'</p>'));
     return card;
   }
+  /* Replié par défaut dès qu'il y a plusieurs créations : une ligne par
+     création, les pièces sur demande. Le filtre ou la recherche déplient. */
+  var ouvert = opts.ouvert || (view.creaOuvert && view.creaOuvert[c.id]);
+  if (!ouvert){
+    var enCoursN = toutes.filter(function(p){ return p.prod !== "termine"; }).length, stockN = enStock(c.id), venduN = toutes.filter(function(p){ return p.com === "vendu"; }).length;
+    var resume = [];
+    if (enCoursN) resume.push(enCoursN + " en fabrication");
+    if (stockN) resume.push(stockN + (vend ? " en stock" : " terminée" + (stockN > 1 ? "s" : "")));
+    if (venduN && vend) resume.push(venduN + " vendue" + (venduN > 1 ? "s" : ""));
+    var bO = el('<button type="button" class="crea-deplier" aria-expanded="false">'+esc(pluriel(toutes.length, "pièce"))+(resume.length ? ' · ' + esc(resume.join(" · ")) : '')+' <span aria-hidden="true">▾</span></button>');
+    bO.addEventListener("click", function(){ view.creaOuvert = view.creaOuvert || {}; view.creaOuvert[c.id] = true; render(); });
+    card.appendChild(bO);
+    return card;
+  }
+  var bR = el('<button type="button" class="crea-deplier" aria-expanded="true">Replier <span aria-hidden="true">▴</span></button>');
+  bR.addEventListener("click", function(){ if (view.creaOuvert) delete view.creaOuvert[c.id]; view.creaFiltreOuvre = false; render(); });
+  if (!opts.ouvert) card.appendChild(bR);
+  /* Les pièces vendues, offertes ou jetées rejoignent un historique replié :
+     la table ne montre que ce qui est encore dans l'atelier. */
+  var actives = pieces.filter(function(p){ return !horsStock(p); }), passees = pieces.filter(function(p){ return horsStock(p); });
+  if (filtre.f && !actives.length){ actives = passees; passees = []; }
   var LIM = 12;
   var tout = view.creaTout && view.creaTout[c.id];
-  var visibles = tout ? pieces : pieces.slice(0, LIM);
+  var visibles = tout ? actives : actives.slice(0, LIM);
   var wrap = el('<div class="tablewrap resp"></div>');
-  var t = el('<table class="t-pieces" style="min-width:'+(vend?1080:760)+'px"><thead><tr>'+
+  var t = el('<table class="t-pieces" style="min-width:'+(vend?1020:790)+'px"><thead><tr>'+
+    '<th style="width:34px"><input type="checkbox" class="sel-tout" aria-label="Sélectionner toutes les pièces de '+esc(c.nom)+'"></th>'+
     '<th style="width:150px">Pièce</th><th style="width:156px">Fabrication</th>'+
     (vend ? '<th style="width:170px">Destination</th>' : '')+
-    '<th style="width:170px">Temps réel</th>'+
-    '<th class="n" style="width:120px">Coût de revient</th>'+
-    (vend ? '<th class="n" style="width:100px">Prix de vente</th><th class="n" style="width:90px">Prix cible</th><th class="n" style="width:130px">Gain</th>' : '')+
+    '<th style="width:160px">Temps passé</th>'+
+    '<th class="n" style="width:130px">'+(vend ? 'Coût réel' : 'Matières')+'</th>'+
+    (vend ? '<th class="n" style="width:110px">Prix de vente</th><th class="n" style="width:130px">Gain</th>' : '')+
     '<th style="width:40px"><span class="sr-only">Actions</span></th></tr></thead><tbody></tbody></table>');
   var tb = t.querySelector("tbody");
-  visibles.forEach(function(p, i){ tb.appendChild(lignePiece(p, c, toutes.length - toutes.indexOf(p), vend)); });
+  visibles.forEach(function(p, i){ tb.appendChild(lignePiece(p, c, numeroPiece(p), vend)); });
   brancherPieces(tb);
+  t.querySelector(".sel-tout").addEventListener("change", function(e){
+    view.selPieces = view.selPieces || {};
+    visibles.forEach(function(p){ if (e.target.checked) view.selPieces[p.id] = true; else delete view.selPieces[p.id]; });
+    [].forEach.call(tb.querySelectorAll('[data-role="sel"]'), function(cb){ cb.checked = e.target.checked; cb.closest("tr").classList.toggle("sel", e.target.checked); });
+    majBarreSelection();
+  });
   wrap.appendChild(t);
   card.appendChild(wrap);
-  if (pieces.length > visibles.length){
-    var plus = el('<div class="plus-lignes"><span class="hint" style="margin:0">'+visibles.length+' pièces sur '+pieces.length+', les plus récentes d\'abord.</span></div>');
-    plus.appendChild(bouton("Afficher les " + (pieces.length - visibles.length) + " autres", function(){
+  if (actives.length > visibles.length){
+    var plus = el('<div class="plus-lignes"><span class="hint" style="margin:0">'+visibles.length+' pièces sur '+actives.length+', les plus récentes d\'abord.</span></div>');
+    plus.appendChild(bouton("Afficher les " + (actives.length - visibles.length) + " autres", function(){
       view.creaTout = view.creaTout || {}; view.creaTout[c.id] = true; render();
     }));
     card.appendChild(plus);
+  }
+  if (!actives.length) card.appendChild(el('<p class="crea-vide">Aucune pièce en cours ni en stock.</p>'));
+  if (passees.length){
+    var venduesN = passees.filter(function(p){ return p.com === "vendu"; }).length;
+    var ca = passees.reduce(function(a, p){ return a + (p.com === "vendu" ? Number(p.prix) || 0 : 0); }, 0);
+    var hist = el('<details class="crea-hist"><summary>'+(vend ? 'Historique : ' + esc(pluriel(venduesN, "vendue")) + (ca ? ' · ' + esc(eur(ca)) : '') + (passees.length > venduesN ? ' · ' + (passees.length - venduesN) + ' offerte(s) ou ratée(s)' : '')
+                                                       : 'Historique : ' + esc(pluriel(passees.length, "pièce")))+'</summary><div class="tablewrap resp"></div></details>');
+    var t2 = el('<table class="t-pieces t-hist" style="min-width:'+(vend?1020:790)+'px"><thead><tr><th style="width:34px"></th><th style="width:150px">Pièce</th><th style="width:156px">Fabrication</th>'+
+      (vend ? '<th style="width:170px">Destination</th>' : '')+'<th style="width:160px">Temps passé</th><th class="n" style="width:130px">'+(vend ? 'Coût réel' : 'Matières')+'</th>'+
+      (vend ? '<th class="n" style="width:110px">Prix de vente</th><th class="n" style="width:130px">Gain</th>' : '')+'<th style="width:40px"></th></tr></thead><tbody></tbody></table>');
+    var tb2 = t2.querySelector("tbody");
+    var toutH = view.creaTout && view.creaTout["h" + c.id];
+    (toutH ? passees : passees.slice(0, LIM)).forEach(function(p){ tb2.appendChild(lignePiece(p, c, numeroPiece(p), vend)); });
+    brancherPieces(tb2);
+    hist.querySelector(".tablewrap").appendChild(t2);
+    if (passees.length > LIM && !toutH){
+      var plusH = el('<div class="plus-lignes"></div>');
+      plusH.appendChild(bouton("Afficher les " + (passees.length - LIM) + " autres", function(){ view.creaTout = view.creaTout || {}; view.creaTout["h" + c.id] = true; view.creaOuvert = view.creaOuvert || {}; view.creaOuvert[c.id] = true; render(); }));
+      hist.appendChild(plusH);
+    }
+    if (view.creaHist && view.creaHist[c.id]) hist.open = true;
+    hist.addEventListener("toggle", function(){ view.creaHist = view.creaHist || {}; if (hist.open) view.creaHist[c.id] = true; else delete view.creaHist[c.id]; });
+    card.appendChild(hist);
   }
   return card;
 }
@@ -3066,21 +3343,25 @@ function lignePiece(p, cr, numero, vend){
   var quand = p.com === "vendu" && p.venduLe ? "vendue le " + new Date(p.venduLe).toLocaleDateString("fr-FR")
             : p.termineLe ? "terminée le " + new Date(p.termineLe).toLocaleDateString("fr-FR")
             : "créée le " + new Date(p.cree).toLocaleDateString("fr-FR");
-  var tr = el('<tr data-pid="'+esc(p.id)+'" data-etat="'+esc(p.prod)+'" style="--etat-c:'+couleur+'">'+
+  var sel = !!(view.selPieces && view.selPieces[p.id]);
+  var tr = el('<tr data-pid="'+esc(p.id)+'" data-etat="'+esc(p.prod)+'" style="--etat-c:'+couleur+'"'+(sel ? ' class="sel"' : '')+'>'+
+    '<td class="sel-cell"><input type="checkbox" data-role="sel" aria-label="Sélectionner la pièce N° '+numero+'"'+(sel ? ' checked' : '')+'></td>'+
     '<td data-l="Pièce"><b>N° '+numero+'</b>'+(p.com==="commande"?' <span class="chip warn">commande</span>':'')+(p.retouches && p.retouches.length ? ' <span class="chip neutre">'+esc(pluriel(p.retouches.length, "retouche"))+'</span>' : '')+
       '<div class="hint" style="margin:2px 0 0">'+esc(quand)+(p.client ? ' · ' + esc(p.client) : '')+'</div></td>'+
     '<td data-l="Fabrication"><select data-role="prod" aria-label="État de fabrication" style="border-left:3px solid '+couleur+'"></select></td>'+
     (vend ? '<td data-l="Destination"><select data-role="com" aria-label="Destination"></select>'+
-      '<input type="text" class="cli" data-role="client" aria-label="Nom de la cliente" placeholder="cliente…" value="'+esc(p.client||"")+'"></td>' : '')+
-    '<td data-l="Temps réel"><div class="tps"><button type="button" class="btn sm chrono'+(enCours?' on':'')+'" data-role="chrono">'+(enCours ? '■ Arrêter' : '▶ Chrono')+'</button>'+
-      '<span class="num">'+(mesMin > 0.01 ? esc(dureeLisible(mesMin)) : '<span class="hint">est. '+esc(dureeLisible(k.minEst))+'</span>')+'</span></div></td>'+
-    '<td class="n" data-l="Coût de revient"><b class="num">'+esc(eur(k.total))+'</b>'+
-      '<div class="hint num">'+esc(eur(k.matieres))+' mat. · '+esc(eur(k.mainOeuvre))+' temps</div>'+
-      '<button type="button" class="lien-mini" data-role="cout" aria-label="Détail du coût de cette pièce">détail'+(k.pesee || k.tempsMesure ? ' · réel' : '')+'</button></td>'+
-    (vend ? '<td class="n" data-l="Prix de vente"><input type="number" inputmode="decimal" min="0" step="0.5" data-role="prix" aria-label="Prix de vente de cette pièce" value="'+(p.prix===null||p.prix===undefined?"":p.prix)+'" placeholder="'+(cr.prix||0)+'"></td>'+
-      '<td class="n num" data-l="Prix cible">'+esc(k.prixCible > 0 ? eur(k.prixCible) : "—")+'</td>'+
-      '<td class="n" data-l="Gain"><b class="num '+k.etat.k+'">'+esc(k.jete ? "− " + eur(k.total) : (k.prix > 0 ? eur(k.gain) : "—"))+'</b>'+
-        '<div class="hint num">'+(k.jete ? 'perte' : k.prix > 0 && k.heures > 0 ? esc(eur(k.gainH)) + ' / h' : esc(k.etat.t))+'</div></td>' : '')+
+      '<input type="text" class="cli" data-role="client" aria-label="Commandé par" placeholder="commandé par…" value="'+esc(p.client||"")+'"></td>' : '')+
+    '<td data-l="Temps passé"><div class="cel"><div class="tps"><button type="button" class="btn sm chrono'+(enCours?' on':'')+'" data-role="chrono">'+(enCours ? '■ Arrêter' : '▶ Chrono')+'</button>'+
+      '<span class="num">'+(mesMin > 0.01 ? esc(dureeLisible(mesMin)) : '<span class="hint">pas chronométrée</span>')+'</span></div>'+
+      '<div class="hint num" style="margin:2px 0 0">prévu '+esc(dureeLisible(k.minEst))+'</div></div></td>'+
+    (vend ? '<td class="n" data-l="Coût réel"><div class="cel"><b class="num">'+esc(eur(k.total))+'</b>'+
+      '<div class="hint num">'+esc(eur(k.matieres))+' mat. · '+esc(eur(k.mainOeuvre))+' temps</div>'
+          : '<td class="n" data-l="Matières"><div class="cel"><b class="num">'+esc(eur(k.matieres))+'</b>'+
+      '<div class="hint num">'+(k.pesee ? 'pesées' : 'd\'après la fiche')+'</div>')+
+      '<button type="button" class="lien-mini" data-role="cout" aria-label="Détail du coût de cette pièce">détail'+(k.provisoire ? ' · provisoire' : k.pesee || k.tempsMesure ? ' · réel' : '')+'</button></div></td>'+
+    (vend ? '<td class="n" data-l="Prix de vente"><div class="cel"><input type="number" inputmode="decimal" min="0" step="0.5" data-role="prix" aria-label="Prix de vente de cette pièce" value="'+(p.prix===null||p.prix===undefined?"":p.prix)+'" placeholder="'+(cr.prix||0)+'"><div class="hint num" style="margin:3px 0 0">conseillé '+esc(k.prixCible > 0 ? eur(k.prixCible) : "—")+'</div></div></td>'+
+      '<td class="n" data-l="Gain"><div class="cel"><b class="num '+k.etat.k+'">'+esc(k.jete ? "− " + eur(k.total) : (k.prix > 0 ? eur(k.gain) : "—"))+'</b>'+
+        '<div class="hint num">'+(k.jete ? 'perte' : k.prix > 0 && k.heures > 0 ? esc(eur(k.gainH)) + ' / h' + (k.provisoire ? ' · provisoire' : '') : esc(k.etat.t))+'</div></div></td>' : '')+
     '<td><div class="act-col">'+
       '<button type="button" class="btn sm ghost" data-role="reel" aria-label="Estimé et réel de cette pièce de '+esc(cr.nom)+'">'+(p.reel && Object.keys(p.reel).length ? 'Pesée ✓' : 'Peser')+'</button>'+
       '<button type="button" class="btn ghost" data-role="del" aria-label="Supprimer cette pièce de '+esc(cr.nom)+'">✕</button></div></td></tr>');
@@ -3097,6 +3378,14 @@ function lignePiece(p, cr, numero, vend){
 function brancherPieces(tb){
   tb.addEventListener("change", function(e){
     var role = e.target.getAttribute("data-role");
+    if (role === "sel"){
+      var pidS = e.target.closest("tr").getAttribute("data-pid");
+      view.selPieces = view.selPieces || {};
+      if (e.target.checked) view.selPieces[pidS] = true; else delete view.selPieces[pidS];
+      e.target.closest("tr").classList.toggle("sel", e.target.checked);
+      majBarreSelection();
+      return;
+    }
     if (role !== "prod" && role !== "com") return;
     var pid = e.target.closest("tr").getAttribute("data-pid");
     var p = piece(pid);
@@ -3121,7 +3410,7 @@ function brancherPieces(tb){
     if (attente.length){
       var c0 = attente[0];
       confirmer({titre:"Cette pièce est-elle pour une commande ?",
-        texte:(attente.length > 1 ? attente.length + " commandes" : "La commande de " + ((c0.client && c0.client.nom) || "ta cliente")) +
+        texte:(attente.length > 1 ? attente.length + " commandes" : "La commande de " + ((c0.client && c0.client.nom) || "quelqu'un")) +
               " attend" + (attente.length > 1 ? "ent" : "") + " une pièce de cette création. Si c'est pour elle, relie-la : l'argent sera compté une seule fois, dans la commande.",
         bouton:"Oui, la relier à la commande", annuler:"Non, vente à part",
         siNon: appliquer, siAnnule: function(){ render(); }},
@@ -3144,8 +3433,8 @@ function brancherPieces(tb){
       /* Le gain de la ligne suit le prix tapé, sans redessiner l'écran. */
       if (crx){
         var k = coutPiece(x, crx), tr = e.target.closest("tr"), cg = tr.querySelector('[data-l="Gain"]');
-        if (cg) cg.innerHTML = '<b class="num '+k.etat.k+'">'+esc(k.jete ? "− " + eur(k.total) : (k.prix > 0 ? eur(k.gain) : "—"))+'</b>'+
-          '<div class="hint num">'+(k.jete ? 'perte' : k.prix > 0 && k.heures > 0 ? esc(eur(k.gainH)) + ' / h' : esc(k.etat.t))+'</div>';
+        if (cg) cg.innerHTML = '<div class="cel"><b class="num '+k.etat.k+'">'+esc(k.jete ? "− " + eur(k.total) : (k.prix > 0 ? eur(k.gain) : "—"))+'</b>'+
+          '<div class="hint num">'+(k.jete ? 'perte' : k.prix > 0 && k.heures > 0 ? esc(eur(k.gainH)) + ' / h' + (k.provisoire ? ' · provisoire' : '') : esc(k.etat.t))+'</div></div>';
       }
     }
     else x.client = e.target.value;
@@ -3171,6 +3460,201 @@ function brancherPieces(tb){
   });
 }
 /* Ajouter des pièces au suivi, depuis l'écran ou depuis une création. */
+/* Noter un achat sans quitter la liste des matières : combien de lots, à
+   quel prix. Le stock monte, le dernier prix payé devient la référence. */
+function dialogueAchatMatiere(m){
+  var box = el('<div><div class="grid2">'+
+    '<label class="f"><span>Combien de '+esc(m.contenance > 1 ? "lots de " + qte(m.contenance, m.unite) : m.unite)+'</span><input id="am-n" type="number" min="0.01" step="1" inputmode="decimal" value="1"></label>'+
+    '<label class="f"><span>Prix payé au total (€)</span><input id="am-p" type="number" min="0" step="0.01" inputmode="decimal" value="'+esc(Number(m.prix) || "")+'"></label>'+
+    '</div><p class="hint" id="am-aide" style="margin:8px 0 0"></p></div>');
+  var iN = box.querySelector("#am-n"), iP = box.querySelector("#am-p"), aide = box.querySelector("#am-aide");
+  function maj(){
+    var n = Number(lireNombre(iN.value)) || 0, p = Number(lireNombre(iP.value)) || 0;
+    var q = n * (Number(m.contenance) || 1);
+    aide.textContent = n > 0 ? "+ " + qte(q, m.unite) + " en stock" + (p > 0 ? " · " + eurU(p / q, m.unite) : " · au prix de la fiche, faute de prix") + " · stock après : " + qte((Number(m.stock)||0) + q, m.unite) : "";
+  }
+  iN.addEventListener("input", function(){ var n = Number(lireNombre(iN.value)) || 0; if (n > 0 && Number(m.prix) > 0) iP.value = Math.round(n * m.prix * 100) / 100; maj(); });
+  iP.addEventListener("input", maj); maj();
+  dialogueChamps({titre:"J'ai acheté « " + m.nom + " »", contenu: box, champs:[], bouton:"Noter l'achat",
+    verifier:function(){ return Number(lireNombre(iN.value)) > 0 ? "" : "Indique combien tu as acheté."; }
+  }, function(){
+    var n = Number(lireNombre(iN.value)) || 0, p = Number(lireNombre(iP.value)) || 0;
+    mouvementMatiere(m, "entree", n * (Number(m.contenance) || 1), p > 0 ? p : null, "Achat");
+    m.prixIndicatif = false;
+    sauverTout(); render();
+    toast("Achat noté : " + qte(n * (Number(m.contenance) || 1), m.unite) + " de " + m.nom);
+  });
+}
+
+/* ═════ VENDRE ═════
+   Une vente en un geste : quoi, combien, comment c'est payé. Une pièce en
+   stock de cette création passe en « Vendue » ; s'il n'y en a pas, une pièce
+   terminée et vendue est créée (les matières sortent du stock). */
+var MOYENS_PAIEMENT = [["especes","Espèces"],["carte","Carte"],["virement","Virement"],["paypal","PayPal"],["cheque","Chèque"],["autre","Autre"]];
+function libelleMoyen(k){ for (var i = 0; i < MOYENS_PAIEMENT.length; i++) if (MOYENS_PAIEMENT[i][0] === k) return MOYENS_PAIEMENT[i][1]; return k || "—"; }
+function optionsMoyens(sel){ return MOYENS_PAIEMENT.map(function(m){ return '<option value="'+m[0]+'"'+(m[0] === sel ? ' selected' : '')+'>'+m[1]+'</option>'; }).join(""); }
+function pieceEnStockDe(cid){
+  var l = piecesDe(cid).filter(function(p){ return p.prod === "termine" && !horsStock(p) && p.com !== "commande"; });
+  l.sort(function(a, b){ return (a.termineLe || a.cree || 0) - (b.termineLe || b.cree || 0); });
+  return l[0] || null;
+}
+/* Enregistre une vente : renvoie la pièce vendue. */
+function vendrePiece(cid, prix, moyen, extra){
+  extra = extra || {};
+  var cr = creation(cid); if (!cr) return null;
+  var p = pieceEnStockDe(cid);
+  if (!p){
+    ajouterPieces(cid, 1, "termine", "atelier");
+    p = piecesDe(cid).filter(function(x){ return x.prod === "termine" && x.com === "atelier"; }).sort(function(a, b){ return b.cree - a.cree; })[0];
+  }
+  if (!p) return null;
+  p.prix = Number(prix) || 0;
+  p.paiement = moyen || "";
+  if (extra.canal) p.canal = extra.canal;
+  if (extra.client) p.client = extra.client;
+  majCom(p, "vendu", p.prix);
+  if (extra.le) p.venduLe = extra.le;
+  p.maj = Date.now();
+  sauverTout();
+  return p;
+}
+function dialogueVente(cid, opts){
+  opts = opts || {};
+  var actives = creationsActives();
+  if (!actives.length){ toast("Crée d'abord une fiche création"); return; }
+  var c0 = creation(cid) || actives[0];
+  var box = el('<div><div class="grid2">'+
+    '<label class="f"><span>Quoi</span><select id="vt-cid"></select></label>'+
+    '<label class="f"><span>Prix payé (€)</span><input id="vt-prix" type="number" min="0" step="0.5" inputmode="decimal"></label>'+
+    '<label class="f"><span>Payé comment</span><select id="vt-moyen">'+optionsMoyens(opts.moyen || "especes")+'</select></label>'+
+    '<label class="f"><span>Où</span><select id="vt-canal"></select></label>'+
+    '<label class="f"><span>Quand</span><input id="vt-date" type="date" value="'+aujourdhuiISO()+'"></label>'+
+    '<label class="f"><span>À qui (facultatif)</span><input id="vt-client" type="text" maxlength="80" placeholder="Prénom, pseudo…"></label>'+
+    '</div><p class="hint" id="vt-stock" style="margin:8px 0 0"></p></div>');
+  var sel = box.querySelector("#vt-cid"), inPrix = box.querySelector("#vt-prix"), selCanal = box.querySelector("#vt-canal"), aide = box.querySelector("#vt-stock");
+  actives.forEach(function(c){ sel.appendChild(el('<option value="'+esc(c.id)+'"'+(c.id === c0.id ? ' selected' : '')+'>'+esc(c.nom)+'</option>')); });
+  state.canaux.forEach(function(cn){ selCanal.appendChild(el('<option value="'+esc(cn.id)+'">'+esc(cn.nom)+'</option>')); });
+  function maj(){
+    var c = creation(sel.value); if (!c) return;
+    inPrix.value = Number(c.prix) || "";
+    selCanal.value = opts.canal || c.canal || "direct";
+    var n = enStock(c.id);
+    aide.textContent = n > 0 ? n + (n > 1 ? " pièces prêtes" : " pièce prête") + " en stock : la plus ancienne sera vendue." : "Aucune pièce en stock : une pièce terminée et vendue sera créée, et ses matières sortiront du stock.";
+  }
+  sel.addEventListener("change", maj); maj();
+  dialogueChamps({titre: opts.titre || "Vendre", contenu: box, bouton:"C'est vendu", champs:[],
+    verifier:function(){ if (!(Number(lireNombre(inPrix.value)) >= 0) || inPrix.value === "") return "Indique le prix payé."; return ""; }
+  }, function(){
+    var p = vendrePiece(sel.value, Number(lireNombre(inPrix.value)), box.querySelector("#vt-moyen").value, {
+      canal: selCanal.value, client: box.querySelector("#vt-client").value.trim(), le: dateVersTs(box.querySelector("#vt-date").value) || Date.now()});
+    if (!p){ toast("La vente n'a pas pu être enregistrée."); return; }
+    var cr = creation(sel.value);
+    toast("Vendu : " + cr.nom + " · " + eur(p.prix) + " · " + libelleMoyen(p.paiement), {libelle:"Annuler", fn:function(){ majCom(p, "atelier"); sauverTout(); render(); toast("Vente annulée : la pièce est de retour en stock."); }});
+    if (opts.apres) opts.apres(p); else render();
+  });
+}
+
+/* ═════ JOUR DE MARCHÉ ═════
+   Un écran pour le stand : les créations avec leur stock, une touche par
+   vente, le total de la journée par moyen de paiement, les frais du stand,
+   et la caisse du soir. Les ventes sont des pièces vendues comme les autres
+   (canal « Marché / salon »). */
+function marcheDuJour(date){
+  state.marches = state.marches || [];
+  for (var i = 0; i < state.marches.length; i++) if (state.marches[i].date === date) return state.marches[i];
+  var m = {id:"mk_" + uid(), date:date, lieu:"", frais:0, note:""};
+  state.marches.push(m);
+  return m;
+}
+function ventesDuJour(date){
+  var d0 = dateVersTs(date), d1 = d0 + 86400000;
+  return (state.pieces||[]).filter(function(p){ return p.com === "vendu" && p.venduLe >= d0 && p.venduLe < d1 && (p.canal === "marche" || p.marche === date); })
+    .sort(function(a, b){ return b.venduLe - a.venduLe; });
+}
+function renderMarche(main){
+  var date = view.marcheDate || aujourdhuiISO();
+  var m = marcheDuJour(date);
+  var ventes = ventesDuJour(date);
+  var total = 0, parMoyen = {};
+  ventes.forEach(function(p){ var v = Number(p.prix)||0; total += v; parMoyen[p.paiement || "autre"] = (parMoyen[p.paiement || "autre"] || 0) + v; });
+  var hd = enTete("Jour de marché", "Une touche par vente. Le soir, la caisse se fait toute seule.");
+  var dateIn = el('<label class="f" style="margin:0"><span class="sr-only">Date du marché</span><input type="date" id="mk-date" value="'+esc(date)+'"></label>');
+  dateIn.querySelector("input").addEventListener("change", function(e){ view.marcheDate = e.target.value || aujourdhuiISO(); render(); });
+  hd.querySelector(".ph-act").appendChild(dateIn);
+  main.appendChild(hd);
+
+  var tiles = el('<div class="tiles"></div>');
+  tiles.appendChild(el('<div class="tile"><div class="k">Vendu aujourd\'hui</div><div class="v">'+esc(eur(total))+'</div><div class="s">'+esc(pluriel(ventes.length, "vente"))+'</div></div>'));
+  tiles.appendChild(el('<div class="tile"><div class="k">Espèces</div><div class="v">'+esc(eur(parMoyen.especes || 0))+'</div><div class="s">à compter dans la caisse</div></div>'));
+  tiles.appendChild(el('<div class="tile"><div class="k">Carte et autres</div><div class="v">'+esc(eur(total - (parMoyen.especes || 0)))+'</div><div class="s">'+esc(Object.keys(parMoyen).filter(function(k){ return k !== "especes"; }).map(function(k){ return libelleMoyen(k) + " " + eur(parMoyen[k]); }).join(" · ") || "—")+'</div></div>'));
+  tiles.appendChild(el('<div class="tile"><div class="k">Après les frais du stand</div><div class="v '+(total - (Number(m.frais)||0) >= 0 ? "good" : "bad")+'">'+esc(eur(total - (Number(m.frais)||0)))+'</div><div class="s">'+esc(eur(Number(m.frais)||0))+' de frais</div></div>'));
+  main.appendChild(tiles);
+
+  /* le stand : une ligne par création, une touche par vente */
+  var cS = el('<div class="card" style="margin-bottom:16px"><header><h2>Ton stand</h2><p>Touche « Vendu » au moment où tu encaisses. Le prix est celui de ta fiche, tu peux le changer.</p></header><div class="body"></div></div>');
+  var body = cS.querySelector(".body");
+  var moyen = view.marcheMoyen || "especes";
+  var bm = el('<div class="filters" style="margin:0 0 12px" role="radiogroup" aria-label="Payé comment"></div>');
+  MOYENS_PAIEMENT.forEach(function(mp){
+    var b = el('<button type="button" class="fchip" role="radio" aria-checked="'+(mp[0] === moyen ? "true" : "false")+'" aria-pressed="'+(mp[0] === moyen ? "true" : "false")+'">'+esc(mp[1])+'</button>');
+    b.addEventListener("click", function(){ view.marcheMoyen = mp[0]; render(); });
+    bm.appendChild(b);
+  });
+  body.appendChild(el('<p class="hint" style="margin:0 0 6px">Payé comment ?</p>'));
+  body.appendChild(bm);
+  var actives = creationsActives();
+  if (!actives.length) body.appendChild(el('<p class="hint">Aucune création : crée d\'abord tes fiches.</p>'));
+  var liste = el('<div class="stand"></div>');
+  actives.forEach(function(c){
+    var n = enStock(c.id), vendus = ventes.filter(function(p){ return p.cid === c.id; }).length;
+    var row = el('<div class="stand-ligne">'+vignette(c, 40)+'<div class="stand-nom"><b>'+esc(c.nom)+'</b><span class="hint">'+(n > 0 ? esc(pluriel(n, "pièce")) + " en stock" : "pas de stock : la vente créera la pièce")+(vendus ? ' · '+vendus+' vendue'+(vendus > 1 ? 's' : '')+' aujourd\'hui' : '')+'</span></div>'+
+      '<label class="f stand-prix"><span class="sr-only">Prix</span><input type="number" min="0" step="0.5" inputmode="decimal" value="'+esc(Number(c.prix) || "")+'" aria-label="Prix de '+esc(c.nom)+'"></label></div>');
+    var bV = bouton("Vendu", function(){
+      var prix = Number(lireNombre(row.querySelector("input").value)) || 0;
+      var p = vendrePiece(c.id, prix, view.marcheMoyen || "especes", {canal:"marche", le: date === aujourdhuiISO() ? Date.now() : dateVersTs(date) + 43200000});
+      if (p){ p.marche = date; sauverTout(); }
+      render();
+      toast("Vendu : " + c.nom + " · " + eur(prix) + " · " + libelleMoyen(view.marcheMoyen || "especes"));
+    }, true);
+    bV.classList.add("stand-btn");
+    row.appendChild(bV);
+    liste.appendChild(row);
+  });
+  body.appendChild(liste);
+  main.appendChild(cS);
+
+  /* les ventes du jour, avec annulation */
+  var cV = el('<div class="card" style="margin-bottom:16px"><header><h2>Les ventes du jour</h2></header><div class="body"></div></div>');
+  var bv = cV.querySelector(".body");
+  if (!ventes.length) bv.appendChild(el('<p class="hint">Rien encore.</p>'));
+  else {
+    var ul = el('<div class="ventes-jour"></div>');
+    ventes.forEach(function(p){
+      var c = creation(p.cid);
+      var li = el('<div class="vente-ligne"><span class="num">'+esc(new Date(p.venduLe).toLocaleTimeString("fr-FR", {hour:"2-digit", minute:"2-digit"}))+'</span><span>'+esc(c ? c.nom : "?")+'</span><span class="hint">'+esc(libelleMoyen(p.paiement))+'</span><b class="num">'+esc(eur(Number(p.prix)||0))+'</b></div>');
+      var bx = el('<button type="button" class="btn sm" aria-label="Annuler cette vente">Annuler</button>');
+      bx.addEventListener("click", function(){ majCom(p, "atelier"); p.marche = null; sauverTout(); render(); toast("Vente annulée : la pièce est de retour en stock."); });
+      li.appendChild(bx);
+      ul.appendChild(li);
+    });
+    bv.appendChild(ul);
+  }
+  main.appendChild(cV);
+
+  /* frais du stand et caisse du soir */
+  var cF = el('<div class="card" style="margin-bottom:16px"><header><h2>Caisse du soir</h2><p>Les frais du stand (emplacement, terminal, essence) se retirent de la journée.</p></header><div class="body">'+
+    '<div class="grid2"><label class="f"><span>Lieu</span><input id="mk-lieu" type="text" maxlength="80" value="'+esc(m.lieu||"")+'" placeholder="Marché de Noël, place du village…"></label>'+
+    '<label class="f"><span>Frais du stand (€)</span><input id="mk-frais" type="number" min="0" step="0.5" inputmode="decimal" value="'+esc(m.frais||0)+'"></label></div>'+
+    '<p style="margin:12px 0 0"><b>'+esc(eur(total))+'</b> vendus'+(Object.keys(parMoyen).length ? ' (' + esc(Object.keys(parMoyen).map(function(k){ return libelleMoyen(k) + " " + eur(parMoyen[k]); }).join(", ")) + ')' : '')+
+    ' − '+esc(eur(Number(m.frais)||0))+' de frais = <b>'+esc(eur(total - (Number(m.frais)||0)))+'</b> pour la journée.</p></div></div>');
+  cF.addEventListener("input", function(e){
+    if (e.target.id === "mk-lieu") m.lieu = e.target.value;
+    if (e.target.id === "mk-frais") m.frais = Math.max(0, Number(lireNombre(e.target.value)) || 0);
+    sauver();
+  });
+  cF.addEventListener("change", function(e){ if (e.target.id === "mk-frais") render(); });
+  main.appendChild(cF);
+}
 function dialogueAjoutPieces(cid){
   var actives = creationsActives();
   if (!actives.length){ toast("Crée d'abord une fiche création"); return; }
@@ -3179,8 +3663,8 @@ function dialogueAjoutPieces(cid){
     '<label class="f"><span>Nombre de pièces</span><input id="ap-n" type="number" min="1" step="1" value="1" inputmode="numeric"></label>'+
     '<label class="f"><span>État au départ</span><select id="ap-prod"></select></label>'+
     (state.reglages.profil !== "passion" ? '<label class="f"><span>Destination</span><select id="ap-com"></select></label>'+
-      '<label class="f"><span>Cliente (facultatif)</span><input id="ap-client" type="text" maxlength="80" placeholder="Prénom, pseudo Instagram…"></label>' : '')+
-    '</div><p class="hint" style="margin:10px 0 0">Pour une pièce commandée : état « À faire », destination « Commande client ». La commande elle-même se gère dans l\'onglet Commandes.</p>');
+      '<label class="f"><span>Commandé par (facultatif)</span><input id="ap-client" type="text" maxlength="80" placeholder="Prénom, pseudo Instagram…"></label>' : '')+
+    '</div><p class="hint" style="margin:10px 0 0">Pour une pièce commandée : état « À faire », destination « Sur commande ». La commande elle-même se gère dans l\'onglet Commandes.</p>');
   var selC = box.querySelector("#ap-cid");
   actives.forEach(function(c){ var o = document.createElement("option"); o.value = c.id; o.textContent = c.nom; selC.appendChild(o); });
   if (cid) selC.value = cid;
@@ -3346,7 +3830,9 @@ function renderFiche(main){
         '<label class="f"><span>Partir d\'un modèle du catalogue</span><select id="f-modele"></select></label>'+
       '</div>'+
       '<p class="hint">Le modèle pré-remplit les matières et les temps avec des ordres de grandeur. Corrige-les avec tes vrais chiffres : c\'est ce qui rend le calcul juste.</p>'+
-      '<label class="f" style="margin-top:12px;max-width:520px"><span>Mon patron</span><select id="f-patron"></select></label>'+
+      '<div class="patron-ligne"><label class="f"><span>Mon patron</span><select id="f-patron"></select></label>'+
+      '<button type="button" class="btn" id="f-patron-charger">Charger un patron (PDF, photos)</button>'+
+      '<input type="file" id="f-patron-fichier" accept="application/pdf,.pdf,image/*" multiple style="display:none" aria-label="Choisir le fichier du patron"></div>'+
       '<p class="hint" id="f-patron-aide"></p>'+
     '</div></div>'
   );
@@ -3410,10 +3896,12 @@ function renderFiche(main){
         "Ton prix est donc calculé sur un temps trop court : tu te paies moins que ce que la fiche affiche.";
     } else {
       verdict.innerHTML = "Tu vas <b>"+Math.abs(pct2)+" % plus vite</b> que prévu. "+
-        "Ta fiche est trop prudente : ton gain horaire réel est meilleur que prévu.";
+        (pct2 <= -50
+          ? "C'est énorme : vérifie que le chronomètre couvre toute la fabrication (préparation, assemblage, finition) et qu'il n'a pas été arrêté trop tôt, avant de changer ta fiche."
+          : "Ta fiche est trop prudente : ton gain de l'heure réel est meilleur que prévu.");
     }
     if (Math.abs(pct2) > 8){
-      var bMaj = bouton("Utiliser le temps réel dans ma fiche", function(){
+      function appliquerTempsReel(){
         POSTES.forEach(function(x){
           if (bt.postesMesures.indexOf(x.k) < 0) return;   /* postes non mesurés : on garde ton estimation */
           var v = Math.round(bt.moyPoste[x.k]);
@@ -3424,6 +3912,20 @@ function renderFiche(main){
         peindre();
         marquerModifie();
         toast("Temps mis à jour. Pense à enregistrer la fiche.");
+      }
+      var bMaj = bouton("Utiliser le temps réel dans ma fiche", function(){
+        /* Un temps très court face à l'estimation vient presque toujours d'un
+           chronomètre arrêté trop tôt (ou d'un essai) : il ferait grimper le
+           gain de l'heure à des chiffres faux. On demande avant de l'écrire. */
+        if (pct2 <= -50){
+          confirmer({titre: "Ce temps semble très court",
+            texte: "Ta fiche prévoit " + dureeTexte(bt.estime) + " et le chronomètre en a compté " + dureeTexte(bt.moyenne) + ". " +
+                   "Si tu as arrêté le chronomètre avant la fin de la pièce (ou si c'était un essai), ne remplace pas ta fiche : ton gain de l'heure deviendrait irréaliste. " +
+                   "Tu peux remplacer quand même si c'est vraiment le temps qu'il te faut.",
+            bouton: "Remplacer quand même", annuler: "Garder ma fiche"}, appliquerTempsReel);
+          return;
+        }
+        appliquerTempsReel();
       }, true);
       bMaj.style.marginTop = "12px";
       cReel.querySelector(".body").appendChild(bMaj);
@@ -3489,7 +3991,7 @@ function renderFiche(main){
   var cVente = el(
     '<div class="card"><header><h2>Comment tu la vends</h2></header><div class="body">'+
       '<div class="grid2">'+
-        '<label class="f"><span>Canal de vente</span><select id="f-canal"></select></label>'+
+        '<label class="f"><span>Où tu la vends</span><select id="f-canal"></select></label>'+
         '<label class="f"><span>Frais d\'expédition à ta charge (€)</span><input id="f-expe" type="number" min="0" step="0.1"></label>'+
       '</div>'+
       '<p class="hint" id="f-canal-note"></p>'+
@@ -3505,7 +4007,7 @@ function renderFiche(main){
     '<p>Les matières s\'achètent par conditionnements entiers. L\'argent qui sort aujourd\'hui n\'est pas le coût de la pièce.</p></header>'+
     '<div class="body">'+
       '<div class="grid2" style="align-items:end">'+
-        '<label class="f"><span>Nombre d\'exemplaires à fabriquer</span><input id="f-n" type="number" min="1" step="1" value="1"></label>'+
+        '<label class="f"><span>Nombre de pièces à fabriquer</span><input id="f-n" type="number" min="1" step="1" value="1"></label>'+
         '<label class="f"><span>Déduire ce que tu as déjà en stock</span><select id="f-stockopt"><option value="1">Oui, tenir compte de mon stock</option><option value="0">Non, tout acheter</option></select></label>'+
       '</div>'+
       '<div class="tablewrap" style="margin-top:14px"><table id="f-achat" style="min-width:600px"><thead><tr>'+
@@ -3528,7 +4030,7 @@ function renderFiche(main){
           '<label class="f"><span>Nombre de pièces</span><input id="p-n" type="number" min="1" step="1" value="1"></label>'+
           '<label class="f"><span>État au départ</span><select id="p-prod"></select></label>'+
           '<label class="f"><span>Destination</span><select id="p-com"></select></label>'+
-          '<label class="f"><span>Cliente (si commande)</span><input id="p-client" type="text" placeholder="Prénom, pseudo Instagram…"></label>'+
+          '<label class="f"><span>Commandé par (si commande)</span><input id="p-client" type="text" placeholder="Prénom, pseudo Instagram…"></label>'+
           '<label class="f"><span>Stock de sécurité (pièces)</span><input id="p-seuil" type="number" min="0" step="1" value="'+(Number(d.seuilFini)||0)+'"></label>'+
           '<div><button type="button" class="btn primary" id="p-add">Ajouter au suivi</button></div>'+
         '</div>'+
@@ -3628,10 +4130,26 @@ function renderFiche(main){
         '<p class="hint" id="r-plancher"></p>'+
         '<p class="hint" id="r-leviers"></p>'+
       '</div>'+
-      '<div class="marges" id="r-marges" style="padding:14px 18px;border-top:1px solid var(--rule);font-size:13.5px"></div>'+
+      '<details class="marges-d" style="border-top:1px solid var(--rule)"><summary style="cursor:pointer;padding:12px 18px;font-weight:600;font-size:13.5px">Pour aller plus loin : tes marges</summary>'+
+      '<div class="marges" id="r-marges" style="padding:0 18px 14px;font-size:13.5px"></div></details>'+
     '</div>'
   );
   right.appendChild(res);
+  /* Mode « pour le plaisir » : pas de prix de vente, pas de cotisations, pas
+     de marge. La fiche dit ce que la pièce coûte en matières et combien de
+     temps elle prend ; le temps n'est pas converti en euros. */
+  var loisir = state.reglages.profil === "passion";
+  if (loisir){
+    cVente.remove();   /* le nœud reste en mémoire : les références restent valables */
+    res.querySelector("#r-lead").textContent = "Cette pièce te coûte";
+    res.querySelector("#r-gain").nextElementSibling.textContent = "de matières";
+    res.querySelector("#r-chip").parentNode.remove();
+    ["r-prix","r-frais","r-cotis","r-fixe"].forEach(function(id){ var dd = res.querySelector("#"+id); dd.previousElementSibling.remove(); dd.remove(); });
+    res.querySelector("#r-reste").previousElementSibling.textContent = "Matières et emballage";
+    res.querySelector("#r-duree").previousElementSibling.textContent = "Temps de travail";
+    res.querySelector("#r-obj").parentNode.remove();
+    res.querySelector("#r-marges").parentNode.remove();
+  }
   right.appendChild(el('<p class="hint">'+(creation(d.id)
     ? 'Une fois enregistrée, ta fiche est dans ton compte et sur tous tes appareils.'
     : 'Pas encore enregistrée : touche « Ajouter à mes créations » pour la garder. En attendant, ta saisie est gardée sur cet appareil.')+'</p>'));
@@ -3750,7 +4268,8 @@ function renderFiche(main){
      même patron (le même bonnet en deux coloris). */
   var selPatron = cId.querySelector("#f-patron");
   var aidePatron = cId.querySelector("#f-patron-aide");
-  (function(){
+  function remplirSelPatron(){
+    selPatron.innerHTML = "";
     var o0 = document.createElement("option");
     o0.value = ""; o0.textContent = "Aucun patron"; selPatron.appendChild(o0);
     patrons().forEach(function(pp){
@@ -3760,7 +4279,7 @@ function renderFiche(main){
       selPatron.appendChild(o);
     });
     var oN = document.createElement("option");
-    oN.value = "__nouveau"; oN.textContent = "+ Ajouter un nouveau patron…";
+    oN.value = "__nouveau"; oN.textContent = "+ Ajouter un patron (fichier ou texte)…";
     selPatron.appendChild(oN);
     if (bibliothequePartagee){
       var oB = document.createElement("option");
@@ -3772,7 +4291,25 @@ function renderFiche(main){
       ? "Le patron s'affichera dans cette fiche, avec son compteur de rangs."
       : "Tu n'as pas encore de patron à toi. Choisis « Ajouter un nouveau patron » pour en créer un : il sera relié à cette fiche.") +
       (bibliothequePartagee ? " Un patron de la bibliothèque partagée est d'abord copié dans tes patrons (privés), puis relié." : "");
-  })();
+  }
+  remplirSelPatron();
+  /* Ajouter un patron sans quitter la fiche : fenêtre « choisir, vérifier,
+     valider », puis le patron est relié à cette fiche. */
+  function ajouterPatronFiche(fichiers){
+    dialoguePatronAjout({fichiers: fichiers, titre: "Ajouter un patron à « " + (d.nom || "cette création") + " »",
+      texte: "Il sera rangé dans « Mes patrons » et relié à cette fiche.", bouton: "Ajouter et relier à la fiche",
+      siAjoute: function(np){
+        d.patron = np.id; remplirSelPatron(); peindrePatronFiche();
+        toast("Patron « " + np.titre + " » ajouté et relié. Enregistre la fiche pour garder ce lien.");
+      }});
+    selPatron.value = (d.patron && patronPerso(d.patron)) ? d.patron : "";
+  }
+  var inFicPatron = cId.querySelector("#f-patron-fichier");
+  cId.querySelector("#f-patron-charger").addEventListener("click", function(){ inFicPatron.click(); });
+  inFicPatron.addEventListener("change", function(){
+    var fs = [].slice.call(inFicPatron.files || []); inFicPatron.value = "";
+    if (fs.length) ajouterPatronFiche(fs);
+  });
   selPatron.addEventListener("change", function(){
     /* Un patron de la bibliothèque partagée est d'abord COPIÉ dans « Mes
        patrons » (privés), puis relié à la fiche : la fiche ne dépend pas d'un
@@ -3783,11 +4320,7 @@ function renderFiche(main){
       return;
     }
     if (selPatron.value === "__nouveau"){
-      var np = nouveauPatron();
-      d.patron = np.id;
-      view.patronVu = np.id;
-      toast("Nouveau patron relié à cette fiche. N'oublie pas d'enregistrer la fiche.");
-      aller("patrons", {garderVue:true});
+      ajouterPatronFiche(null);
       return;
     }
     d.patron = selPatron.value || null;
@@ -3952,6 +4485,21 @@ function renderFiche(main){
 
     var st = verdictCalcul(r);
     var bfT = document.getElementById("bf-t"), bfG = document.getElementById("bf-g");
+    if (loisir){
+      var matL = cts(r.consommable + r.perte + r.emballage);
+      if (bfT && bfG){ bfT.textContent = eur(matL) + " de matières"; bfG.textContent = dureeTexte(r.minutes); bfG.style.color = ""; }
+      var gL = res.querySelector("#r-gain"); gL.textContent = eur(matL); gL.style.color = "";
+      res.querySelector("#r-after").textContent = r.minutes > 0 ? "et " + dureeTexte(r.minutes) + " de travail, sans compter ton temps en euros." : "";
+      res.querySelector("#r-vrai").hidden = true;
+      res.querySelector("#r-mat").textContent   = eur(r.consommable);
+      res.querySelector("#r-perte").textContent = eur(r.perte);
+      res.querySelector("#r-emb").textContent   = eur(r.emballage);
+      res.querySelector("#r-reste").textContent = eur(matL); res.querySelector("#r-reste").style.color = "";
+      res.querySelector("#r-duree").textContent = dureeTexte(r.minutes);
+      var levL = res.querySelector("#r-leviers"); if (levL) levL.hidden = true;
+      peindreAchat();
+      return;
+    }
     if (bfT && bfG){
       bfT.textContent = r.prix > 0 ? "À " + eur(r.prix) + " : " + st.t : "Indique ton prix de vente";
       bfG.textContent = r.prix > 0 && r.heures > 0 ? eur(r.gainHoraire) + " / h" : "—";
@@ -3986,7 +4534,7 @@ function renderFiche(main){
     var obj = Number(state.reglages.tauxHoraire)||0;
     if (!r.impossible){
       res.querySelector("#r-obj").innerHTML =
-        "Pour te payer <b>" + esc(eur(obj)) + "</b> de l'heure, il faudrait la vendre <b>" + esc(eur(r.prixObjectif)) + "</b>.";
+        "<b>Prix conseillé : " + esc(eur(r.prixObjectif)) + "</b>. C'est le prix qui te paie <b>" + esc(eur(obj)) + "</b> de l'heure, ton objectif.";
       res.querySelector("#r-plancher").textContent =
         "En dessous de " + eur(r.prixPlancher) + ", tu paies pour travailler : le prix ne couvre même pas les matières et les frais.";
     } else {
@@ -4041,7 +4589,7 @@ function peindreMarges(z, r){
     (coef ? '<dt>Coefficient sur les matières</dt><dd>× ' + esc(nb(Math.round(coef * 10) / 10)) + '</dd>'+
       '<dd class="expl">ton prix divisé par le coût des matières' +
         (3 * r.matieres < r.prixObjectif - 0.005 ? '. La règle « matières × 3 » donnerait ' + esc(eur(3 * r.matieres)) + ', soit ' +
-          esc(eur(r.prixObjectif - 3 * r.matieres)) + ' de moins que ton prix juste : elle oublie ton temps.' : '') + '</dd>' : '')+
+          esc(eur(r.prixObjectif - 3 * r.matieres)) + ' de moins que ton prix conseillé : elle oublie ton temps.' : '') + '</dd>' : '')+
     (fixes > 0 && contrib > 0 ? '<dt>Pour payer tes frais fixes</dt><dd>' + esc(pluriel(Math.ceil(fixes / contrib - 1e-9), "pièce", "pièces")) + ' / mois</dd>'+
       '<dd class="expl">à ce prix, pour couvrir ' + esc(eur(fixes)) + ' de frais fixes par mois (avant de te payer)</dd>' : '')+
     '</dl>';
@@ -4056,7 +4604,7 @@ function renderStock(main){
   var seg = el('<div class="seg" style="margin-bottom:20px;flex-wrap:wrap">'+
     '<button type="button" data-s="catalogue">Catalogue des matières</button>'+
     '<button type="button" data-s="matieres">Mes matières</button>'+
-    '<button type="button" data-s="stock">Stock et mouvements</button>'+
+    '<button type="button" data-s="stock">Historique du stock</button>'+
     '<button type="button" data-s="fournisseurs">Fournisseurs et prix</button></div>');
   seg.querySelectorAll("button").forEach(function(b){
     b.setAttribute("aria-pressed", view.sub === b.getAttribute("data-s") ? "true" : "false");
@@ -4159,7 +4707,7 @@ function renderFournisseurs(main){
   /* --- la comparaison --- */
   var cC = el('<div class="card"><header><h2>Comparer les prix</h2>'+
     '<p>Tape le prix d\'un lot chez chaque fournisseur. Les lots n\'ont pas toujours la même taille : la comparaison se fait au gramme (ou au mètre, à la pièce). '+
-    'Le moins cher est en vert. Un achat noté dans « Stock et mouvements » met le prix à jour tout seul.</p></header>'+
+    'Le moins cher est en vert. Un achat noté dans « Historique du stock » met le prix à jour tout seul.</p></header>'+
     '<div class="body"><div class="grid2" style="margin-bottom:12px">'+
       '<label class="f"><span>Catégorie</span><select id="fc-cat"><option value="">Toutes</option></select></label>'+
       '<label class="f"><span>Matières affichées</span><select id="fc-quoi"><option value="utiles">Celles de mes créations ou de mon stock</option><option value="toutes">Toutes</option><option value="prix">Celles qui ont au moins un prix noté</option></select></label>'+
@@ -4597,7 +5145,7 @@ function renderMesMatieres(main){
       '<p style="margin:0"><b>Tu n\'as pas tes factures sous la main ?</b> '+
       'Nous avons relevé le '+esc(PRIX_MARCHE_DATE)+' le prix réel en boutique de '+
       PRIX_MARCHE.length+' matières parmi les plus utilisées. En un clic, elles sont mises à jour, '+
-      'avec le nom du vendeur et la date du relevé.</p>'+
+      'avec le nom de la boutique et la date du relevé.</p>'+
       '<p class="hint">Ce ne sont pas tes prix d\'achat : ils resteront signalés comme prix relevés en boutique. '+
       'Ils restent plus fiables qu\'une estimation.</p>'+
       '<div class="et-act" style="margin-top:12px"></div></div></div>');
@@ -4619,7 +5167,9 @@ function renderMesMatieres(main){
       '<input type="search" id="mf-q" placeholder="coton, ouate, yeux…" value="'+esc(view.mfQ||"")+'"></label>'+
     '<label class="f" style="flex:1;min-width:150px"><span>Catégorie</span><select id="mf-cat"></select></label>'+
     '<label class="f" style="flex:1;min-width:150px"><span>Va avec mon crochet</span><select id="mf-cro"></select></label>'+
-    '</div>');
+    '<div class="mf-tri"></div></div>');
+  filtres.querySelector(".mf-tri").appendChild(barreTri({cle:"mat", defaut:"nom", quand:function(){ render(); }, options:[
+    ["nom","Nom"],["prix","Prix payé"],["cout","Coût unitaire"],["contenance","Contenance"]]}));
   var fCat = filtres.querySelector("#mf-cat");
   fCat.appendChild(el('<option value="">Toutes</option>'));
   CATS.forEach(function(c){
@@ -4669,14 +5219,19 @@ function renderMesMatieres(main){
   var t = el('<table><thead><tr><th style="min-width:170px">Matière</th><th style="width:105px">Prix payé</th>'+
     '<th style="width:95px">Contenance</th><th style="width:95px">Unité</th>'+
     '<th style="width:125px">Crochet</th>'+
-    '<th class="n" style="width:150px">Coût unitaire</th><th style="width:44px"><span class="sr-only">Actions</span></th></tr></thead><tbody></tbody></table>');
+    '<th class="n" style="width:150px">Coût unitaire</th><th style="width:150px">En stock</th><th style="width:44px"><span class="sr-only">Actions</span></th></tr></thead><tbody></tbody></table>');
   var tb = t.querySelector("tbody");
   var nVisibles = 0;
   CATS.forEach(function(cat){
-    var items = state.matieres.filter(function(m){ return m.cat === cat.id && visible(m); });
+    var items = trierListe(state.matieres.filter(function(m){ return m.cat === cat.id && visible(m); }), etatTri("mat", "nom"), {
+      nom: function(m){ return m.nom; },
+      prix: function(m){ return Number(m.prix) || 0; },
+      cout: function(m){ return m.contenance > 0 ? m.prix / m.contenance : null; },
+      contenance: function(m){ return Number(m.contenance) || 0; }
+    });
     if (!items.length) return;
     nVisibles += items.length;
-    tb.appendChild(el('<tr class="catrow"><td colspan="7">'+esc(cat.nom)+'</td></tr>'));
+    tb.appendChild(el('<tr class="catrow"><td colspan="8">'+esc(cat.nom)+'</td></tr>'));
     items.forEach(function(m){
       var cellCrochet = m.cat === "fil"
         ? '<select data-role="crochet" aria-label="Taille de crochet">'+
@@ -4704,6 +5259,8 @@ function renderMesMatieres(main){
             (m.prixSource
                ? '<div style="margin-top:3px"><span class="chip">prix '+esc(m.prixSource.src)+' · '+esc(m.prixSource.date)+'</span></div>'
                : m.prixIndicatif ? '<div style="margin-top:3px"><span class="hypo">INDICATIF</span></div>' : '')+'</td>'+
+          '<td data-l="En stock"><div class="cel"><span class="num'+((Number(m.stock)||0) < 0 ? ' bad' : '')+'">'+esc(qte(Number(m.stock)||0, m.unite))+'</span>'+
+            '<button type="button" class="lien-mini" data-role="achat">J\'ai acheté</button></div></td>'+
           '<td><button type="button" class="btn ghost" data-role="del" aria-label="Supprimer la matière '+esc(m.nom)+'">✕</button></td>'+
         '</tr>'
       ));
@@ -4764,10 +5321,19 @@ function renderMesMatieres(main){
     sauverTout();
     toast(v ? "Crochet " + nb(v) + " mm enregistré" : "Taille de crochet effacée");
   });
+  attacherVerif(tb, [
+    {sel:'[data-role="nom"]', type:"texte", requis:true, min:2, max:80, msgRequis:"Une matière a besoin d'un nom."},
+    {sel:'[data-role="prix"]', type:"prix", requis:true, max:100000},
+    {sel:'[data-role="contenance"]', type:"nombre", requis:true, strict:true, max:1000000},
+    {sel:'[data-role="unite"]', type:"texte", requis:true, max:12, msgRequis:"Indique l'unité."}
+  ]);
   tb.addEventListener("input", function(e){
     var tr = e.target.closest("tr[data-mid]"); if (!tr) return;
     var m = matiere(tr.getAttribute("data-mid")); if (!m) return;
     var role = e.target.getAttribute("data-role");
+    /* un prix illisible (« abc ») ou vide n'écrase pas le prix gardé */
+    if (role === "prix" && (e.target.validity.badInput || String(e.target.value).trim() === "")) return;
+    if (role === "nom" && String(e.target.value).trim().length < 2) return;
     if (role === "nom") m.nom = e.target.value;
     if (role === "prix"){ m.prix = Math.max(0, Number(e.target.value)||0); m.prixIndicatif = false;
                           m.prixSource = null; m.maj = Date.now(); }
@@ -4790,6 +5356,11 @@ function renderMesMatieres(main){
      part, on dit OÙ, et on laisse décider. Refuser sans expliquer, c'est la
      version de l'outil qui décide à la place de l'artisane. */
   tb.addEventListener("click", function(e){
+    if (e.target.getAttribute("data-role") === "achat"){
+      var mA = matiere(e.target.closest("tr[data-mid]").getAttribute("data-mid"));
+      if (mA) dialogueAchatMatiere(mA);
+      return;
+    }
     if (e.target.getAttribute("data-role") !== "del") return;
     var bouton2 = e.target;
     var mid = bouton2.closest("tr[data-mid]").getAttribute("data-mid");
@@ -4854,13 +5425,23 @@ function renderMesMatieres(main){
   add.appendChild(el('<p class="hint" style="margin:10px 0 0">Le <b>numéro de bain</b> est le lot de teinture. '+
     'Deux pelotes du même coloris mais de bains différents ne donnent pas tout à fait la même nuance : '+
     'le noter évite la démarcation en plein milieu d\'un ouvrage.</p>'));
+  var verifAdd = attacherVerif(add, [
+    {sel:"#nm-nom", type:"texte", requis:true, min:2, max:80, msgRequis:"Indique le nom de la matière."},
+    {sel:"#nm-prix", type:"prix", requis:true, max:100000},
+    {sel:"#nm-cont", type:"nombre", requis:true, strict:true, max:1000000},
+    {sel:"#nm-unite", type:"texte", requis:true, max:12, msgRequis:"Indique l'unité (g, m, pièce…)."},
+    {sel:"#nm-met", type:"nombre", min:0, max:100000},
+    {sel:"#nm-comp", type:"texte", max:120},
+    {sel:"#nm-bain", type:"texte", max:80}
+  ]);
   var barAdd = el('<div class="savebar" style="margin-top:14px"></div>');
   var bAdd = el('<button type="button" class="btn primary">Ajouter cette matière</button>');
   bAdd.addEventListener("click", function(){
+    var errsAdd = verifAdd.valider();
+    if (errsAdd.length){ toast(errsAdd[0].lib + " : " + errsAdd[0].msg); try{ errsAdd[0].champ.focus(); }catch(e){} return; }
     var nom = add.querySelector("#nm-nom").value.trim();
-    if (!nom){ toast("Indique le nom de la matière"); return; }
-    var prix = Math.max(0, Number(add.querySelector("#nm-prix").value)||0);
-    var cont = Math.max(0.01, Number(add.querySelector("#nm-cont").value)||1);
+    var prix = Math.max(0, Number(lireNombre(add.querySelector("#nm-prix").value))||0);
+    var cont = Math.max(0.01, Number(lireNombre(add.querySelector("#nm-cont").value))||1);
     var cro  = Number(selCro.value)||null;
     state.matieres.push({id:uid(), nom:nom, cat:selCat.value, prix:prix, contenance:cont,
       unite:add.querySelector("#nm-unite").value.trim()||"unité", stock:0, seuil:0, pmp:prix/cont, mouv:[],
@@ -4895,7 +5476,7 @@ var SECTIONS_REG = [
    intro:"Ce qui décide de tous les calculs : si tu vends, sous quel statut, et ce que tu veux gagner de l'heure."},
   {id:"charges",     nom:"Mes charges",
    aide:"Cotisations, frais fixes, coût des matières",
-   intro:"Ce qui part avant que tu sois payée : cotisations, frais fixes, et la façon de compter le prix de tes matières."},
+   intro:"Ce qui part avant que ton travail soit payé : cotisations, frais fixes, et la façon de compter le prix de tes matières."},
   {id:"canaux",      nom:"Canaux de vente",   siVend:true,
    aide:"Frais des plateformes et des marchés",
    intro:"Ce que chaque plateforme, boutique ou marché prélève sur une vente."},
@@ -4955,6 +5536,12 @@ function renderReglages(main){
         esc(st.quand) + '</p></div>'
       : '<p class="hint" style="margin:0">Tant que tu n\'as pas choisi, l\'outil garde le taux ' +
         'saisi dans « Mes charges » comme une hypothèse.</p>';
+    if (!selSt.value || selSt.value === "non_declare"){
+      d.appendChild(el('<div class="banner" style="margin-top:10px"><p><b>Faut-il déclarer mes ventes ?</b> Vendre de temps en temps une pièce faite pour soi n\'est pas une activité. '+
+        'Vendre régulièrement ce que tu fabriques (sur un marché, sur Instagram, sur une plateforme) en est une : elle se déclare en micro-entreprise, gratuitement et en ligne sur le '+
+        '<a href="https://formalites.entreprises.gouv.fr" target="_blank" rel="noopener">guichet unique des entreprises</a>. L\'<a href="https://www.autoentrepreneur.urssaf.fr" target="_blank" rel="noopener">URSSAF</a> explique le statut et répond aux questions. '+
+        'Une fois déclarée, choisis ton statut ci-dessus : les cotisations entreront dans tes prix.</p></div>'));
+    }
   }
   selSt.addEventListener("change", function(){
     var st = statutCotis(selSt.value);
@@ -4988,7 +5575,7 @@ function renderReglages(main){
 
   var c2 = el('<div class="card" style="margin-bottom:16px"><header><h2>Tes charges</h2></header><div class="body">'+
     '<div class="grid2">'+
-      '<label class="f"><span>Cotisations sur le chiffre d\'affaires (%)</span><input type="number" min="0" max="50" step="0.1" data-r="cotisations" value="'+r.cotisations+'"></label>'+
+      '<label class="f"><span>Cotisations URSSAF (% de tes ventes)</span><input type="number" min="0" max="50" step="0.1" data-r="cotisations" value="'+r.cotisations+'"></label>'+
       '<label class="f"><span>Frais fixes par mois (€)</span><input type="number" min="0" step="1" data-r="fraisFixes" value="'+r.fraisFixes+'"></label>'+
       '<label class="f"><span>Pièces vendues par mois</span><input type="number" min="1" step="1" data-r="piecesParMois" value="'+r.piecesParMois+'"></label>'+
       '<label class="f"><span>Heures de crochet par jour</span><input type="number" min="0" max="16" step="0.5" data-r="heuresParJour" value="'+(r.heuresParJour === undefined || r.heuresParJour === null ? 3 : r.heuresParJour)+'"></label>'+
@@ -5008,14 +5595,14 @@ function renderReglages(main){
   var cFact = el('<div class="card" style="margin-bottom:16px"><header><h2>Tes mentions de facture</h2>'+
     '<p>Ce qui s\'imprimera en haut de chaque facture que tu émets.</p></header><div class="body">'+
     '<div class="grid2">'+
-      '<label class="f"><span>Nom ou raison sociale</span><input type="text" data-r2f="raisonSociale" placeholder="Marie Dupont, ou Crochet & Cie"></label>'+
-      '<label class="f"><span>SIRET</span><input type="text" data-r2f="siret" placeholder="14 chiffres, une fois immatriculée"></label>'+
+      '<label class="f"><span>Ton nom, ou le nom de ton entreprise</span><input type="text" data-r2f="raisonSociale" placeholder="Camille Dupont, ou Crochet & Cie"></label>'+
+      '<label class="f"><span>SIRET (ton numéro d\'entreprise, 14 chiffres)</span><input type="text" data-r2f="siret" placeholder="14 chiffres, après l\'immatriculation"></label>'+
       '<label class="f"><span>Adresse</span><input type="text" data-r2f="adresse" placeholder="12 rue des Lilas, 69000 Lyon"></label>'+
       '<label class="f"><span>Contact sur la facture</span><input type="text" data-r2f="contact" placeholder="e-mail ou téléphone"></label>'+
     '</div>'+
     '<p class="hint" style="margin-top:10px">Tant que ces champs sont vides, tes factures portent '+
     'des mentions à compléter et ne sont pas valables. Une facture doit permettre d\'identifier '+
-    'le vendeur. La mention « TVA non applicable, article 293 B du CGI » est ajoutée automatiquement '+
+    'qui vend. La mention « TVA non applicable, article 293 B du CGI » est ajoutée automatiquement '+
     'tant que tu es en franchise de TVA.</p>'+
     '</div></div>');
   ["raisonSociale","siret","adresse","contact"].forEach(function(k){
@@ -5054,32 +5641,14 @@ function renderReglages(main){
       }
     });
   });
-  var cM = el('<div class="card" style="margin-bottom:16px"><header><h2>Suivi pièce par pièce</h2>'+
-    '<p>Pour celles qui ont du stock, des séries ou des marchés.</p></header><div class="body">'+
-    '<label class="f" style="max-width:520px"><span>Suivi des pièces</span><select data-r2="mode">'+
-    '<option value="simple">Non — je calcule mes prix et je gère mes matières</option>'+
-    '<option value="complet">Oui — suivre chaque pièce, de la fabrication à la vente</option></select></label>'+
-    '<p class="hint">Le <b>suivi des pièces</b>, dans « Mes créations », suit chaque pièce une par une : à faire, en cours, terminée, en vente, vendue. '+
-    'Les <b>Indicateurs</b> restent toujours disponibles : ils se remplissent avec tes commandes, tes achats de matières '+
-    'et, si tu l\'actives, le suivi des pièces. Rien n\'est perdu en le désactivant : les pièces restent, seul leur suivi se masque.</p></div></div>');
-  cM.querySelector("[data-r2]").value = r.mode || "simple";
-  cM.querySelector("[data-r2]").addEventListener("change", function(e){
-    state.reglages.mode = e.target.value; sauverTout(); render();
-    toast(e.target.value === "complet" ? "Suivi des pièces activé dans « Mes créations »" : "Suivi des pièces masqué");
-  });
 
-  var c0 = el('<div class="card" style="margin-bottom:16px"><header><h2>Comment tu utilises l\'outil</h2></header><div class="body">'+
-    '<label class="f" style="max-width:460px"><span>Je crée…</span><select data-r2="profil">'+
-    '<option value="vend">pour vendre (micro-entreprise, marchés, boutique en ligne)</option>'+
-    '<option value="passion">pour le plaisir, sans vendre ou presque</option></select></label>'+
-    '<p class="hint">En mode « pour le plaisir », « Mes créations » et les Indicateurs masquent tout ce qui touche à la vente '+
-    'et ne gardent que le suivi de tes pièces, tes stocks et ce que ton loisir te coûte. Les rubriques '+
-    '« Canaux de vente » et « Facturation » disparaissent aussi des réglages.</p></div></div>');
-  c0.querySelector("[data-r2]").value = r.profil || "vend";
-  c0.querySelector("[data-r2]").addEventListener("change", function(e){
-    state.reglages.profil = e.target.value; sauverTout(); render();
-    toast(e.target.value === "passion" ? "Mode « pour le plaisir » activé" : "Mode vente activé");
-  });
+  var pA = profilActuel();
+  var c0 = el('<div class="card" style="margin-bottom:16px"><header><h2>Ton profil</h2>'+
+    '<p>Il règle les onglets, les calculs et le vocabulaire. '+(pA && pA.id === "loisir"
+      ? 'En mode « pour le plaisir », rien ne parle de prix ni de cotisations : l\'outil compte tes matières et ton temps.'
+      : 'Tout ce qui touche à la vente est affiché : prix conseillé, commandes, factures.')+'</p></header><div class="body">'+
+    '<p style="margin:0 0 10px"><b>'+esc(pA ? pA.nom : "Pas encore choisi")+'</b>'+(pA ? '<br><span class="hint">'+esc(pA.d)+'</span>' : '')+'</p></div></div>');
+  c0.querySelector(".body").appendChild(bouton("Changer de profil", function(){ dialogueProfil({}); }));
 
   /* --- plateformes --- */
   var cP = el('<div class="card" style="margin-bottom:16px"><header><h2>Frais des plateformes et canaux de vente</h2>'+
@@ -5120,7 +5689,7 @@ function renderReglages(main){
   cP.querySelector(".body").appendChild(wp);
   cP.querySelector(".body").appendChild(el('<p class="hint" style="margin-top:12px;max-width:80ch">'+
     '<b>Publicité externe</b> : certaines plateformes prélèvent un pourcentage sur les ventes issues de leurs publicités. '+
-    '« Part des ventes » est le pourcentage de tes ventes qui en proviennent. Mets 0 si tu n\'es pas concernée. '+
+    '« Part des ventes » est le pourcentage de tes ventes qui en proviennent. Mets 0 si ça ne te concerne pas. '+
     '<b>TVA</b> : la plateforme facture généralement la TVA sur ses propres frais, ce qui les alourdit d\'autant. '+
     'Le « prélèvement total » est ce qui part réellement du prix affiché. Les valeurs proposées sont des ordres de grandeur : vérifie-les sur le site de chaque plateforme.</p>'));
   var bReset = el('<button type="button" class="btn sm" style="margin-top:12px">Rétablir les valeurs par défaut</button>');
@@ -5340,7 +5909,7 @@ function renderReglages(main){
     }
     cont.appendChild(el('<div class="reg-tete"><h2>'+esc(sc.nom)+'</h2><p>'+esc(sc.intro)+'</p></div>'));
     var cartes = {
-      activite:    [c0, cStat, c1, cM],
+      activite:    [c0, cStat, c1],
       charges:     [c2, c3, cConf],
       canaux:      [cP],
       facturation: [cFact],
@@ -5378,7 +5947,7 @@ var COM = [
   {k:"atelier",  nom:"En atelier",      vendable:true},
   {k:"envente",  nom:"En vente",        vendable:true},
   {k:"reserve",  nom:"Réservée",        vendable:true},
-  {k:"commande", nom:"Commande client", vendable:true},
+  {k:"commande", nom:"Sur commande", vendable:true},
   {k:"vendu",    nom:"Vendue",          vendable:false},
   {k:"offert",   nom:"Offerte / gardée",vendable:false},
   {k:"jete",     nom:"Ratée / jetée",   vendable:false}
@@ -5396,6 +5965,13 @@ function creation(cid){
    chaque enregistrement, donc jamais périmé. */
 var indexPieces = null;
 function oublierIndex(){ indexPieces = null; }
+/* Le numéro d'une pièce est celui de son ordre de création (N° 1 = la
+   première fabriquée) : il ne change plus quand on la modifie. */
+function numeroPiece(p){
+  var l = piecesDe(p.cid).slice();
+  l.sort(function(a, b){ var d = (a.cree || 0) - (b.cree || 0); return d ? d : state.pieces.indexOf(a) - state.pieces.indexOf(b); });
+  return l.indexOf(p) + 1;
+}
 function piecesDe(cid){
   if (!indexPieces || indexPieces.src !== state.pieces || indexPieces.n !== state.pieces.length){
     var m = {};
@@ -5446,12 +6022,22 @@ function consommerPour(cr, n){
   });
   return manques;
 }
+/* Un seul message, même quand plusieurs pièces sortent d'un coup : les
+   matières manquantes s'accumulent et le message existant est mis à jour au
+   lieu de s'empiler. La liste se vide dès qu'on ouvre le stock ou qu'on
+   ferme le message. */
+var manquesEnAttente = [];
 function prevenirManques(manques){
   if (!manques || !manques.length) return;
-  toast(manques.length === 1
-    ? "Attention : le stock de « " + manques[0] + " » passe en négatif. Note ton achat dans Matières."
-    : "Attention : " + manques.length + " matières passent en stock négatif. Note tes achats dans Matières.",
-    {important:true, libelle:"Voir le stock", fn:function(){ view.sub = "stock"; aller("stock"); }});
+  manques.forEach(function(n){ if (manquesEnAttente.indexOf(n) < 0) manquesEnAttente.push(n); });
+  var pile = document.getElementById("toasts");
+  if (pile){ [].forEach.call(pile.querySelectorAll(".toast"), function(t){ if (t.__manques) t.remove(); }); }
+  var n = manquesEnAttente.length;
+  var t = toast(n === 1
+    ? "Le stock de « " + manquesEnAttente[0] + " » passe en négatif : note ton achat dans Matières."
+    : n + " matières passent en stock négatif (" + manquesEnAttente.slice(0, 2).join(", ") + (n > 2 ? "…" : "") + ") : note tes achats dans Matières.",
+    {important:true, libelle:"Voir le stock", fn:function(){ manquesEnAttente = []; view.sub = "stock"; aller("stock"); }});
+  if (t) t.__manques = true;
 }
 function majProd(p, k){
   var cr = creation(p.cid);
@@ -5551,26 +6137,43 @@ function coutPiece(p, cr){
   var ret = retouchesDe(p);
   var taux = Number(state.reglages.tauxHoraire) || 0;
   var fg = p.com === "vendu" && p.fige ? p.fige : null;
-  var prix = p.com === "vendu" && Number(p.prix) > 0 ? Number(p.prix) : (Number(p.prix) > 0 ? Number(p.prix) : r.prix);
+  var prix = Number(p.prix) > 0 ? Number(p.prix) : r.prix;
   var jete = p.com === "jete";
+  /* Les frais proportionnels au prix (commission, cotisations) se calculent
+     sur le prix de CETTE pièce, pas sur celui de la fiche. */
+  var crP = clone(cr); crP.prix = prix; if (p.canal) crP.canal = p.canal;
+  var rp = calculer(crP);
   /* Matières : réelles si pesées, sinon celles de la fiche ; plus ce que les
      retouches ont consommé. Une pièce ratée vaut ce qu'on a jeté. */
   var matieres = jete ? cts(Number(p.perteFigee) || 0) : cts(er.matReel + ret.mat);
   var emballage = jete ? 0 : r.emballage;
   var transport = jete ? 0 : cts(Math.max(0, Number(cr.expedition) || 0));
+  if (fg){
+    /* Vente figée : le transport du jour de la vente, s'il a été gardé. */
+    var ffv = Number(fg.fraisFixesVente) || 0;
+    transport = fg.transport !== undefined ? cts(fg.transport) : cts(Math.min(transport, ffv));
+  }
   var minutes = er.mesure ? er.minReel : er.minEst;   /* les minutes de retouche sont déjà dans le chronomètre */
   var heures = (minutes + (r.minutesIndirectes || 0)) / 60;
   var mainOeuvre = cts(heures * taux);
-  var frVente = jete ? 0 : (fg ? cts(fg.fraisVente) : cts(r.fraisVar + (r.fraisFixesVente - transport)));
-  var cotis = jete ? 0 : (fg ? cts(fg.cotisations) : r.cotisations);
-  var fixe = jete ? 0 : (fg ? cts(fg.fixe) : r.fixePiece);
-  var total = cts(matieres + mainOeuvre + fixe + frVente + cotis);
+  /* frais de vente = commission, paiement, frais fixes du canal, SANS le
+     transport (affiché à part mais compté dans le total). */
+  var frVente = jete ? 0 : (fg ? cts(Math.max(0, fg.fraisVente - transport)) : cts(rp.fraisVar + Math.max(0, rp.fraisFixesVente - transport)));
+  var cotis = jete ? 0 : (fg ? cts(fg.cotisations) : rp.cotisations);
+  var fixe = jete ? 0 : (fg ? cts(fg.fixe) : rp.fixePiece);
+  var total = cts(matieres + mainOeuvre + fixe + transport + frVente + cotis);
   var vendu = p.com === "vendu";
   var prixVente = jete ? 0 : prix;
-  var horsMO = cts(matieres + fixe + frVente + cotis);
+  var horsMO = cts(matieres + fixe + transport + frVente + cotis);
   var reste = cts(prixVente - horsMO);
   var gain = cts(prixVente - total);
   var gainH = heures > 0 ? reste / heures : 0;
+  /* Prix cible de CETTE pièce : le prix pour lequel son gain serait nul, donc
+     qui paie son temps réel au taux visé. Au-dessus, le gain est positif. */
+  var pctV = fg && fg.pctVente !== undefined ? fg.pctVente : rp.pctVente;
+  var tCot = fg && fg.tauxCotis !== undefined ? fg.tauxCotis : rp.tauxCotis;
+  var denomP = 1 - (Number(pctV) || 0) - (Number(tCot) || 0);
+  var ciblePiece = jete || denomP <= 0 ? 0 : ceilCts((matieres + fixe + transport + (fg ? Math.max(0, (Number(fg.fraisFixesVente) || 0) - transport) : Math.max(0, rp.fraisFixesVente - transport)) + mainOeuvre) / denomP);
   var etat;
   if (jete) etat = {k:"bad", t:"Perte"};
   else if (!(prixVente > 0)) etat = {k:"neutre", t:"Prix à fixer"};
@@ -5578,7 +6181,8 @@ function coutPiece(p, cr){
   else etat = statut(gainH);
   return {matieres: matieres, matieresHorsEmb: cts(matieres - emballage), emballage: emballage, transport: transport,
           mainOeuvre: mainOeuvre, heures: heures, minutes: minutes, tempsMesure: er.mesure, pesee: er.pesee,
-          fraisVente: frVente, cotisations: cotis, fixe: fixe, total: total, prix: prixVente, prixCible: r.prixObjectif,
+          provisoire: pieceProvisoire(p), minutesChrono: minutesMesurees(p),
+          fraisVente: frVente, cotisations: cotis, fixe: fixe, total: total, prix: prixVente, prixCible: ciblePiece, prixCibleFiche: r.prixObjectif,
           reste: reste, gain: gain, gainH: gainH, etat: etat, retouche: ret, vendu: vendu, jete: jete, taux: taux,
           matEst: r.matieres, minEst: r.minutes};
 }
@@ -5587,17 +6191,18 @@ function dialogueCoutPiece(p){
   var k = coutPiece(p, cr);
   function l(lib, v, aide){ return '<div class="row"><span>'+esc(lib)+(aide ? '<small>'+esc(aide)+'</small>' : '')+'</span><span>'+esc(eur(v))+'</span></div>'; }
   var h = '<div class="cout-piece">'+
+    (k.provisoire ? '<p class="hint" style="margin:0 0 8px">Pièce pas encore terminée : chiffres provisoires. Le temps compté est au moins celui de la fiche ; il sera remplacé par le temps chronométré quand la pièce sera terminée.</p>' : '')+
     l("Matières" + (k.pesee ? " (pesées)" : ""), k.matieresHorsEmb, k.pesee ? "" : "d'après la fiche") +
     l("Conditionnement", k.emballage, "emballage de la fiche") +
-    l("Main-d'œuvre", k.mainOeuvre, dureeLisible(k.minutes) + (k.tempsMesure ? " chronométrées" : " estimées") + " à " + eur(k.taux) + " / h") +
+    l("Main-d'œuvre", k.mainOeuvre, dureeLisible(k.minutes) + (k.provisoire ? " (temps de la fiche" + (k.minutesChrono > 0 ? ", " + dureeLisible(k.minutesChrono) + " déjà chronométrées" : "") + ")" : k.tempsMesure ? " chronométrées" : " estimées") + " à " + eur(k.taux) + " / h") +
     (k.retouche.n ? l("dont retouches", cts(k.retouche.mat + (k.retouche.min / 60) * k.taux), pluriel(k.retouche.n, "retouche") + " : " + dureeLisible(k.retouche.min) + (k.retouche.mat ? " et " + eur(k.retouche.mat) + " de matières" : "")) : "") +
     l("Transport", k.transport, "expédition de la fiche") +
     l("Frais de vente", k.fraisVente, "commission, paiement, frais fixes du canal") +
     l("Cotisations", k.cotisations, "") +
     (k.fixe ? l("Part des frais fixes", k.fixe, "") : "") +
-    '<div class="row tot"><span>Coût de revient complet</span><span>'+esc(eur(k.total))+'</span></div>'+
+    '<div class="row tot"><span>Coût de revient complet' + (k.provisoire ? ' (provisoire)' : '') + '</span><span>'+esc(eur(k.total))+'</span></div>'+
     '<div class="row"><span>Prix de vente' + (k.vendu ? " (vendue)" : "") + '</span><span>'+esc(k.prix > 0 ? eur(k.prix) : "—")+'</span></div>'+
-    '<div class="row"><span>Prix cible de la fiche</span><span>'+esc(k.prixCible > 0 ? eur(k.prixCible) : "—")+'</span></div>'+
+    '<div class="row"><span>Prix conseillé d\'après son temps réel<small>le prix qui paierait son temps réel à ton objectif</small></span><span>'+esc(k.prixCible > 0 ? eur(k.prixCible) : "—")+'</span></div>'+
     '<div class="row tot"><span>Gain en plus de ton salaire</span><span class="'+k.etat.k+'">'+esc(eur(k.gain))+'</span></div>'+
     '<div class="row"><span>Ce que cette pièce te paie de l\'heure</span><span class="'+k.etat.k+'">'+esc(k.heures > 0 && k.prix > 0 ? eur(k.gainH) + " / h" : "—")+'</span></div>'+
     '</div>';
@@ -5678,7 +6283,8 @@ function dialogueReel(p){
     synth.innerHTML =
       '<div class="c"><span>Matières</span><b>'+esc(eur(er.matEst))+' → '+esc(eur(er.matReel))+'</b></div>'+
       '<div class="c"><span>Temps</span><b>'+esc(dureeTexte(er.minEst))+' → '+esc(dureeTexte(er.minReel))+'</b>'+
-        (er.mesure ? '' : '<span class="hint" style="font-size:11px">pas chronométrée</span>')+'</div>'+
+        (!er.mesure ? '<span class="hint" style="font-size:11px">pas chronométrée</span>'
+          : pieceProvisoire(copie) ? '<span class="hint" style="font-size:11px">pas terminée : au moins le temps de la fiche ('+esc(dureeTexte(minutesMesurees(copie)))+' chronométrées)</span>' : '')+'</div>'+
       '<div class="c"><span>Coût complet (ton temps payé)</span><b style="color:'+(ecartC > 0.005 ? 'var(--bad)' : ecartC < -0.005 ? 'var(--good)' : 'inherit')+'">'+
         esc(eur(er.coutEst))+' → '+esc(eur(er.coutReel))+'</b></div>'+
       '<div class="c"><span>Gain de l\'heure à '+esc(eur(er.prix))+'</span><b>'+esc(eur(er.gainEst))+' → '+esc(eur(er.gainReel))+'</b></div>';
@@ -5704,6 +6310,7 @@ function figerVente(cr, prix, canalId, minutesMesurees){
   var heures = (minutes + (r.minutesIndirectes || 0)) / 60;
   return {le: Date.now(), prix: r.prix, canal: copie.canal, matieres: r.matieres, fraisVente: cts(r.fraisVar + r.fraisFixesVente),
           fixe: r.fixePiece, cotisations: r.cotisations, reste: r.reste, minutes: minutes, tempsMesure: minutesMesurees > 0,
+          transport: cts(Math.max(0, Number(cr.expedition) || 0)),
           gainHoraire: heures > 0 ? r.reste / heures : 0, tauxHoraire: Number(state.reglages.tauxHoraire)||0,
           heures: heures, fraisFixesVente: r.fraisFixesVente, pctVente: r.pctVente, tauxCotis: r.tauxCotis};
 }
@@ -5986,6 +6593,95 @@ function origineCA(ca){
   if (ca.commandes > 0) parts.push(esc(eur(ca.commandes)) + " encaissés sur tes commandes (arrhes, acomptes, soldes)");
   return parts.length ? parts.join(" et ") : "aucun encaissement pour l'instant cette année";
 }
+/* ═════ REGISTRES ═════
+   Le livre des recettes et le registre des achats, tenus obligatoirement en
+   micro-entreprise. Ils se déduisent de ce qui est déjà saisi : ventes,
+   règlements de commandes, achats de matières, frais de stand. */
+function anneeDe(t){ return t ? new Date(t).getFullYear() : null; }
+function livreRecettes(annee){
+  var l = [];
+  (state.pieces||[]).forEach(function(p){
+    if (p.com !== "vendu" || !p.venduLe || commandeLiee(p)) return;
+    if (anneeDe(p.venduLe) !== annee) return;
+    var cr = creation(p.cid);
+    l.push({t:p.venduLe, ref:"Vente" + (p.marche ? " (marché)" : ""), qui:p.client || "Vente au comptant", nature:"Vente de " + (cr ? cr.nom : "pièce") + " (marchandise)", montant:Number(p.prix)||0, moyen:libelleMoyen(p.paiement)});
+  });
+  commandes().forEach(function(c){
+    var qui = (c.client && c.client.nom) || "Sans nom", ref = c.factureNum ? "Facture " + c.factureNum : "Commande " + (c.num || "");
+    var v = c.versement || {}, mv = Number(v.montant)||0, tv = dateVersTs(v.date) || dateVersTs(c.dateCommande);
+    if (mv > 0 && anneeDe(tv) === annee) l.push({t:tv, ref:ref, qui:qui, nature:(v.type === "arrhes" ? "Arrhes" : "Acompte") + " sur commande", montant:mv, moyen:"—"});
+    (c.paiements||[]).forEach(function(pp){
+      var m = Number(pp.montant)||0; if (!m) return;
+      var tp = dateVersTs(pp.date) || pp.saisiLe || null;
+      if (anneeDe(tp) !== annee) return;
+      l.push({t:tp, ref:ref, qui:qui, nature: m < 0 ? "Remboursement" : "Règlement de commande (marchandise)", montant:m, moyen: m < 0 ? (pp.moyen === "remboursement" ? "—" : libelleMoyen(pp.moyen)) : libelleMoyen(pp.moyen)});
+    });
+  });
+  l.sort(function(a, b){ return a.t - b.t; });
+  return l;
+}
+function registreAchats(annee){
+  var l = [];
+  (state.matieres||[]).forEach(function(m){
+    (m.mouv||[]).forEach(function(mv){
+      if (mv.t !== "entree" || mv.annule || !(Number(mv.p) > 0) || mv.est) return;
+      if (anneeDe(mv.d) !== annee) return;
+      var f = mv.f ? fournisseur(mv.f) : null;
+      l.push({t:mv.d, ref:mv.n || "Achat", qui:f ? f.nom : "—", nature:"Matière : " + m.nom + " (" + qte(mv.q, m.unite) + ")", montant:Number(mv.p)||0, moyen:"—"});
+    });
+  });
+  (state.marches||[]).forEach(function(mk){
+    var f = Number(mk.frais)||0; if (!(f > 0)) return;
+    var t = dateVersTs(mk.date); if (anneeDe(t) !== annee) return;
+    l.push({t:t, ref:"Marché", qui:mk.lieu || "—", nature:"Frais de stand", montant:f, moyen:"—"});
+  });
+  l.sort(function(a, b){ return a.t - b.t; });
+  return l;
+}
+function exporterRegistre(nom, titre, lignes){
+  var rows = [["Date","Référence","Client ou fournisseur","Nature","Montant (€)","Mode de règlement"]];
+  lignes.forEach(function(x){ rows.push([new Date(x.t).toLocaleDateString("fr-FR"), x.ref, x.qui, x.nature, cts(x.montant).toFixed(2).replace(".", ","), x.moyen]); });
+  var cellule = function(v, i){ v = String(v); if (i !== 4 && /^[=+\-@]/.test(v)) v = "'" + v; return '"' + v.replace(/"/g, '""') + '"'; };
+  var csv = "\ufeff" + rows.map(function(r){ return r.map(cellule).join(";"); }).join("\r\n");
+  var url = URL.createObjectURL(new Blob([csv], {type:"text/csv;charset=utf-8"}));
+  var a = document.createElement("a"); a.href = url; a.download = nom + ".csv";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+}
+function imprimerRegistre(titre, annee, lignes){
+  var total = lignes.reduce(function(a, x){ return a + x.montant; }, 0);
+  var r = state.reglages;
+  var h = '<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>'+esc(titre)+' '+annee+'</title>'+
+    '<style>body{font:13px/1.4 system-ui,sans-serif;margin:24px;color:#111}h1{font-size:18px;margin:0 0 4px}p{margin:0 0 12px;color:#444}table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid #ccc;padding:6px 8px;text-align:left;vertical-align:top}th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#555}td.n,th.n{text-align:right;white-space:nowrap}tfoot td{font-weight:600}.barre{margin:16px 0}@media print{.barre{display:none}}</style></head><body>'+
+    '<h1>'+esc(titre)+' — '+annee+'</h1><p>'+esc(r.raisonSociale || "")+(r.siret ? ' · SIRET ' + esc(r.siret) : '')+' · édité le '+new Date().toLocaleDateString("fr-FR")+' avec Crochompte</p>'+
+    '<table><thead><tr><th>Date</th><th>Référence</th><th>Client ou fournisseur</th><th>Nature</th><th class="n">Montant</th><th>Règlement</th></tr></thead><tbody>'+
+    lignes.map(function(x){ return '<tr><td>'+esc(new Date(x.t).toLocaleDateString("fr-FR"))+'</td><td>'+esc(x.ref)+'</td><td>'+esc(x.qui)+'</td><td>'+esc(x.nature)+'</td><td class="n">'+esc(eur(x.montant))+'</td><td>'+esc(x.moyen)+'</td></tr>'; }).join("")+
+    '</tbody><tfoot><tr><td colspan="4">Total</td><td class="n">'+esc(eur(total))+'</td><td></td></tr></tfoot></table>'+
+    '<div class="barre"><button onclick="window.print()">Imprimer ou enregistrer en PDF</button></div></body></html>';
+  var w = window.open("", "_blank");
+  if (!w){ toast("Ton navigateur a bloqué la fenêtre : autorise les pop-up pour ce site."); return; }
+  w.document.open(); w.document.write(h); w.document.close();
+}
+function carteRegistres(){
+  var annee = view.regAnnee || new Date().getFullYear();
+  var rec = livreRecettes(annee), ach = registreAchats(annee);
+  var tR = rec.reduce(function(a, x){ return a + x.montant; }, 0), tA = ach.reduce(function(a, x){ return a + x.montant; }, 0);
+  var c = el('<div class="card" style="margin-bottom:18px"><header><h2>Tes registres</h2>'+
+    '<p>Le <b>livre des recettes</b> et le <b>registre des achats</b> sont obligatoires en micro-entreprise. Ils se remplissent tout seuls avec tes ventes, tes règlements et tes achats de matières : il n\'y a qu\'à les télécharger.</p></header>'+
+    '<div class="body"><div class="savebar" style="margin:0 0 12px;align-items:center"><label class="f" style="margin:0"><span>Année</span><select id="reg-annee"></select></label></div>'+
+    '<div class="reg-2"><div class="reg-bloc"><h3>Livre des recettes</h3><p class="hint">'+esc(pluriel(rec.length, "ligne"))+' · '+esc(eur(tR))+' encaissés en '+annee+'</p><div class="reg-act"></div></div>'+
+    '<div class="reg-bloc"><h3>Registre des achats</h3><p class="hint">'+esc(pluriel(ach.length, "ligne"))+' · '+esc(eur(tA))+' d\'achats en '+annee+' (matières au prix payé, frais de stand)</p><div class="reg-act"></div></div></div>'+
+    '<p class="hint" style="margin:12px 0 0">Les achats sans prix noté, estimés au prix de la fiche, n\'y figurent pas : note le prix de tes tickets dans Matières. À conserver 10 ans, comme tes factures.</p></div></div>');
+  var sel = c.querySelector("#reg-annee"), y0 = new Date().getFullYear();
+  for (var y = y0; y >= y0 - 5; y--) sel.appendChild(el('<option value="'+y+'"'+(y === annee ? ' selected' : '')+'>'+y+'</option>'));
+  sel.addEventListener("change", function(){ view.regAnnee = Number(sel.value); render(); });
+  var acts = c.querySelectorAll(".reg-act");
+  acts[0].appendChild(bouton("Télécharger (tableur)", function(){ exporterRegistre("crochompte-livre-recettes-" + annee, "Livre des recettes", rec); }));
+  acts[0].appendChild(bouton("Imprimer / PDF", function(){ imprimerRegistre("Livre des recettes", annee, rec); }));
+  acts[1].appendChild(bouton("Télécharger (tableur)", function(){ exporterRegistre("crochompte-registre-achats-" + annee, "Registre des achats", ach); }));
+  acts[1].appendChild(bouton("Imprimer / PDF", function(){ imprimerRegistre("Registre des achats", annee, ach); }));
+  return c;
+}
 function carteSeuils(){
   var ca = caAnnuel();
   var sl = seuilsDuStatut();
@@ -6174,7 +6870,15 @@ function renderIndicateurs(main){
   var ach = achatsMatieres();
   var pieces = state.pieces || [];
   var cmds = commandes();
-  main.appendChild(enTete("Indicateurs",
+  /* Quatre chiffres en haut ; le reste se déplie. */
+  function plier(titre, ouvert){
+    var d = el('<details class="card ind-pli" style="margin-bottom:16px"><summary style="cursor:pointer;font-weight:600;padding:14px 18px">'+esc(titre)+'</summary><div class="ind-pli-corps" style="padding:0 18px 14px"></div></details>');
+    if (ouvert) d.open = true;
+    return d;
+  }
+  var pliActivite = plier("Le détail : activité, matières, pertes", false), pliGraph = plier("Les graphiques", false), pliPieces = plier("Où en sont tes pièces", false);
+  var zA = pliActivite.querySelector(".ind-pli-corps"), zG = pliGraph.querySelector(".ind-pli-corps"), zP = pliPieces.querySelector(".ind-pli-corps");
+  main.appendChild(enTete("Mes chiffres",
     vend ? "Ce qui rentre, ce qui sort, et ce que ton travail te rapporte, calculé à partir de ce que tu enregistres."
          : "Ce que tu produis, ce que ton loisir te coûte, et l'état de tes stocks."));
 
@@ -6237,7 +6941,7 @@ function renderIndicateurs(main){
   }
 
   /* --- ton activité --- */
-  main.appendChild(el('<h2 class="ind-groupe">Ton activité</h2>'));
+  zA.appendChild(el('<h2 class="ind-groupe" style="margin-top:6px">Ton activité</h2>'));
   var t2 = el('<div class="tiles"></div>');
   if (!vend){
     t2.appendChild(tuile("Achats de matières · " + per.nom.toLowerCase(), eur(achP),
@@ -6263,7 +6967,7 @@ function renderIndicateurs(main){
   var minTot = 0;
   pieces.forEach(function(x){ minTot += minutesMesurees(x); });
   if (minTot > 0) t2.appendChild(tuile("Temps chronométré", dureeTexte(minTot), "mesuré, toutes pièces confondues", "acc-2"));
-  main.appendChild(t2);
+  zA.appendChild(t2);
 
   /* --- matières, pertes, prévu/réel --- */
   var pertesP = pertesEntre(B.debut, B.fin);
@@ -6274,7 +6978,7 @@ function renderIndicateurs(main){
     if (!(p.reel && Object.keys(p.reel).length) && !(minutesMesurees(p) > 0)) return;
     var erp = estimeReelPiece(p, crp); ecartPR += erp.coutReel - erp.coutEst; nPR++;
   });
-  main.appendChild(el('<h2 class="ind-groupe">Tes matières et tes pertes · '+esc(per.nom.toLowerCase())+'</h2>'));
+  zA.appendChild(el('<h2 class="ind-groupe">Tes matières et tes pertes · '+esc(per.nom.toLowerCase())+'</h2>'));
   var t3 = el('<div class="tiles"></div>');
   t3.appendChild(tuile("Pertes", eur(pertesP.total),
     pertesP.total > 0 ? (pertesP.pelotes ? nb(Math.round(pertesP.pelotes * 10) / 10) + " pelote" + (pertesP.pelotes >= 2 ? "s" : "") + " jetée" + (pertesP.pelotes >= 2 ? "s" : "") : "matière jetée") +
@@ -6282,28 +6986,29 @@ function renderIndicateurs(main){
     pertesP.total > 0 ? "acc-warn" : "acc-good", pertesP.total > 0 ? "warn" : ""));
   var pel = pelotesEnStock();
   t3.appendChild(tuile("Pelotes en stock", pel ? nb(Math.round(pel * 10) / 10) : "0", eur(valMat) + " de matières au prix moyen", "acc-2"));
-  if (nPR) t3.appendChild(tuile("Réel face au prévu", (ecartPR >= 0 ? "+ " : "− ") + eur(Math.abs(ecartPR)),
+  if (nPR) t3.appendChild(tuile(ecartPR > 0.005 ? "Tes pièces coûtent plus que prévu" : ecartPR < -0.005 ? "Tes pièces coûtent moins que prévu" : "Tes pièces coûtent ce que tu prévois", (ecartPR >= 0 ? "+ " : "− ") + eur(Math.abs(ecartPR)),
     "sur " + pluriel(nPR, "pièce pesée ou chronométrée", "pièces pesées ou chronométrées") + " : " + (ecartPR > 0.005 ? "tes pièces coûtent plus que prévu" : ecartPR < -0.005 ? "tes pièces coûtent moins que prévu" : "conforme à tes fiches"),
     ecartPR > 0.005 ? "acc-warn" : "acc-good", ecartPR > 0.005 ? "warn" : ""));
   if (fournisseurs().length){
     var eco12 = economiePossible(Date.now() - 365 * 864e5);
     t3.appendChild(tuile("Économie possible", eur(eco12), "sur tes achats des 12 derniers mois, au prix le plus bas de tes fournisseurs", "acc-1", eco12 > 0 ? "good" : ""));
   }
-  main.appendChild(t3);
+  zA.appendChild(t3);
+  main.appendChild(pliActivite);
   if (pertesP.lignes.length){
     var cPe = el('<details class="card" style="margin-bottom:18px"><summary>Le détail des pertes ('+pertesP.lignes.length+')</summary>'+
       '<div class="body"><div class="tablewrap"><table><thead><tr><th>Date</th><th>Quoi</th><th>Motif</th><th class="n">Quantité</th><th class="n">Valeur</th></tr></thead><tbody></tbody></table></div>'+
-      '<p class="hint" style="margin:10px 0 0">Une perte se note dans Matières › Stock et mouvements (« Perte »), ou en passant une pièce en « Ratée / jetée ». '+
+      '<p class="hint" style="margin:10px 0 0">Une perte se note dans Matières › Historique du stock (« Perte »), ou en passant une pièce en « Ratée / jetée ». '+
       'Si les ouvrages ratés reviennent souvent, ton taux de chutes et ratés des Réglages est peut-être trop bas.</p></div></details>');
     pertesP.lignes.forEach(function(x){
       cPe.querySelector("tbody").appendChild(el('<tr><td>'+esc(new Date(x.d).toLocaleDateString("fr-FR"))+'</td><td>'+esc(x.nom)+'</td>'+
         '<td>'+esc(x.motif === "piece" ? "Pièce ratée" : libMotif(x.motif))+'</td><td class="n">'+esc(qte(x.q, x.unite))+'</td><td class="n">'+esc(eur(x.v))+'</td></tr>'));
     });
-    main.appendChild(cPe);
+    zA.appendChild(cPe);
   }
 
   /* --- seuils : annuels, quelle que soit la période affichée --- */
-  if (vend){ var cS = carteSeuils(); if (cS) main.appendChild(cS); }
+  if (vend){ var cS = carteSeuils(); if (cS) main.appendChild(cS); main.appendChild(carteRegistres()); }
 
   /* --- évolution --- */
   var gran = PERIODES[2];
@@ -6334,7 +7039,7 @@ function renderIndicateurs(main){
     : '<p class="hint" style="margin:0">Rien d\'enregistré sur cette échelle de temps.</p>';
   cE.querySelector("#nE").innerHTML = (vend ? "Sur le graphique : <b>" + esc(eur(totEnc)) + "</b> encaissés, " : "Sur le graphique : ") +
     "<b>" + esc(eur(totDep)) + "</b> d'achats. Un achat de fil sert souvent plusieurs mois : ce graphique montre les mouvements d'argent, pas ton bénéfice.";
-  main.appendChild(cE);
+  zG.appendChild(cE);
 
   /* --- production --- */
   if (pieces.length){
@@ -6348,8 +7053,9 @@ function renderIndicateurs(main){
       ? barTemporel(sxP, [{nom:"Pièces terminées", champ:"v", couleur:"var(--s-1)"}],
           function(v, axe){ return axe ? String(Math.round(v)) : Math.round(v) + " pièce" + (v>1?"s":""); })
       : '<p class="hint" style="margin:0">Aucune pièce terminée sur cette échelle de temps.</p>';
-    main.appendChild(cP);
+    zG.appendChild(cP);
   }
+  main.appendChild(pliGraph);
 
   /* --- ce qui te rapporte le plus --- */
   if (vend){
@@ -6384,7 +7090,7 @@ function renderIndicateurs(main){
         '</header><div class="body" style="padding-top:14px"></div></div>');
       var wR = el('<div class="tablewrap"></div>');
       var tR = el('<table style="min-width:560px"><thead><tr><th>Création</th><th class="n">Vendues</th>'+
-        '<th class="n">Encaissé</th><th class="n">Ton heure</th><th class="n">En stock</th></tr></thead><tbody></tbody></table>');
+        '<th class="n">Reçu</th><th class="n">Gain de l\'heure</th><th class="n">En stock</th></tr></thead><tbody></tbody></table>');
       lignes.forEach(function(x){
         var stt = statut(x.gain);
         tR.querySelector("tbody").appendChild(el('<tr><td><b>'+esc(x.nom)+'</b></td><td class="n">'+x.vendues+'</td>'+
@@ -6395,7 +7101,7 @@ function renderIndicateurs(main){
       });
       wR.appendChild(tR);
       cR.querySelector(".body").appendChild(wR);
-      cR.querySelector(".body").appendChild(el('<p class="hint" style="margin:10px 0 0">« Ton heure » : ce que la création t\'a '+
+      cR.querySelector(".body").appendChild(el('<p class="hint" style="margin:10px 0 0">« Gain de l\'heure » : ce que la création t\'a '+
         'réellement payé de l\'heure, en moyenne sur ses ventes et ses commandes livrées, au prix encaissé, une fois '+
         'matières, frais et cotisations payés. Vert : au moins ton objectif de '+esc(eur(Number(r.tauxHoraire)||0))+'/h.</p>'));
       main.appendChild(cR);
@@ -6413,7 +7119,8 @@ function renderIndicateurs(main){
     cO.querySelector("#gO").innerHTML = barreRepartition(PROD.map(function(x){
       return {lib:x.nom, val:parProd[x.k], couleur:x.c};
     }));
-    main.appendChild(cO);
+    zP.appendChild(cO);
+    main.appendChild(pliPieces);
   }
 
   /* --- d'où viennent ces chiffres --- */
@@ -6422,7 +7129,7 @@ function renderIndicateurs(main){
   main.appendChild(el('<div class="ind-source"><p><b>D\'où viennent ces chiffres.</b> '+
     (vend ? origineEncaisse(nbAt, nbCmd) + ' ' : '')+
     '« Achats de matières » reprend les entrées de stock saisies avec leur prix. '+
-    (vend && nbAt && nbCmd ? 'Une pièce suivie dans « Mes créations » et faite pour une commande (« Commande client ») n\'est comptée qu\'une fois, dans la commande. ' : '')+
+    (vend && nbAt && nbCmd ? 'Une pièce suivie dans « Mes créations » et faite pour une commande (« Sur commande ») n\'est comptée qu\'une fois, dans la commande. ' : '')+
     'Les ventes passées sont figées au jour de la vente : un changement de prix ou de taux ne les modifie pas. '+
     '</p>'+
     '<p>Ce n\'est pas une comptabilité : c\'est ton tableau de bord. Il se met à jour tout seul, sur tous tes appareils.</p></div>'));
@@ -6620,6 +7327,221 @@ function bouton(libelle, action, primaire){
   var b = el('<button type="button" class="btn'+(primaire?' primary':'')+'">'+esc(libelle)+'</button>');
   b.addEventListener("click", action);
   return b;
+}
+
+/* ═════ TRIER UNE LISTE ═════
+   Toutes les listes se trient de la même façon : un critère au choix et un
+   bouton pour le sens (croissant ↑ / décroissant ↓). L'état est gardé par
+   liste (view.tris[cle]) tant que l'application reste ouverte. */
+function etatTri(cle, defaut, sensDefaut){
+  if (!view.tris) view.tris = {};
+  var t = view.tris[cle];
+  if (!t) t = view.tris[cle] = {k: defaut, sens: sensDefaut || 1};
+  return t;
+}
+/* Compare deux valeurs : nombres comme nombres, textes en français sans tenir
+   compte des accents ni des majuscules, valeurs vides toujours en dernier. */
+function comparer(a, b){
+  var va = a === undefined || a === null || a === "" || (typeof a === "number" && isNaN(a));
+  var vb = b === undefined || b === null || b === "" || (typeof b === "number" && isNaN(b));
+  if (va && vb) return 0;
+  if (va) return 2;     /* le vide passe après, quel que soit le sens */
+  if (vb) return -2;
+  if (typeof a === "number" && typeof b === "number") return a < b ? -1 : a > b ? 1 : 0;
+  return String(a).localeCompare(String(b), "fr", {sensitivity:"base", numeric:true});
+}
+/* liste triée (copie) selon l'état de tri ; defs = {critère: fonction(x) → valeur} */
+function trierListe(liste, t, defs){
+  var f = defs[t.k] || defs[Object.keys(defs)[0]];
+  return liste.slice().sort(function(a, b){
+    var c = comparer(f(a), f(b));
+    if (c === 2 || c === -2) return c > 0 ? 1 : -1;
+    return c * (t.sens < 0 ? -1 : 1);
+  });
+}
+/* Le sélecteur de critère et le bouton de sens. o = {cle, options:[[k, nom]],
+   defaut, sens (sens du départ), quand (rappel à chaque changement)} */
+function barreTri(o){
+  var t = etatTri(o.cle, o.defaut, o.sens);
+  var box = el('<div class="tri-barre" data-cle="'+esc(o.cle)+'" role="group" aria-label="Trier la liste">'+
+    '<label class="f"><span class="sr-only">Trier par</span><select class="tri-crit">'+
+      o.options.map(function(x){ return '<option value="'+esc(x[0])+'">'+esc(x[1])+'</option>'; }).join("")+
+    '</select></label>'+
+    '<button type="button" class="btn sm tri-sens"></button></div>');
+  var sel = box.querySelector("select"), bs = box.querySelector(".tri-sens");
+  sel.value = t.k;
+  if (sel.value !== t.k) { t.k = o.defaut; sel.value = t.k; }
+  function peindreSens(){
+    bs.textContent = t.sens < 0 ? "↓ Décroissant" : "↑ Croissant";
+    bs.setAttribute("aria-label", "Sens du tri : " + (t.sens < 0 ? "décroissant" : "croissant") + ". Toucher pour inverser.");
+  }
+  peindreSens();
+  sel.addEventListener("change", function(){ t.k = sel.value; if (o.quand) o.quand(t); });
+  bs.addEventListener("click", function(){ t.sens = -t.sens; peindreSens(); if (o.quand) o.quand(t); });
+  return box;
+}
+/* En-têtes de tableau cliquables : toucher le titre d'une colonne trie par
+   cette colonne, une seconde fois inverse le sens. th porte data-tri="critère". */
+function entetesTriables(thead, cle, quand){
+  var t = etatTri(cle, null);
+  [].forEach.call(thead.querySelectorAll("th[data-tri]"), function(th){
+    var k = th.getAttribute("data-tri"), nom = th.textContent;
+    var b = el('<button type="button" class="th-tri"></button>');
+    function peindre(){
+      var actif = t.k === k;
+      b.textContent = nom + (actif ? (t.sens < 0 ? " ↓" : " ↑") : "");
+      th.setAttribute("aria-sort", actif ? (t.sens < 0 ? "descending" : "ascending") : "none");
+    }
+    peindre(); th.textContent = ""; th.appendChild(b);
+    b.addEventListener("click", function(){
+      if (t.k === k) t.sens = -t.sens; else { t.k = k; t.sens = 1; }
+      [].forEach.call(thead.querySelectorAll("th[data-tri]"), function(x){
+        var bb = x.querySelector(".th-tri"), kk = x.getAttribute("data-tri"), on = t.k === kk;
+        var nomx = bb.textContent.replace(/ [↑↓]$/, "");
+        bb.textContent = nomx + (on ? (t.sens < 0 ? " ↓" : " ↑") : "");
+        x.setAttribute("aria-sort", on ? (t.sens < 0 ? "descending" : "ascending") : "none");
+      });
+      var sel = document.querySelector('.tri-barre[data-cle="'+cle+'"] select');
+      if (sel){ sel.value = t.k; var bs = document.querySelector('.tri-barre[data-cle="'+cle+'"] .tri-sens'); if (bs) bs.textContent = t.sens < 0 ? "↓ Décroissant" : "↑ Croissant"; }
+      quand(t);
+    });
+  });
+}
+
+/* ═════ SAISIES : VÉRIFIER, PUIS ENREGISTRER ═════
+   Chaque champ dit tout de suite s'il ne correspond pas à ce qu'on attend
+   (un e-mail, un nombre, une date, un SIREN…), et le bouton « Enregistrer »
+   relit tout le formulaire avant de valider. Les modifications restent
+   gardées au fur et à mesure : le bouton vérifie, confirme et envoie. */
+function cleSiren(v){   /* clé de contrôle d'un SIREN (algorithme de Luhn) */
+  var somme = 0;
+  for (var i = 0; i < 9; i++){
+    var n = Number(v.charAt(8 - i)); if (i % 2 === 1){ n *= 2; if (n > 9) n -= 9; }
+    somme += n;
+  }
+  return somme % 10 === 0;
+}
+/* Renvoie le message d'erreur pour la valeur d'un champ, ou "" si tout va bien.
+   r = {type: texte|contact|entier|nombre|prix|pourcentage|date|siren, requis, min, max, strict} */
+function messageSaisie(inp, r){
+  r = r || {};
+  var v = String(inp.value === null || inp.value === undefined ? "" : inp.value).trim();
+  if (inp.validity && inp.validity.badInput) return "Écris un nombre : des chiffres, avec une virgule si besoin.";
+  if (v === "") return r.requis ? (r.msgRequis || "Ce champ est nécessaire.") : "";
+  var t = r.type || "texte";
+  if (t === "texte"){
+    if (v.length < (r.min || 1)) return "Écris au moins " + (r.min || 1) + " caractères.";
+    if (r.max && v.length > r.max) return "Trop long : " + r.max + " caractères au plus.";
+    return "";
+  }
+  if (t === "contact"){
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v)) return "";
+    if (/^@[A-Za-z0-9._]{2,30}$/.test(v)) return "";
+    if (/^\+?\d{8,15}$/.test(v.replace(/[\s.\-()]/g, ""))) return "";
+    return "Ce contact ne ressemble ni à un e-mail (nom@site.fr), ni à un téléphone (06 12 34 56 78), ni à un pseudo Instagram (@nom).";
+  }
+  if (t === "entier" || t === "nombre" || t === "prix" || t === "pourcentage"){
+    var brut = lireNombre(v), n = Number(brut);
+    if (brut === "" || !isFinite(n)) return "Écris un nombre.";
+    if (t === "entier" && Math.floor(n) !== n) return "Écris un nombre entier, sans virgule.";
+    var mn = r.min !== undefined ? r.min : (t === "prix" || t === "pourcentage" ? 0 : null);
+    var mx = r.max !== undefined ? r.max : (t === "pourcentage" ? 100 : null);
+    if (mn !== null && n < mn) return "Le minimum est " + nb(mn) + (t === "prix" ? " €" : t === "pourcentage" ? " %" : "") + ".";
+    if (mx !== null && n > mx) return "Le maximum est " + nb(mx) + (t === "pourcentage" ? " %" : "") + ".";
+    if (r.strict && n <= 0) return "Ce nombre doit être supérieur à 0.";
+    return "";
+  }
+  if (t === "date"){
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+    if (!m) return "Choisis une date valide.";
+    var dd = new Date(+m[1], +m[2] - 1, +m[3]);
+    if (isNaN(dd.getTime()) || dd.getMonth() !== +m[2] - 1) return "Cette date n'existe pas.";
+    if (+m[1] < 2000 || +m[1] > 2100) return "L'année " + m[1] + " semble une faute de frappe.";
+    return "";
+  }
+  if (t === "siren"){
+    var s9 = v.replace(/\s/g, "");
+    if (!/^\d{9}$/.test(s9)) return "Un SIREN compte 9 chiffres.";
+    if (!cleSiren(s9)) return "Ce SIREN n'existe pas (la clé de contrôle ne correspond pas) : vérifie les chiffres.";
+    return "";
+  }
+  return "";
+}
+function libelleChamp(inp){
+  var lab = inp.closest("label"), sp = lab && lab.querySelector("span");
+  return sp ? sp.textContent.replace(/\(.*\)/, "").trim() : (inp.getAttribute("aria-label") || "Un champ");
+}
+function afficherErreurChamp(inp, msg){
+  var lab = inp.closest("label") || inp.parentNode, err = lab.querySelector(".champ-err");
+  if (msg){
+    inp.setAttribute("aria-invalid", "true");
+    if (!err){ err = document.createElement("small"); err.className = "champ-err"; err.setAttribute("role", "alert"); lab.appendChild(err); }
+    err.textContent = msg;
+    inp.__err = msg;
+  } else {
+    inp.removeAttribute("aria-invalid"); inp.__err = "";
+    if (err) err.remove();
+  }
+}
+/* Branche les règles sur un formulaire. regles = [{sel, type, requis, min, max,
+   strict, quand (fonction : la règle ne s'applique que si elle renvoie vrai)}].
+   Les champs ajoutés plus tard (lignes d'articles…) sont couverts. */
+function attacherVerif(racine, regles){
+  function regleDe(inp){
+    for (var i = 0; i < regles.length; i++) if (inp.matches && inp.matches(regles[i].sel)) return regles[i];
+    return null;
+  }
+  function actif(inp, r){ return !inp.disabled && !inp.closest("[hidden]") && (!r.quand || r.quand(inp)); }
+  function verifier(inp){
+    var r = regleDe(inp); if (!r) return "";
+    if (!actif(inp, r)){ afficherErreurChamp(inp, ""); return ""; }
+    var msg = messageSaisie(inp, r); afficherErreurChamp(inp, msg); return msg;
+  }
+  /* pendant la frappe on ne critique pas un champ encore vide ; à la sortie du champ, oui */
+  racine.addEventListener("input", function(e){
+    var r = regleDe(e.target); if (!r) return;
+    if (e.target.__err || String(e.target.value).trim() !== "") verifier(e.target);
+  });
+  racine.addEventListener("focusout", function(e){ if (regleDe(e.target)) verifier(e.target); });
+  racine.addEventListener("change", function(e){ if (regleDe(e.target)) verifier(e.target); });
+  return {
+    valider: function(){
+      var erreurs = [];
+      regles.forEach(function(r){
+        [].forEach.call(racine.querySelectorAll(r.sel), function(inp){
+          var msg = verifier(inp);
+          if (msg) erreurs.push({champ: inp, msg: msg, lib: libelleChamp(inp)});
+        });
+      });
+      /* dans l'ordre de la page */
+      erreurs.sort(function(a, b){ return (a.champ.compareDocumentPosition(b.champ) & 4) ? -1 : 1; });
+      return erreurs;
+    }
+  };
+}
+/* Le bouton « Enregistrer » d'un formulaire : vérifie tous les champs, se
+   plaint des erreurs (en amenant sur la première), sinon enregistre et le dit. */
+function barreEnregistrer(o){
+  var box = el('<div class="enreg"><button type="button" class="btn primary">'+esc(o.libelle || "Enregistrer")+'</button>'+
+    '<span class="enreg-etat" role="status" aria-live="polite">'+esc(o.aide || "Tes modifications sont gardées au fur et à mesure.")+'</span></div>');
+  var b = box.querySelector("button"), etat = box.querySelector(".enreg-etat");
+  b.addEventListener("click", function(){
+    var erreurs = o.verif.valider();
+    if (erreurs.length){
+      etat.classList.add("err");
+      etat.textContent = erreurs.length === 1 ? "1 champ à corriger : " + erreurs[0].lib + "." : erreurs.length + " champs à corriger : " + erreurs.slice(0, 3).map(function(x){ return x.lib; }).join(", ") + (erreurs.length > 3 ? "…" : ".");
+      toast(erreurs[0].lib + " : " + erreurs[0].msg);
+      try{ erreurs[0].champ.focus(); erreurs[0].champ.scrollIntoView({block:"center"}); }catch(e){}
+      return;
+    }
+    etat.classList.remove("err");
+    if (o.surOk) o.surOk();
+    sauverTout();
+    var h = new Date();
+    etat.textContent = "✓ Enregistré à " + (h.getHours() < 10 ? "0" : "") + h.getHours() + ":" + (h.getMinutes() < 10 ? "0" : "") + h.getMinutes() + ".";
+    toast(o.message || "Enregistré ✓");
+  });
+  return box;
 }
 
 /* Invitation à passer en mode complet, affichée une seule fois par page concernée. */
@@ -7544,15 +8466,15 @@ function blocPhotoModele(m, apres){
       '</span><div class="photoact"></div></div>'+
       '<div class="grid2">'+
         '<label class="f"><span>Lien vers la source</span><input type="url" data-f="sourceUrl" placeholder="https://…"></label>'+
-        '<label class="f"><span>Auteur de la photo</span><input type="text" data-f="auteur" placeholder="Nom, pseudo…"></label>'+
+        '<label class="f"><span>Crédit photo</span><input type="text" data-f="auteur" placeholder="Nom, pseudo…"></label>'+
         '<label class="f"><span>Licence de la photo</span><select data-f="licencePhoto"></select></label>'+
         '<label class="f"><span>Licence du patron</span><select data-f="licencePatron"></select></label>'+
         '<label class="f"><span>Vente des réalisations</span><select data-f="usageCommercial"></select></label>'+
         '<label class="f"><span>Vérifié le</span><input type="date" data-f="verifieLe"></label>'+
       '</div>'+
       '<p class="hint">Laisse vide ce que tu n\'as pas vérifié : mieux vaut un champ vide qu\'une information fausse. '+
-      '« Vente des réalisations » concerne le droit de vendre les objets faits d\'après ce patron. Beaucoup de '+
-      'créatrices l\'autorisent, à condition d\'être citées.</p>'+
+      '« Vente des réalisations » concerne le droit de vendre les objets faits d\'après ce patron. C\'est souvent '+
+      'autorisé, à condition de citer la personne qui a créé le patron.</p>'+
     '</div></div>');
 
   var act = c.querySelector(".photoact");
@@ -7670,7 +8592,7 @@ function arreterChrono(silencieux){
     var poste = c.poste, debut = c.debut;
     c.debut = null; sauverTout(); majBarreChrono();
     confirmer({titre:"Le chronomètre a tourné " + dureeTexte(Math.round(min)) + ".",
-      texte:"S'il est resté allumé par oubli, ce temps fausserait ton gain à l'heure. Faut-il vraiment l'ajouter ?",
+      texte:"S'il est resté allumé par oubli, ce temps fausserait ton gain de l'heure. Faut-il vraiment l'ajouter ?",
       bouton:"Oui, ajouter " + dureeTexte(Math.round(min)), annuler:"Ne pas l'ajouter"}, function(){
       ajouterTemps(p, poste, min, debut); sauverTout(); render();
       toast("Temps ajouté : " + dureeTexte(Math.round(min)));
@@ -7719,7 +8641,7 @@ function majBarreChrono(){
       '<span class="cb-pt"></span>'+
       '<div class="cb-txt"><b id="cb-nom"></b><span id="cb-poste"></span></div>'+
       '<span class="cb-t num" id="cb-t">0:00</span>'+
-      '<select id="cb-sel" aria-label="Poste de travail en cours" '+
+      '<select id="cb-sel" aria-label="Étape en cours" '+
       'style="width:auto;background:transparent;color:inherit;border-color:currentColor;padding:5px 8px;font-size:12.5px"></select>'+
       '<button type="button" class="btn sm" id="cb-stop">Arrêter</button>'+
       '</div>');
@@ -7741,7 +8663,7 @@ function majBarreChrono(){
       arreterChrono(); render();
     });
   }
-  ex.querySelector("#cb-nom").textContent = cr ? cr.nom : "Pièce";
+  ex.querySelector("#cb-nom").textContent = cr ? cr.nom + " · pièce N° " + numeroPiece(p) : "Pièce";
   var selP = ex.querySelector("#cb-sel"); if (selP) selP.value = c.poste;
   var lib = ""; POSTES.forEach(function(x){ if (x.k === c.poste) lib = x.nom; });
   ex.querySelector("#cb-poste").textContent = lib.toLowerCase();
@@ -7842,16 +8764,25 @@ function tauxHoraireReel(cr, minutes){
 }
 
 function carteChrono(cr, rafraichir){
-  var p = pieceEnCours(cr.id);
+  /* Le temps se compte PIÈCE PAR PIÈCE : on choisit la pièce sur laquelle on
+     travaille, on voit son temps à elle, jamais un total de la création. */
   var ch = chronoEnCours();
+  var pieces = view.ficheId ? piecesDe(cr.id).slice() : [];
+  pieces.sort(function(a, b){ return numeroPiece(a) - numeroPiece(b); });
+  var p = null;
+  if (ch) p = pieces.filter(function(x){ return x.id === ch.pid; })[0] || null;
+  if (!p && view.pieceChrono) p = pieces.filter(function(x){ return x.id === view.pieceChrono; })[0] || null;
+  if (!p) p = pieceEnCours(cr.id);
+  if (p) view.pieceChrono = p.id;
   var actif = !!(ch && p && ch.pid === p.id);
   var cumul = p ? minutesMesurees(p) : 0;
+  var num = p ? numeroPiece(p) : 0;
 
   var c = el('<div class="card chrono-card'+(actif?' actif':'')+'">'+
     '<div class="body">'+
       '<div class="ch-haut">'+
         '<div class="ch-info">'+
-          '<div class="ch-lab">'+(actif ? "Travail en cours" : (cumul>0 ? "Travail commencé" : "Ton temps sur cette création"))+'</div>'+
+          '<div class="ch-lab">'+(!p ? "Ton temps de travail" : actif ? "Travail en cours · pièce N° " + num : (cumul>0 ? "Temps passé · pièce N° " + num : "Pièce N° " + num + " · pas encore de temps"))+'</div>'+
           '<div class="ch-big num" id="ch-t">'+esc(actif ? dureeChrono(cumul) : dureeLisible(cumul))+'</div>'+
           '<div class="ch-sous" id="ch-sous"></div>'+
         '</div>'+
@@ -7869,14 +8800,32 @@ function carteChrono(cr, rafraichir){
     return c;
   }
 
+  /* quelle pièce ? (seulement s'il y en a plusieurs) */
+  if (pieces.length > 1){
+    var selP = el('<select id="ch-piece" aria-label="Pièce sur laquelle tu travailles" style="width:auto;min-width:160px"></select>');
+    pieces.forEach(function(x){
+      var o = document.createElement("option"); o.value = x.id;
+      var m = minutesMesurees(x);
+      o.textContent = "Pièce N° " + numeroPiece(x) + " · " + libProd(x.prod).toLowerCase() + (m > 0.01 ? " · " + dureeLisible(m) : "");
+      selP.appendChild(o);
+    });
+    selP.value = p ? p.id : "";
+    selP.addEventListener("change", function(){
+      if (chronoEnCours()){ toast("Mets d'abord le chronomètre en pause : il tourne sur la pièce N° " + numeroPiece(piece(chronoEnCours().pid)) + "."); selP.value = p.id; return; }
+      view.pieceChrono = selP.value; if (rafraichir) rafraichir();
+    });
+    act.appendChild(selP);
+  }
+
   if (actif){
     act.appendChild(bouton("⏸ Mettre en pause", function(){
       arreterChrono(); if (rafraichir) rafraichir();
     }, true));
   } else {
-    act.appendChild(bouton(cumul > 0 ? "▶ Reprendre le travail" : "▶ Démarrer le travail", function(){
-      var pp = ouvrirPieceTravail(cr.id);
+    act.appendChild(bouton(!p ? "▶ Démarrer la première pièce" : cumul > 0 ? "▶ Reprendre la pièce N° " + num : "▶ Démarrer la pièce N° " + num, function(){
+      var pp = p || ouvrirPieceTravail(cr.id);
       if (!pp){ toast("Impossible de démarrer le chronomètre. Réessaie."); return; }
+      view.pieceChrono = pp.id;
       demarrerChrono(pp.id, view.posteChrono || "crochet");
       if (rafraichir) rafraichir();
     }, true));
@@ -7894,10 +8843,20 @@ function carteChrono(cr, rafraichir){
   });
   act.appendChild(sel);
 
-  if (cumul > 0 && !actif && p){
-    act.appendChild(bouton("Pièce terminée", function(){
+  if (cumul > 0 && !actif && p && p.prod !== "termine"){
+    act.appendChild(bouton("Pièce N° " + num + " terminée", function(){
       majProd(p, "termine"); sauverTout();
-      toast("Pièce terminée : " + dureeTexte(minutesMesurees(p)) + " de travail");
+      toast("Pièce N° " + num + " terminée : " + dureeTexte(minutesMesurees(p)) + " de travail");
+      if (rafraichir) rafraichir();
+    }));
+  }
+  /* commencer une autre pièce, sans mélanger son temps avec celui-ci */
+  if (!actif && p && (p.prod === "termine" || cumul > 0)){
+    act.appendChild(bouton("+ Nouvelle pièce", function(){
+      ajouterPieces(cr.id, 1, "encours", "atelier", "");
+      var np = piecesDe(cr.id).slice().sort(function(a, b){ return numeroPiece(b) - numeroPiece(a); })[0];
+      if (np) view.pieceChrono = np.id;
+      sauverTout(); toast("Pièce N° " + (np ? numeroPiece(np) : "") + " créée : son temps commence à zéro.");
       if (rafraichir) rafraichir();
     }));
   }
@@ -7910,16 +8869,17 @@ function carteChrono(cr, rafraichir){
     /* sous 10 minutes, un taux horaire n'a aucun sens : on ne l'affiche pas */
     var th = mins >= 10 ? tauxHoraireReel(cr, mins) : null;
     if (!p){
-      sous.textContent = "Lance le chronomètre quand tu t'installes, mets en pause quand tu t'arrêtes. Le temps s'additionne d'un jour à l'autre.";
+      sous.textContent = "Lance le chronomètre quand tu t'installes, mets en pause quand tu t'arrêtes. Chaque pièce a son propre temps.";
       return;
     }
     var seances = (p.sessions||[]).length;
+    var prov = pieceProvisoire(p);
     sous.innerHTML = seances
-      ? esc(seances + (seances>1 ? " séances de travail" : " séance de travail")) +
+      ? esc(seances + (seances>1 ? " séances de travail" : " séance de travail") + " sur cette pièce") +
         (th !== null && Number(cr.prix)>0
-          ? ' · au temps <b>réellement passé</b>, à ' + esc(eur(cr.prix)) + ' cette pièce te paie <b style="color:' +
+          ? ' · au temps <b>passé jusqu\'ici</b>, à ' + esc(eur(cr.prix)) + ' cette pièce te paierait <b style="color:' +
             (th < (state.reglages.tauxHoraire||0)*0.9 ? 'var(--bad)' : 'var(--good)') + '">' +
-            esc(eur(th)) + ' / h</b>'
+            esc(eur(th)) + ' / h</b>' + (prov ? ' <span class="hint">(provisoire : la pièce n\'est pas terminée)</span>' : '')
           : "")
       : "Première séance en cours.";
   }
@@ -7931,12 +8891,20 @@ function carteChrono(cr, rafraichir){
     }, 1000);
   }
 
-  /* rappel du détail par poste */
+  /* détail par poste de CETTE pièce */
   if (p && cumul > 0.01){
     var m = mesureDe(p);
     var lignes = POSTES.filter(function(x){ return (Number(m[x.k])||0) > 0.01; })
       .map(function(x){ return '<span class="ch-poste">'+esc(x.nom)+' <b>'+esc(dureeLisible(m[x.k]))+'</b></span>'; });
     if (lignes.length) bas.innerHTML = lignes.join("");
+  }
+  /* le temps de chaque pièce, séparément */
+  if (pieces.length > 1){
+    bas.appendChild(el('<div class="ch-pieces"><b>Temps par pièce</b>'+
+      pieces.map(function(x){
+        var mx = minutesMesurees(x);
+        return '<span class="ch-poste'+(p && x.id === p.id ? ' cur' : '')+'">N° '+numeroPiece(x)+' <b>'+esc(mx > 0.01 ? dureeLisible(mx) : "—")+'</b> <em>'+esc(libProd(x.prod).toLowerCase())+'</em></span>';
+      }).join("")+'</div>'));
   }
   return c;
 }
@@ -8684,7 +9652,7 @@ function renderDemarrage(main){
         ? b.chrono + " pièces ont un temps mesuré. Tes prix reposent sur des minutes réelles."
         : "Cette étape, personne ne peut la faire à ta place. Les durées du catalogue "
           + "sont des estimations ; les tiennes seront différentes. Ouvre une création, lance le "
-          + "chronomètre, reprends-le demain là où tu t'es arrêtée. Il n'y a rien à saisir, il tourne "
+          + "chronomètre, reprends-le demain là où tu en étais. Il n'y a rien à saisir, il tourne "
           + "tout seul. Après trois pièces, tu sauras ce que ton heure de travail te rapporte vraiment.",
       jauge: [b.chrono, 3],
       bouton: ["Voir mes créations", function(){ aller("creations"); }]
@@ -8909,11 +9877,11 @@ var STATUTS = [
   {id:"marchandises", nom:"Micro-entreprise — vente de marchandises",
    taux:12.4, detail:"12,3 % de cotisations + 0,1 % de formation professionnelle",
    quand:"Tu fabriques tes pièces avec tes propres matières et tu les vends finies. "+
-         "C'est le cas le plus courant pour une créatrice au crochet qui vend sur un marché, "+
+         "C'est le cas le plus courant quand on vend ses créations au crochet sur un marché, "+
          "une boutique en ligne ou une plateforme."},
   {id:"services_art", nom:"Micro-entreprise — prestation de services artisanale",
    taux:21.5, detail:"21,2 % de cotisations + 0,3 % de formation professionnelle",
-   quand:"Tu travailles surtout sur commande et sur mesure, ou la cliente fournit la matière."},
+   quand:"Tu travailles surtout sur commande et sur mesure, ou on te fournit la matière."},
   {id:"services_com", nom:"Micro-entreprise — prestation de services commerciale",
    taux:21.3, detail:"21,2 % de cotisations + 0,1 % de formation professionnelle",
    quand:"Prestation de services relevant du régime commercial."},
@@ -8923,10 +9891,10 @@ var STATUTS = [
   {id:"cipav", nom:"Profession libérale affiliée à la CIPAV",
    taux:23.4, detail:"23,2 % de cotisations + 0,2 % de formation professionnelle",
    quand:"Professions libérales réglementées relevant de la CIPAV."},
-  {id:"non_declare", nom:"Je ne suis pas encore déclarée",
+  {id:"non_declare", nom:"Activité pas encore déclarée",
    taux:0, detail:"Aucune cotisation tant que l'activité n'est pas déclarée",
    quand:"Tu crochètes sans activité déclarée. L'outil calcule alors sans cotisations. "+
-         "Garde en tête qu'une fois déclarée, ton prix devra les intégrer."}
+         "Garde en tête qu'une fois ton activité déclarée, ton prix devra les intégrer."}
 ];
 function statutCotis(id){
   for (var i=0;i<STATUTS.length;i++) if (STATUTS[i].id === id) return STATUTS[i];
@@ -9600,15 +10568,40 @@ function epoque(id){
 
 var STATUTS_CMD = [
   {id:"devis",    nom:"Devis envoyé",   aide:"proposée, pas encore acceptée"},
-  {id:"acceptee", nom:"Acceptée",       aide:"accord donné, fabrication à lancer"},
+  {id:"acceptee", nom:"À fabriquer",    aide:"accord donné, fabrication à lancer"},
   {id:"encours",  nom:"En fabrication", aide:"le travail a commencé"},
-  {id:"terminee", nom:"Terminée",       aide:"prête, pas encore remise"},
-  {id:"livree",   nom:"Livrée",         aide:"remise à la cliente"},
+  {id:"terminee", nom:"Prête",          aide:"terminée, pas encore remise"},
+  {id:"livree",   nom:"Livrée",         aide:"remise ou envoyée"},
   {id:"annulee",  nom:"Annulée",        aide:""}
 ];
 function statutCmd(id){
   for (var i=0;i<STATUTS_CMD.length;i++) if (STATUTS_CMD[i].id === id) return STATUTS_CMD[i];
   return STATUTS_CMD[0];
+}
+/* L'ÉTAPE d'une commande, en un seul mot, et ce qu'il reste à faire.
+   Une commande passe par : devis → à fabriquer → en fabrication → prête →
+   livrée → facturée → soldée. Le statut, la facture et l'argent reçu étaient
+   trois informations séparées : la cliente, elle, veut savoir « où j'en suis
+   et quoi faire maintenant ». */
+function etapeCommande(c){
+  var j = joursRestants(c);
+  var retard = j !== null && j < 0;
+  var livrer = j === null ? "Fixer une date de livraison"
+             : retard ? "Livraison en retard de " + pluriel(Math.abs(j), "jour")
+             : j === 0 ? "À livrer aujourd'hui" : j === 1 ? "À livrer demain" : "À livrer dans " + j + " jours";
+  var sd = soldeDu(c);
+  switch (c.statut){
+    case "annulee":  return {rang:9, k:"annulee", nom:"Annulée", action:"", urgent:false, fini:true};
+    case "devis":    return {rang:0, k:"devis", nom:"Devis", action: j !== null && j < 0 ? "À relancer : pas de réponse" : "Attendre l'accord", urgent:false, relancer: j !== null && j < 0};
+    case "acceptee": return {rang:1, k:"acceptee", nom:"À fabriquer", action:livrer, urgent:retard};
+    case "encours":  return {rang:2, k:"encours", nom:"En fabrication", action:livrer, urgent:retard};
+    case "terminee": return {rang:3, k:"terminee", nom:"Prête", action:"À remettre ou à envoyer", urgent:retard};
+    case "livree":
+      if (!c.factureNum) return {rang:4, k:"afacturer", nom:"À facturer", action:"Émettre la facture", urgent:true};
+      if (sd > 0.004)    return {rang:5, k:"aencaisser", nom:"Paiement à recevoir", action:"Réclamer " + eur(sd), urgent:true};
+      return {rang:6, k:"soldee", nom:"Payée en entier", action:"", urgent:false, fini:true};
+  }
+  return {rang:0, k:"devis", nom:statutCmd(c.statut).nom, action:"", urgent:false};
 }
 function commandes(){ if (!state.commandes) state.commandes = []; return state.commandes; }
 function commande(id){
@@ -9631,6 +10624,39 @@ function nouvelleCommande(){
   };
   commandes().unshift(c); sauverTout();
   return c;
+}
+/* Une nouvelle commande en quatre questions : qui, quoi, combien, pour
+   quand. Le reste (adresse, facture, versement) attend dans la fiche. */
+function dialogueNouvelleCommande(){
+  var actives = creationsActives();
+  var box = el('<div><div class="grid2">'+
+    '<label class="f"><span>Quoi</span><select id="nc-cid"><option value="">— pièce libre —</option>'+actives.map(function(c){ return '<option value="'+esc(c.id)+'">'+esc(c.nom)+'</option>'; }).join("")+'</select></label>'+
+    '<label class="f"><span>Combien de pièces</span><input id="nc-qte" type="number" min="1" step="1" inputmode="numeric" value="1"></label>'+
+    '<label class="f"><span>Prix convenu, une pièce (€)</span><input id="nc-prix" type="number" min="0" step="0.5" inputmode="decimal"></label>'+
+    '<label class="f"><span>Pour quand</span><input id="nc-date" type="date"></label></div>'+
+    '<label style="display:flex;gap:10px;align-items:center;margin-top:12px;cursor:pointer"><input type="checkbox" id="nc-ok" checked style="width:18px;height:18px"> <span>C\'est déjà accepté (sinon, c\'est un devis à confirmer)</span></label></div>');
+  var sel = box.querySelector("#nc-cid"), inPrix = box.querySelector("#nc-prix");
+  if (actives.length){ sel.value = actives[0].id; inPrix.value = Number(actives[0].prix) || ""; }
+  sel.addEventListener("change", function(){ var c = creation(sel.value); if (c) inPrix.value = Number(c.prix) || ""; });
+  dialogueChamps({titre:"Nouvelle commande", texte:"Quatre questions. Tu compléteras le reste dans la fiche si besoin.",
+    champs:[{id:"nom", lib:"Commandé par", requis:true, max:80, placeholder:"Prénom, pseudo, boutique…"}],
+    contenu: box, bouton:"Créer la commande",
+    verifier:function(v){ if (inPrix.value === "" || !(Number(lireNombre(inPrix.value)) >= 0)) return "Indique le prix convenu."; return ""; }
+  }, function(v){
+    var c = nouvelleCommande();
+    c.client = {nom:v.nom, contact:"", note:""};
+    c.cid = sel.value || null;
+    var cr = c.cid ? creation(c.cid) : null;
+    c.qte = Math.max(1, Math.round(Number(box.querySelector("#nc-qte").value) || 1));
+    c.prixConvenu = Number(lireNombre(inPrix.value)) || 0;
+    c.datePromise = box.querySelector("#nc-date").value || "";
+    if (cr) c.canal = cr.canal || c.canal;
+    if (box.querySelector("#nc-ok").checked){ c.statut = "acceptee"; c.accordLe = Date.now(); journaliser(c, "Accord conclu"); }
+    delete c.brouillon;
+    sauverTout();
+    view.cmdVue = c.id; aller("commandes", {garderVue:true});
+    toast("Commande " + (c.num || "") + " créée");
+  });
 }
 function supprimerCommande(id){
   state.commandes = commandes().filter(function(c){ return c.id !== id; });
@@ -9743,11 +10769,17 @@ function resteAEncaisser(){
 /* Temps de fabrication « réel » d'une pièce : poste par poste, le temps
    chronométré s'il existe, sinon l'estimation de la fiche. Mesurer le seul
    crochet ne fait plus disparaître l'assemblage ou la finition. */
+function pieceProvisoire(p){
+  return !!p && p.com !== "vendu" && p.com !== "jete" && (p.prod === "afaire" || p.prod === "encours");
+}
 function minutesReellesPiece(p, cr){
-  var m = mesureDe(p), t = 0;
+  var m = mesureDe(p), t = 0, prov = pieceProvisoire(p);
   POSTES.forEach(function(x){
-    var mes = Number(m[x.k]) || 0;
-    t += mes > 0 ? mes : (cr ? Number(cr.temps[x.k]) || 0 : 0);
+    var mes = Number(m[x.k]) || 0, est = cr ? Number(cr.temps[x.k]) || 0 : 0;
+    /* Pièce pas terminée : le chronomètre n'a compté que le début. Tant
+       qu'elle n'est pas finie, un poste vaut au moins l'estimation de la
+       fiche, sinon 19 min chronométrées effaceraient 6 h prévues. */
+    t += prov ? Math.max(mes, est) : (mes > 0 ? mes : est);
   });
   return t;
 }
@@ -9955,10 +10987,10 @@ function manquesFacture(c){
   if (!String(r.raisonSociale || "").trim()) l.push({t:"ton nom (ou le nom de ton entreprise)", a:versReglages, lib:"Compléter mes informations"});
   if (!String(r.adresse || "").trim()) l.push({t:"ton adresse", a:versReglages, lib:"Compléter mes informations"});
   if (r.statut && r.statut !== "non_declare" && !String(r.siret || "").trim()) l.push({t:"ton numéro SIRET", a:versReglages, lib:"Compléter mes informations"});
-  if (!c.client || !String(c.client.nom || "").trim()) l.push({t:"le nom de la cliente", champ:'[data-c="nom"]'});
-  if (c.clientePro && !String((c.client && c.client.adresse) || "").trim()) l.push({t:"l'adresse de la cliente (obligatoire pour une professionnelle)", champ:'[data-c="adresse"]'});
+  if (!c.client || !String(c.client.nom || "").trim()) l.push({t:"le nom de la personne qui commande", champ:'[data-c="nom"]'});
+  if (c.clientePro && !String((c.client && c.client.adresse) || "").trim()) l.push({t:"l'adresse de facturation (obligatoire pour un achat professionnel)", champ:'[data-c="adresse"]'});
   if (!(totalDu(c) > 0)) l.push({t:"le prix convenu", champ:'[data-c="prixConvenu"]'});
-  if (c.statut === "devis") l.push({t:"l'accord de la cliente (la commande est encore un devis)", champ:'[data-c="statut"]'});
+  if (c.statut === "devis") l.push({t:"l'accord sur le devis (la commande est encore un devis)", champ:'[data-c="statut"]'});
   if (c.statut === "annulee") l.push({t:"une commande active (celle-ci est annulée)", champ:'[data-c="statut"]'});
   return l;
 }
@@ -10007,7 +11039,7 @@ function emettreDocument(type, cmdId, donnees){
     p = S.emettreFacture(an, min, type, cmdId, donnees).then(function(r){
       if (r.numero) return r;
       return {erreur: r.erreur === "reseau"
-        ? "Pas de connexion internet : le numéro est attribué par ton compte en ligne. Réessaie une fois connectée."
+        ? "Pas de connexion internet : le numéro est attribué par ton compte en ligne. Réessaie dès que la connexion revient."
         : "Le document n'a pas pu être émis. Réessaie dans un instant ; si ça continue, écris-nous à bonjour@crochompte.com."};
     });
   } else {
@@ -10110,7 +11142,7 @@ function carteCommandesLiees(cid){
   var carte = el('<div class="card" style="margin-bottom:16px"><header>'+
     '<h2>'+liees.length+' commande'+(liees.length>1?'s':'')+' en cours sur cette création</h2>'+
     '<p>'+esc(dureeTexte(h*60))+' de travail promis'+
-    (du > 0 ? ' · '+esc(eur(du))+' encore à encaisser' : '')+'</p></header>'+
+    (du > 0 ? ' · '+esc(eur(du))+' encore à recevoir' : '')+'</p></header>'+
     '<div class="body"></div></div>');
   var b = carte.querySelector(".body");
   liees.forEach(function(c){
@@ -10138,36 +11170,36 @@ function renderCommandes(main){
   }
 
   main.appendChild(enTete("Commandes",
-    "Ton suivi administratif : ce que tu as promis, à qui, pour quand, et ce qui reste à encaisser. "+
-    "Tu échanges avec tes clientes comme d'habitude ; ici, tu gardes une trace de tout.",
-    [bouton("+ Nouvelle commande", function(){
-      var c = nouvelleCommande(); view.cmdVue = c.id; render();
-    }, true)]));
+    "Ton suivi administratif : ce que tu as promis, à qui, pour quand, et ce qui reste à recevoir. "+
+    "Tu échanges avec ta clientèle comme d'habitude ; ici, tu gardes une trace de tout.",
+    [bouton("+ Nouvelle commande", function(){ dialogueNouvelleCommande(); }, true)]));
 
   var pc = planDeCharge();
 
   /* Le plan de charge passe avant la liste : savoir si on tiendra les délais
      est plus urgent que savoir ce qu'il y a dedans. */
   var tiles = el('<div class="tiles"></div>');
-  tiles.appendChild(el('<div class="tile"><div class="k">À fabriquer</div><div class="v">'+
-    pc.n+'</div><div class="s">'+(!pc.n ? 'aucune commande acceptée' : pc.sansDate ? pc.sansDate+' sans date promise' : 'toutes datées')+'</div></div>'));
-  tiles.appendChild(el('<div class="tile"><div class="k">Travail restant</div><div class="v">'+
-    esc(dureeTexte(pc.heures*60))+'</div><div class="s">'+(pc.parJour > 0
-      ? 'à '+nb(pc.parJour)+' h par jour, '+esc(pluriel(Math.ceil(pc.joursNecessaires), "jour"))
-      : 'aucune heure par jour indiquée (Réglages)')+'</div></div>'));
+  var nFab = commandes().filter(function(c){ return c.statut === "acceptee" || c.statut === "encours" || c.statut === "terminee"; }).length;
+  tiles.appendChild(el('<div class="tile"><div class="k">À fabriquer</div><div class="v">'+nFab+'</div><div class="s">'+
+    (!nFab ? 'aucune commande en attente'
+      : esc(dureeTexte(pc.heures*60)) + ' de travail' + (pc.parJour > 0 ? ' · ' + esc(pluriel(Math.ceil(pc.joursNecessaires), "jour")) + ' à ' + nb(pc.parJour) + ' h' : ' · indique tes heures par jour (Réglages)') +
+        (pc.sansDate ? ' · ' + pc.sansDate + ' sans date' : ''))+'</div></div>'));
+  tiles.appendChild(el('<div class="tile acc '+(pc.enRetard||!pc.tenable?"acc-warn":"acc-good")+'">'+
+    '<div class="k">Prochaine livraison</div><div class="v '+(pc.enRetard||!pc.tenable?"warn":"good")+'">'+
+    (pc.prochaine === null ? '—' : pc.prochaine === 0 ? 'aujourd\'hui' : pc.prochaine+' j')+'</div>'+
+    '<div class="s">'+(pc.enRetard ? pc.enRetard+' en retard' : 'rien en retard')+'</div></div>'));
+  var nFact = commandes().filter(function(c){ return c.statut === "livree" && !c.factureNum; }).length;
+  tiles.appendChild(el('<div class="tile"><div class="k">À facturer</div><div class="v '+(nFact ? "warn" : "")+'">'+nFact+'</div><div class="s">'+
+    (nFact ? 'livrée'+(nFact>1?'s':'')+', facture à émettre' : 'rien à facturer')+'</div></div>'));
   var rae = resteAEncaisser();
   tiles.appendChild(el('<div class="tile"><div class="k">Reste à recevoir</div><div class="v">'+
     esc(eur(rae.total))+'</div><div class="s">'+(rae.n ? 'sur '+rae.n+' commande'+(rae.n>1?'s':'')+' (devis exclus)' : 'rien en attente')+'</div></div>'));
-  tiles.appendChild(el('<div class="tile acc '+(pc.enRetard||!pc.tenable?"acc-warn":"acc-good")+'">'+
-    '<div class="k">Prochaine échéance</div><div class="v '+(pc.enRetard||!pc.tenable?"warn":"good")+'">'+
-    (pc.prochaine === null ? '—' : pc.prochaine === 0 ? 'aujourd\'hui' : pc.prochaine+' j')+'</div>'+
-    '<div class="s">'+(pc.enRetard ? pc.enRetard+' en retard' : 'rien en retard')+'</div></div>'));
   main.appendChild(tiles);
 
   if (!pc.tenable && pc.bloquante){
     main.appendChild(el('<div class="banner" style="background:var(--warn-soft);border-color:var(--warn)"><p>'+
       '<b>Tes délais ne sont pas tenables.</b> '+esc(texteSurcharge(pc))+' '+
-      'Mieux vaut prévenir une cliente maintenant que livrer en retard sans l\'avoir dit : '+
+      'Mieux vaut prévenir maintenant que livrer en retard sans l\'avoir dit : '+
       'propose un nouveau délai, ou un remboursement, et garde une trace écrite de sa réponse.</p>'+
       '<p class="hint" style="margin-top:8px">Tu crochètes plus que '+nb(pc.parJour)+' h par jour ? '+
       'Corrige-le dans Réglages, le calcul suivra.</p></div>'));
@@ -10176,41 +11208,42 @@ function renderCommandes(main){
   var liste = commandes();
   if (!liste.length){
     main.appendChild(etatVide("Aucune commande pour l'instant",
-      "Dès qu'une cliente te commande quelque chose (par message, sur un marché, en boutique), "+
-      "note-le ici : ce qui est convenu, pour quand, et combien elle a versé. "+
+      "Dès qu'on te commande quelque chose (par message, sur un marché, en boutique), "+
+      "note-le ici : ce qui est convenu, pour quand, et ce qui a déjà été versé. "+
       "C'est ce qui évite de fabriquer pour quelqu'un qui ne paiera pas.",
-      [bouton("+ Nouvelle commande", function(){
-        var c = nouvelleCommande(); view.cmdVue = c.id; render();
-      }, true)]));
+      [bouton("+ Nouvelle commande", function(){ dialogueNouvelleCommande(); }, true)]));
     return;
   }
 
-  /* Tri par urgence : ce qui est promis le plus tôt se voit en premier. */
-  var triees = liste.slice().sort(function(a,b){
-    var fa = (a.statut === "livree" || a.statut === "annulee") ? 1 : 0;
-    var fb = (b.statut === "livree" || b.statut === "annulee") ? 1 : 0;
-    if (fa !== fb) return fa - fb;
-    var ja = joursRestants(a), jb = joursRestants(b);
-    if (ja === null && jb === null) return 0;
-    if (ja === null) return 1;
-    if (jb === null) return -1;
-    return ja - jb;
-  });
-
-  /* Suivi : filtrer par étape, retrouver une cliente ou un numéro. */
+  /* Suivi : filtrer par étape, retrouver une cliente ou un numéro, trier
+     comme on veut (par défaut : ce qui presse le plus en premier). */
   var FCMD = [
     {k:"tous",      nom:"Toutes"},
     {k:"encours",   nom:"En cours",             f:function(c){ return c.statut === "acceptee" || c.statut === "encours" || c.statut === "terminee"; }},
     {k:"devis",     nom:"Devis",                f:function(c){ return c.statut === "devis"; }},
     {k:"afacturer", nom:"Livrées à facturer",   f:function(c){ return c.statut === "livree" && !c.factureNum; }},
     {k:"facturees", nom:"Livrées et facturées", f:function(c){ return c.statut === "livree" && !!c.factureNum; }},
-    {k:"impayees",  nom:"Reste dû",             f:function(c){ return doitEtreEncaissee(c) && soldeDu(c) > 0; }},
+    {k:"impayees",  nom:"Reste à recevoir",     f:function(c){ return doitEtreEncaissee(c) && soldeDu(c) > 0; }},
     {k:"annulees",  nom:"Annulées",             f:function(c){ return c.statut === "annulee"; }}
   ];
-  var fck = view.fCmd || "tous";
+  var TRI_CMD = {
+    urgence: function(c){ var fini = (c.statut === "livree" || c.statut === "annulee") ? 1 : 0, j = joursRestants(c); if (c.statut === "devis") return 4e5 + (j === null ? 1e5 : Math.max(j, 0)); return fini * 1e6 + (j === null ? 5e5 : j); },
+    num:     function(c){ return c.num || ""; },
+    client:  function(c){ return (c.client && c.client.nom) || ""; },
+    pour:    function(c){ return c.datePromise || ""; },
+    etape:   function(c){ return etapeCommande(c).rang; },
+    convenu: function(c){ return totalDu(c); },
+    verse:   function(c){ return encaisse(c); },
+    reste:   function(c){ return soldeDu(c); }
+  };
+  var fck = view.fCmd || (liste.some(FCMD[1].f) ? "encours" : "tous");
   var fc = FCMD.filter(function(x){ return x.k === fck; })[0] || FCMD[0];
+  etatTri("cmd", "urgence");
   var outils = el('<div class="cmd-outils"><div class="filters" style="margin:0"></div>'+
-    '<label class="f"><span class="sr-only">Rechercher une commande</span><input type="search" id="cmd-q" placeholder="Cliente, n° de commande, article…"></label></div>');
+    '<div class="cmd-outils-d"><label class="f"><span class="sr-only">Rechercher une commande</span><input type="search" id="cmd-q" placeholder="Nom, n° de commande, article…"></label></div></div>');
+  outils.querySelector(".cmd-outils-d").appendChild(barreTri({cle:"cmd", defaut:"urgence", quand:function(){ peindreCmd(); majEntetes(); }, options:[
+    ["urgence","Le plus urgent"],["num","N° de commande"],["client","Commandé par"],["pour","Date de livraison"],["etape","Étape"],
+    ["convenu","Prix convenu"],["verse","Reçu"],["reste","Reste à recevoir"]]}));
   var fz = outils.querySelector(".filters");
   FCMD.forEach(function(x){
     var n = x.f ? liste.filter(x.f).length : liste.length;
@@ -10225,15 +11258,24 @@ function renderCommandes(main){
   main.appendChild(outils);
 
   var wrap = el('<div class="tablewrap resp" style="margin-top:8px"></div>');
-  var t = el('<table style="min-width:1000px"><thead><tr><th style="width:110px">N°</th><th>Cliente</th><th>Articles</th>'+
-    '<th style="width:118px">Promise pour</th><th style="width:150px">Statut</th>'+
-    '<th class="n" style="width:105px">Prix convenu</th><th class="n" style="width:95px">Versé</th><th class="n" style="width:105px">Reste dû</th>'+
+  var t = el('<table class="t-cmd" style="min-width:1000px"><thead><tr><th data-tri="num" style="width:110px">N°</th><th data-tri="client">Commandé par</th><th>Articles</th>'+
+    '<th data-tri="pour" style="width:118px">Pour le</th><th data-tri="etape" style="width:190px">Étape et suite</th>'+
+    '<th class="n" data-tri="convenu" style="width:105px">Prix convenu</th><th class="n" data-tri="verse" style="width:95px">Reçu</th><th class="n" data-tri="reste" style="width:105px">Reste à recevoir</th>'+
     '<th style="width:70px"><span class="sr-only">Actions</span></th></tr></thead><tbody></tbody></table>');
   var tb = t.querySelector("tbody");
   var videCmd = el('<p class="hint" hidden>Aucune commande dans ce filtre.</p>');
+  function majEntetes(){
+    var tt = etatTri("cmd", "urgence");
+    [].forEach.call(t.querySelectorAll("th[data-tri]"), function(th){
+      var k = th.getAttribute("data-tri"), on = tt.k === k, b = th.querySelector(".th-tri");
+      if (b) b.textContent = b.textContent.replace(/ [↑↓]$/, "") + (on ? (tt.sens < 0 ? " ↓" : " ↑") : "");
+      th.setAttribute("aria-sort", on ? (tt.sens < 0 ? "descending" : "ascending") : "none");
+    });
+  }
   function peindreCmd(){
   tb.innerHTML = "";
   var q = String(view.cmdQ || "").trim().toLowerCase();
+  var triees = trierListe(liste, etatTri("cmd", "urgence"), TRI_CMD);
   var affichees = triees.filter(function(c){
     if (fc.f && !fc.f(c)) return false;
     if (q){
@@ -10245,36 +11287,39 @@ function renderCommandes(main){
   videCmd.hidden = affichees.length > 0;
   affichees.forEach(function(c){
     var j = joursRestants(c);
-    var fini = c.statut === "livree" || c.statut === "annulee";
+    var et = etapeCommande(c);
+    var fini = !!et.fini;
     var urgence = "";
-    if (!fini && j !== null){
-      if (j < 0) urgence = '<span class="chip bad">'+esc(echeanceTexte(j))+'</span>';
+    if (!fini && c.statut !== "livree" && j !== null){
+      if (c.statut === "devis") urgence = j < 0 ? '<span class="chip warn">à relancer</span>' : '';
+      else if (j < 0) urgence = '<span class="chip bad">'+esc(echeanceTexte(j))+'</span>';
       else if (j <= 7) urgence = '<span class="chip warn">'+esc(echeanceTexte(j))+'</span>';
     }
     var solde = soldeDu(c);
     var artsL = articlesCommande(c).filter(function(a){ return a.q > 0; });
     var tr = el('<tr'+(fini?' style="color:var(--muted)"':'')+'>'+
       '<td data-l="N°" class="num" style="white-space:nowrap">'+esc(c.num || "—")+(c.factureNum ? '<div class="hint" style="font-size:11px;margin-top:2px">fact. '+esc(c.factureNum.replace(/^[A-Z0-9]{5}-/, ""))+'</div>' : '')+'</td>'+
-      '<td data-l="Cliente"><b>'+esc(c.client && c.client.nom ? c.client.nom : "Sans nom")+'</b>'+
+      '<td data-l="Commandé par"><b>'+esc(c.client && c.client.nom ? c.client.nom : "Sans nom")+'</b>'+
         (c.personnalisee ? '<div class="hint" style="font-size:11px;margin-top:2px">personnalisée</div>' : '')+'</td>'+
       '<td data-l="Articles">'+(artsL.length ? esc((artsL[0].q > 1 ? artsL[0].q + " × " : "") + artsL[0].nom) : '—')+
         (artsL.length > 1 ? '<div class="hint" style="font-size:11px;margin-top:2px">+ '+esc(pluriel(artsL.length - 1, "autre article", "autres articles"))+'</div>'
           : c.variantes ? '<div class="hint" style="font-size:11px;margin-top:2px">'+esc(c.variantes)+'</div>' : '')+'</td>'+
-      '<td data-l="Promise pour">'+(c.datePromise ? esc(new Date(dateVersTs(c.datePromise)).toLocaleDateString("fr-FR")) : '<span class="hint">non fixée</span>')+
+      '<td data-l="Pour le">'+(c.datePromise ? esc(new Date(dateVersTs(c.datePromise)).toLocaleDateString("fr-FR")) : '<span class="hint">non fixée</span>')+
         (urgence ? '<div style="margin-top:2px">'+urgence+'</div>' : '')+'</td>'+
-      '<td data-l="Statut"><span class="chip st-'+esc(c.statut)+'">'+esc(statutCmd(c.statut).nom)+'</span>'+
-        (c.factureNum ? '<div style="margin-top:3px"><span class="chip good">facturée</span></div>' : c.statut === "livree" ? '<div style="margin-top:3px"><span class="chip warn">à facturer</span></div>' : '')+'</td>'+
+      '<td data-l="Étape"><div class="cel"><span class="chip st-'+esc(et.k)+'">'+esc(et.nom)+'</span>'+
+        (et.action ? '<div class="hint etape-suite'+(et.urgent ? ' urgent' : '')+'">'+esc(et.action)+'</div>' : '')+'</div></td>'+
       '<td class="n num" data-l="Prix convenu">'+esc(eur(totalDu(c)))+'</td>'+
-      '<td class="n num" data-l="Versé">'+(encaisse(c) > 0 ? esc(eur(encaisse(c))) : '<span class="hint">—</span>')+'</td>'+
-      '<td class="n num" data-l="Reste dû">'+(solde > 0 ? '<b>'+esc(eur(solde))+'</b>'
+      '<td class="n num" data-l="Reçu">'+(encaisse(c) > 0 ? esc(eur(encaisse(c))) : '<span class="hint">—</span>')+'</td>'+
+      '<td class="n num" data-l="Reste à recevoir">'+(solde > 0 ? '<b>'+esc(eur(solde))+'</b>'
           : tropPercu(c) > 0 ? '<span class="warn">trop-perçu '+esc(eur(tropPercu(c)))+'</span>'
-          : totalDu(c) > 0 ? '<span class="good">soldée</span>' : '<span class="hint">—</span>')+'</td>'+
+          : totalDu(c) > 0 ? '<span class="good">payée en entier</span>' : '<span class="hint">—</span>')+'</td>'+
       '<td><button type="button" class="btn sm">Ouvrir</button></td></tr>');
     tr.querySelector("td:last-child button").setAttribute("aria-label", "Ouvrir la commande " + (c.num || "") + (c.client && c.client.nom ? " de " + c.client.nom : ""));
     tr.querySelector("td:last-child button").addEventListener("click", function(){ view.cmdVue = c.id; render(); });
     tb.appendChild(tr);
   });
   }
+  entetesTriables(t.querySelector("thead"), "cmd", function(){ peindreCmd(); });
   peindreCmd();
   wrap.appendChild(t);
   main.appendChild(wrap);
@@ -10285,22 +11330,39 @@ function renderCommandes(main){
    commande a été supprimée, modifiée ou remplacée par une sauvegarde. Avec
    un compte, il est complété par la copie gardée sur le serveur. */
 function carteRegistre(){
-  var c = el('<div class="card" style="margin-top:20px"><header><h2>Registre des factures et avoirs</h2>'+
-    '<p>Tout ce que tu as émis, dans l\'ordre. À conserver 10 ans.</p></header><div class="body"></div></div>');
+  var c = el('<details class="card registre" style="margin-top:20px"><summary><h2>Registre des factures et avoirs <span class="n" id="reg-n"></span></h2>'+
+    '<p>La liste de toutes tes factures et de tes avoirs (les factures d\'annulation). À conserver 10 ans.</p></summary><div class="body"></div></details>');
   var body = c.querySelector(".body");
+  c.open = !!view.regOuvert;
+  c.addEventListener("toggle", function(){ view.regOuvert = c.open; });
+  var TRI_REG = {
+    date:    function(x){ return String(x.le || ""); },
+    num:     function(x){ return x.num || ""; },
+    type:    function(x){ return x.type === "avoir" ? "Avoir" : "Facture"; },
+    cliente: function(x){ return ((x.donnees || {}).client || {}).nom || ""; },
+    montant: function(x){ return Number((x.donnees || {}).total) || 0; }
+  };
+  etatTri("reg", "date", -1);
   function peindre(){
     body.innerHTML = "";
-    var l = registre().slice().sort(function(a, b){ return String(b.le).localeCompare(String(a.le)); });
+    var l = trierListe(registre(), etatTri("reg", "date", -1), TRI_REG);
+    var nReg = c.querySelector("#reg-n"); if (nReg) nReg.textContent = l.length ? "(" + l.length + ")" : "";
     if (!l.length){ body.appendChild(el('<p class="hint" style="margin:0">Aucune facture émise pour l\'instant.</p>')); }
     else {
-      var w = el('<div class="tablewrap resp"><table><thead><tr><th>Numéro</th><th>Date</th><th>Type</th><th>Commande</th><th>Cliente</th><th class="n">Montant</th><th><span class="sr-only">Action</span></th></tr></thead><tbody></tbody></table></div>');
+      if (l.length > 1){
+        var bt = barreTri({cle:"reg", defaut:"date", sens:-1, quand:function(){ peindre(); }, options:[
+          ["date","Date d'émission"],["num","Numéro"],["type","Type"],["cliente","Destinataire"],["montant","Montant"]]});
+        bt.style.marginBottom = "10px"; body.appendChild(bt);
+      }
+      var w = el('<div class="tablewrap resp"><table><thead><tr><th data-tri="num">Numéro</th><th data-tri="date">Date</th><th data-tri="type">Type</th><th>Commande</th><th data-tri="cliente">Destinataire</th><th class="n" data-tri="montant">Montant</th><th><span class="sr-only">Action</span></th></tr></thead><tbody></tbody></table></div>');
       var tb = w.querySelector("tbody");
+      entetesTriables(w.querySelector("thead"), "reg", function(){ peindre(); });
       l.forEach(function(x){
         var d = x.donnees || {};
         var tr = el('<tr><td data-l="Numéro"><b>'+esc(x.num)+'</b></td><td data-l="Date">'+esc(new Date(x.le).toLocaleDateString("fr-FR"))+'</td>'+
           '<td data-l="Type">'+(x.type === "avoir" ? "Avoir" : "Facture")+'</td>'+
           '<td data-l="Commande">'+(d.commandeNum ? (commande(x.cmd) ? '<button type="button" class="lien-mini" data-cmd="'+esc(x.cmd)+'">'+esc(d.commandeNum)+'</button>' : esc(d.commandeNum)) : '<span class="hint">—</span>')+'</td>'+
-          '<td data-l="Cliente">'+esc((d.client && d.client.nom) || "—")+'</td>'+
+          '<td data-l="Destinataire">'+esc((d.client && d.client.nom) || "—")+'</td>'+
           '<td class="n" data-l="Montant">'+esc(eur(Number(d.total)||0))+'</td>'+
           '<td><button type="button" class="btn sm">Ouvrir</button></td></tr>');
         var bO = tr.querySelector("td:last-child button");
@@ -10315,7 +11377,7 @@ function carteRegistre(){
     var bar = el('<div class="savebar" style="margin-top:12px"></div>');
     if (l.length){
       bar.appendChild(bouton("Télécharger le registre (tableur)", function(){
-        var lignes = [["Numéro","Type","Date d'émission","Commande","Cliente","Montant (€)","Facture annulée"]];
+        var lignes = [["Numéro","Type","Date d'émission","Commande","Destinataire","Montant (€)","Facture annulée"]];
         l.slice().reverse().forEach(function(x){
           var d = x.donnees || {};
           lignes.push([x.num, x.type === "avoir" ? "Avoir" : "Facture", new Date(x.le).toLocaleDateString("fr-FR"), d.commandeNum || "",
@@ -10354,6 +11416,54 @@ function carteRegistre(){
   return c;
 }
 
+/* Un temps se saisit en heures et minutes, comme dans la fiche : « 2 h 30 »,
+   jamais « 2,5 ». La valeur gardée reste un nombre d'heures. */
+function champsHeuresMinutes(id, heures, defautHeures){
+  var h = Math.floor(Number(heures) || 0), m = Math.round(((Number(heures) || 0) - h) * 60);
+  var dh = Math.floor(Number(defautHeures) || 0), dm = Math.round(((Number(defautHeures) || 0) - dh) * 60);
+  return '<div class="hm"><label class="f"><span class="sr-only">Heures</span><input id="'+id+'" type="number" min="0" step="1" inputmode="numeric" value="'+(heures > 0 ? h : "")+'" placeholder="'+dh+'" aria-label="Heures"></label><span>h</span>'+
+    '<label class="f"><span class="sr-only">Minutes</span><input id="'+id+'-min" type="number" min="0" max="59" step="5" inputmode="numeric" value="'+(heures > 0 && m > 0 ? m : "")+'" placeholder="'+(heures > 0 ? "00" : (dm < 10 ? "0" : "") + dm)+'" aria-label="Minutes"></label><span>min</span></div>';
+}
+function brancherHeuresMinutes(racine, id, surValeur, surChange){
+  var iH = racine.querySelector("#" + id), iM = racine.querySelector("#" + id + "-min");
+  function lire(){
+    var h = Number(lireNombre(iH.value)) || 0, m = Math.min(59, Math.max(0, Number(lireNombre(iM.value)) || 0));
+    surValeur(iH.value === "" && iM.value === "" ? 0 : Math.max(0, h + m / 60));
+  }
+  iH.addEventListener("input", lire); iM.addEventListener("input", lire);
+  if (surChange){ iH.addEventListener("change", surChange); iM.addEventListener("change", surChange); }
+}
+function friseCommande(c){
+  var et = etapeCommande(c);
+  var ETAPES = [["devis","Devis"],["acceptee","À fabriquer"],["encours","En fabrication"],["terminee","Prête"],["livree","Livrée"],["afacturer","Facturée"],["soldee","Payée"]];
+  var rang = {devis:0, acceptee:1, encours:2, terminee:3, afacturer:4, aencaisser:5, soldee:6, livree:4}[et.k];
+  if (et.k === "aencaisser") rang = 5;
+  var z = el('<div class="card frise-card"><div class="body"><ol class="frise" aria-label="Étapes de la commande"></ol><div class="frise-act"></div></div></div>');
+  var ol = z.querySelector(".frise");
+  if (c.statut === "annulee"){ z.querySelector(".body").innerHTML = '<p style="margin:0"><b>Commande annulée.</b> Elle reste dans ta liste, pour mémoire.</p>'; return z; }
+  ETAPES.forEach(function(e, i){
+    var k = i < rang ? "faite" : i === rang ? "cur" : "";
+    ol.appendChild(el('<li class="'+k+'"><span class="pt" aria-hidden="true">'+(i < rang ? "✓" : i + 1)+'</span><span class="lb">'+esc(e[1])+'</span></li>'));
+  });
+  var act = z.querySelector(".frise-act");
+  function passer(st, lib){
+    var sel = document.querySelector('[data-c="statut"]');
+    if (sel){ sel.value = st; sel.dispatchEvent(new Event("change", {bubbles:true})); }
+    else { c.statut = st; sauverTout(); render(); }
+    if (lib) toast(lib);
+  }
+  var b = null;
+  if (c.statut === "devis") b = bouton(et.relancer ? "Accord reçu : à fabriquer" : "Accord reçu : à fabriquer", function(){ c.accordLe = c.accordLe || Date.now(); passer("acceptee", "Commande acceptée : à fabriquer"); }, true);
+  else if (c.statut === "acceptee") b = bouton("Je commence la fabrication", function(){ passer("encours", "En fabrication"); }, true);
+  else if (c.statut === "encours") b = bouton("C'est prêt", function(){ passer("terminee", "Prête à remettre ou à envoyer"); }, true);
+  else if (c.statut === "terminee") b = bouton("C'est livré", function(){ passer("livree", "Livrée"); }, true);
+  else if (c.statut === "livree" && !c.factureNum) b = bouton("Passer à la facture", function(){ var x = document.getElementById("cmd-facture"); if (x){ x.scrollIntoView({behavior:"smooth", block:"start"}); var bx = x.querySelector("button.primary, button"); if (bx) bx.focus(); } }, true);
+  else if (c.statut === "livree" && soldeDu(c) > 0.004) b = bouton("Noter un règlement de " + eur(soldeDu(c)), function(){ var x = document.getElementById("cmd-p-m"); if (x){ x.scrollIntoView({behavior:"smooth", block:"center"}); x.focus(); } }, true);
+  if (b) act.appendChild(b);
+  act.appendChild(el('<span class="hint">'+esc(et.action ? (et.k === "soldee" ? "Tout est réglé." : "Prochaine étape : " + et.action.charAt(0).toLowerCase() + et.action.slice(1) + ".") : "")+'</span>'));
+  if (c.statut === "devis") { var bA = bouton("Annuler la commande", function(){ passer("annulee", "Commande annulée"); }); bA.classList.add("sm"); act.appendChild(bA); }
+  return z;
+}
 function renderCommandeDetail(main, c){
   var back = bouton("← Retour aux commandes", function(){ retourParent(function(){ view.cmdVue = null; }); });
   back.classList.add("sm"); back.style.marginBottom = "16px";
@@ -10364,19 +11474,22 @@ function renderCommandeDetail(main, c){
 
   function maj(){ delete c.brouillon; sauverTout(); }
 
+  /* --- la frise : où en est la commande, et le seul bouton qui compte --- */
+  main.appendChild(friseCommande(c));
+
   /* --- la cliente et ce qui est convenu --- */
   var cId = el('<div class="card" style="margin-bottom:16px"><header><h2>Ce qui est convenu</h2>'+
-    '<p>Tu t\'es mise d\'accord avec ta cliente (par message, sur un marché, en boutique) ? '+
-    'Note-le ici dès que c\'est décidé : ce sera ta trace écrite si elle change d\'avis.</p></header>'+
+    '<p>L\'accord est conclu (par message, sur un marché, en boutique) ? '+
+    'Note-le ici dès que c\'est décidé : ce sera ta trace écrite en cas de changement d\'avis.</p></header>'+
     '<div class="body"><div class="grid2">'+
-      '<label class="f"><span>Cliente</span><input data-c="nom" type="text" placeholder="Prénom et nom"></label>'+
-      '<label class="f"><span>Comment la joindre</span><input data-c="contact" type="text" placeholder="téléphone, e-mail, Instagram…"></label>'+
+      '<label class="f"><span>Commandé par</span><input data-c="nom" type="text" placeholder="Prénom et nom"></label>'+
+      '<label class="f"><span>Contact</span><input data-c="contact" type="text" placeholder="téléphone, e-mail, Instagram…"></label>'+
     '</div>'+
     '<div class="articles-cmd" style="margin-top:14px">'+
       '<p style="margin:0 0 8px"><b>Ce qui est commandé</b> <span class="hint">— une ligne par article ; le prix est celui d\'une pièce</span></p>'+
       '<div class="art-l">'+
         '<label class="f art-cr"><span>Création</span><select data-c="cid"></select></label>'+
-        '<label class="f art-d"><span>Désignation sur la facture</span><input data-c="libelle" type="text" placeholder="Lapin Céleste, 25 cm"></label>'+
+        '<label class="f art-d"><span>Nom de l\'article sur la facture</span><input data-c="libelle" type="text" placeholder="Lapin Céleste, 25 cm"></label>'+
         '<label class="f art-s"><span>Ce qui a été demandé en plus</span><input data-c="variantes" type="text" placeholder="coton bleu, prénom Léa brodé"></label>'+
         '<label class="f art-q"><span>Quantité</span><input data-c="qte" type="number" inputmode="numeric" min="1" step="1"></label>'+
         '<label class="f art-pu"><span>Prix convenu (€)</span><input data-c="prixConvenu" type="number" min="0" step="0.5"></label>'+
@@ -10385,29 +11498,30 @@ function renderCommandeDetail(main, c){
       '<div class="art-pied"><button type="button" class="btn sm" id="cmd-art-add">+ Ajouter un article</button>'+
       '<p class="art-total" id="cmd-art-tot" aria-live="polite"></p></div>'+
     '</div>'+
+    '<details class="cmd-plus" style="margin-top:14px"><summary>Adresse, facture pour une entreprise, pièce personnalisée</summary>'+
     '<label style="display:flex;gap:10px;align-items:flex-start;margin-top:12px;cursor:pointer">'+
       '<input type="checkbox" data-c="clientePro" style="margin-top:3px;width:18px;height:18px;flex:none">'+
-      '<span><b>Cliente professionnelle</b> : une boutique, une entreprise, une association, '+
-      'et non une particulière. Les mentions obligatoires de la facture sont adaptées.</span></label>'+
-    '<label class="f" id="cmd-adr" style="margin-top:10px"><span>Adresse de la cliente <span class="hint" id="cmd-adr-aide">(facultative pour une particulière)</span></span>'+
+      '<span><b>Achat professionnel</b> : une boutique, une entreprise, une association, '+
+      'et non un achat personnel. Les mentions obligatoires de la facture sont adaptées.</span></label>'+
+    '<label class="f" id="cmd-adr" style="margin-top:10px"><span>Adresse de facturation <span class="hint" id="cmd-adr-aide">(facultative pour un achat personnel)</span></span>'+
       '<input data-c="adresse" type="text" placeholder="rue, code postal, ville"></label>'+
     '<div class="grid2" style="margin-top:10px">'+
-      '<label class="f" id="cmd-siren"><span>SIREN de la cliente professionnelle</span><input data-c="siren" type="text" inputmode="numeric" placeholder="9 chiffres"></label>'+
+      '<label class="f" id="cmd-siren"><span>SIREN de la structure qui achète (9 chiffres, sur ses factures)</span><input data-c="siren" type="text" inputmode="numeric" placeholder="9 chiffres"></label>'+
       '<label class="f"><span>Adresse de livraison, si différente</span><input data-c="adresseLivraison" type="text" placeholder="rue, code postal, ville"></label>'+
-      '<label class="f" id="cmd-ref"><span>N° de son bon de commande, si elle en a fait un</span><input data-c="refClient" type="text" maxlength="60" placeholder="obligatoire sur la facture s\'il existe"></label>'+
+      '<label class="f" id="cmd-ref"><span>N° de bon de commande, s\'il y en a un</span><input data-c="refClient" type="text" maxlength="60" placeholder="obligatoire sur la facture s\'il existe"></label>'+
     '</div>'+
     '<label style="display:flex;gap:10px;align-items:flex-start;margin-top:12px;cursor:pointer">'+
       '<input type="checkbox" data-c="personnalisee" style="margin-top:3px;width:18px;height:18px;flex:none">'+
-      '<span><b>Pièce personnalisée</b> : faite selon les demandes de la cliente '+
+      '<span><b>Pièce personnalisée</b> : faite sur demande '+
       '(prénom, couleurs choisies, mesures).</span></label>'+
-    '<p class="hint" id="cmd-retract" style="margin-top:6px"></p>'+
+    '<p class="hint" id="cmd-retract" style="margin-top:6px"></p></details>'+
     '<div class="grid3" style="margin-top:12px">'+
       '<label class="f"><span>Livraison facturée (€)</span><input data-c="fraisLivraison" type="number" min="0" step="0.5"></label>'+
       '<label class="f"><span>Promise pour le</span><input data-c="datePromise" type="date"></label>'+
     '</div>'+
     '<div class="grid2" style="margin-top:10px">'+
       '<label class="f"><span>Statut</span><select data-c="statut"></select></label>'+
-      '<label class="f"><span>Canal de vente</span><select data-c="canal"></select></label>'+
+      '<label class="f"><span>Où elle est vendue</span><select data-c="canal"></select></label>'+
     '</div>'+
     '<label class="f" style="margin-top:10px"><span>Note</span><input data-c="note" type="text" placeholder="livrée au marché de Noël, cadeau d\'anniversaire…"></label>'+
     '<div class="savebar" style="margin-top:14px"></div>'+
@@ -10441,13 +11555,14 @@ function renderCommandeDetail(main, c){
   cId.querySelector('[data-c="note"]').value     = c.note || "";
   cId.querySelector('[data-c="personnalisee"]').checked = !!c.personnalisee;
   cId.querySelector('[data-c="clientePro"]').checked = !!c.clientePro;
+  if (c.clientePro || c.personnalisee || (c.client && (c.client.adresse || c.client.adresseLivraison))) cId.querySelector(".cmd-plus").open = true;
   cId.querySelector('[data-c="adresse"]').value = (c.client && c.client.adresse) || "";
   cId.querySelector('[data-c="siren"]').value = (c.client && c.client.siren) || "";
   cId.querySelector('[data-c="adresseLivraison"]').value = (c.client && c.client.adresseLivraison) || "";
   function majPro(){
     cId.querySelector("#cmd-siren").hidden = !c.clientePro;
     cId.querySelector("#cmd-ref").hidden = !c.clientePro;
-    cId.querySelector("#cmd-adr-aide").textContent = c.clientePro ? "(obligatoire pour une professionnelle)" : "(facultative pour une particulière)";
+    cId.querySelector("#cmd-adr-aide").textContent = c.clientePro ? "(obligatoire pour un achat professionnel)" : "(facultative pour un achat personnel)";
   }
   majPro();
   /* Facture émise : ce qu'elle dit ne doit plus pouvoir diverger de la
@@ -10532,16 +11647,16 @@ function renderCommandeDetail(main, c){
   function majRetract(){
     var z = cId.querySelector("#cmd-retract");
     if (c.clientePro){
-      z.innerHTML = 'Vente à une professionnelle : le droit de rétractation du code de la '+
-        'consommation ne s\'applique pas, car il ne protège que les particuliers. C\'est ce que '+
+      z.innerHTML = 'Vente professionnelle : le droit de rétractation du code de la '+
+        'consommation ne s\'applique pas, car il ne protège que les achats faits à titre personnel. C\'est ce que '+
         'vous avez convenu ensemble qui fait foi.';
       return;
     }
     z.innerHTML = c.personnalisee
-      ? 'Une pièce faite selon les demandes de la cliente <b>n\'ouvre pas de droit de '+
+      ? 'Une pièce faite sur demande <b>n\'ouvre pas de droit de '+
         'rétractation</b> (article L221-28 du code de la consommation). La mention sera '+
-        'portée sur la facture, à condition de l\'avoir annoncé à la cliente <b>avant</b> de commencer.'
-      : 'Vente à distance : la cliente dispose de <b>14 jours pour se rétracter</b> après '+
+        'portée sur la facture, à condition de l\'avoir annoncé <b>avant</b> de commencer.'
+      : 'Vente à distance : la personne qui achète dispose de <b>14 jours pour se rétracter</b> après '+
         'réception, sans avoir à se justifier (article L221-18). En vente en main propre '+
         'sur un marché, ce délai ne s\'applique pas.';
   }
@@ -10571,7 +11686,7 @@ function renderCommandeDetail(main, c){
   /* Après l'accord de la cliente, changer son nom, le prix convenu ou la
      livraison facturée laisse une trace datée dans l'historique : en cas de
      désaccord, on sait ce qui a été convenu et quand cela a changé. */
-  var SUIVIS_ACCORD = {nom: "Cliente", prixConvenu: "Prix convenu", fraisLivraison: "Livraison facturée", qte: "Quantité"};
+  var SUIVIS_ACCORD = {nom: "Commandé par", prixConvenu: "Prix convenu", fraisLivraison: "Livraison facturée", qte: "Quantité"};
   function valeurSuivie(k){ return k === "nom" ? ((c.client && c.client.nom) || "") : k === "qte" ? String(Math.max(1, Number(c.qte)||1)) : String(cts(Number(c[k])||0)); }
   cId.addEventListener("focusin", function(e){
     var k = e.target.getAttribute("data-c");
@@ -10637,11 +11752,29 @@ function renderCommandeDetail(main, c){
     cId.querySelector(".body").insertBefore(lienCr, cId.querySelector(".savebar"));
   }
 
+  /* Vérification des saisies + bouton Enregistrer. */
+  var verifCmd = attacherVerif(cId, [
+    {sel:'[data-c="nom"]', type:"texte", requis:true, min:2, max:80, msgRequis:"Indique pour qui est la commande."},
+    {sel:'[data-c="contact"]', type:"contact"},
+    {sel:'[data-c="qte"]', type:"entier", requis:true, min:1, max:9999},
+    {sel:'[data-c="prixConvenu"]', type:"prix", requis:true, max:100000},
+    {sel:'[data-c="fraisLivraison"]', type:"prix", max:100000},
+    {sel:'[data-c="datePromise"]', type:"date"},
+    {sel:'[data-c="siren"]', type:"siren", requis:true, quand:function(){ return !!c.clientePro; }},
+    {sel:'[data-c="adresse"]', type:"texte", requis:true, min:5, max:200, quand:function(){ return !!c.clientePro; }, msgRequis:"L'adresse est obligatoire pour un achat professionnel."},
+    {sel:'[data-c="refClient"]', type:"texte", max:60},
+    {sel:'[data-a="q"]', type:"entier", requis:true, min:0, max:9999},
+    {sel:'[data-a="pu"]', type:"prix", requis:true, max:100000}
+  ]);
   /* Figer l'accord : un horodatage, et le rappel de ce qui a été convenu. */
   var barAccord = cId.querySelector(".savebar");
+  barAccord.classList.add("savebar-enreg");
+  barAccord.appendChild(barreEnregistrer({verif: verifCmd, message: "Commande enregistrée ✓", surOk: function(){ delete c.brouillon; }}));
   if (!c.accordLe){
     barAccord.appendChild(bouton("Valider l'accord à la date du jour", function(){
-      if (!c.client || !c.client.nom){ toast("Note d'abord le nom de la cliente"); return; }
+      var errs = verifCmd.valider();
+      if (errs.length){ toast(errs[0].lib + " : " + errs[0].msg); try{ errs[0].champ.focus(); }catch(e){} return; }
+      if (!c.client || !c.client.nom){ toast("Note d'abord pour qui est la commande"); return; }
       if (!totalDu(c)){ toast("Note d'abord le prix convenu"); return; }
       c.accordLe = new Date().toISOString();
       if (c.statut === "devis") c.statut = "acceptee";
@@ -10657,10 +11790,10 @@ function renderCommandeDetail(main, c){
   /* --- l'argent --- */
   var enc = encaisse(c), solde = soldeDu(c);
   var cArgent = el('<div class="card" style="margin-bottom:16px"><header><h2>L\'argent</h2>'+
-    '<p>Ce qui a été versé, ce qui reste dû.</p></header><div class="body">'+
+    '<p>Ce qui a déjà été reçu, ce qui reste à recevoir.</p></header><div class="body">'+
     '<div class="tiles" style="margin-bottom:14px">'+
       '<div class="tile"><div class="k">Total de la commande</div><div class="v">'+esc(eur(totalDu(c)))+'</div></div>'+
-      '<div class="tile"><div class="k">Déjà encaissé</div><div class="v">'+esc(eur(enc))+'</div></div>'+
+      '<div class="tile"><div class="k">Déjà reçu</div><div class="v">'+esc(eur(enc))+'</div></div>'+
       (tropPercu(c) > 0
         ? '<div class="tile acc acc-warn"><div class="k">Trop-perçu</div><div class="v warn">'+esc(eur(tropPercu(c)))+'</div><div class="s">à rembourser ou à déduire</div></div>'
         : '<div class="tile acc '+(solde>0?"acc-warn":"acc-good")+'"><div class="k">Reste à recevoir</div>'+
@@ -10678,7 +11811,7 @@ function renderCommandeDetail(main, c){
       '<div id="cmd-paie"></div>'+
       '<div class="grid3" style="align-items:end;margin-top:10px">'+
         '<label class="f"><span>Montant (€)</span><input id="cmd-p-m" type="number" min="0" step="0.5" value="'+(solde||0)+'"></label>'+
-        '<label class="f"><span>Moyen de paiement</span><input id="cmd-p-moy" type="text" placeholder="espèces, virement…"></label>'+
+        '<label class="f"><span>Moyen de paiement</span><select id="cmd-p-moy">'+optionsMoyens("virement")+'</select></label>'+
         '<label class="f"><span>Date</span><input id="cmd-p-d" type="date"></label>'+
       '</div>'+
       '<div class="savebar" style="margin-top:10px"><button type="button" class="btn" id="cmd-p-add">Enregistrer ce règlement</button></div>'+
@@ -10691,13 +11824,13 @@ function renderCommandeDetail(main, c){
   inD.value = (c.versement && c.versement.date) || "";
   function majAideVersement(){
     cArgent.querySelector("#cmd-ac-aide").innerHTML = inT.value === "arrhes"
-      ? '<b>Arrhes</b> : la cliente peut renoncer en les perdant, mais si c\'est toi qui '+
+      ? '<b>Arrhes</b> : la personne qui commande peut renoncer en les perdant, mais si c\'est toi qui '+
         'renonces, tu dois lui rendre <b>le double</b> (article L214-1 du code de la consommation). '+
         'Attention : si rien n\'est précisé sur la facture, la loi considère que les sommes '+
         'versées sont des arrhes.'
-      : '<b>Acompte</b> : la vente est ferme des deux côtés. Si la cliente renonce, elle reste '+
-        'tenue du prix ; si tu renonces, tu rembourses ce qui a été versé. C\'est ce qui protège '+
-        'le mieux le travail déjà engagé : annonce-le clairement à ta cliente avant de commencer.';
+      : '<b>Acompte</b> : la vente est ferme des deux côtés. En cas de désistement de l\'autre partie, '+
+        'le prix reste dû ; si tu renonces, tu rembourses ce qui a été versé. C\'est ce qui protège '+
+        'le mieux le travail déjà engagé : annonce-le clairement avant de commencer.';
   }
   majAideVersement();
   if (factureActive(c)){ [inM, inT, inD].forEach(function(x){ x.disabled = true; x.title = "Verrouillé : une facture a été émise."; }); }
@@ -10729,7 +11862,7 @@ function renderCommandeDetail(main, c){
       var ligne = el('<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;'+
         'padding:6px 0;border-bottom:1px solid var(--rule)">'+
         '<span>'+esc(ts ? new Date(ts).toLocaleDateString("fr-FR") : "sans date")+
-        (p.moyen ? ' · '+esc(p.moyen) : '')+(p.annule ? ' · <i>annulé</i>' : '')+'</span>'+
+        (p.moyen ? ' · '+esc(libelleMoyen(p.moyen)) : '')+(p.annule ? ' · <i>annulé</i>' : '')+'</span>'+
         '<span style="display:flex;align-items:center;gap:10px"><b'+(m < 0 ? ' style="color:var(--bad)"' : '')+'>'+esc(eur(m))+'</b></span></div>');
       /* Une erreur de saisie se corrige par une ligne d'annulation datée,
          jamais en effaçant : le compte reste vérifiable. */
@@ -10757,14 +11890,14 @@ function renderCommandeDetail(main, c){
     var dP = cArgent.querySelector("#cmd-p-d").value || aujourdhuiISO();
     var suite = function(){
       c.paiements = c.paiements || [];
-      c.paiements.push({montant:m, moyen:cArgent.querySelector("#cmd-p-moy").value.trim(), date:dP, saisiLe:Date.now()});
+      c.paiements.push({montant:m, moyen:cArgent.querySelector("#cmd-p-moy").value, date:dP, saisiLe:Date.now()});
       journaliser(c, "Règlement reçu : " + eur(m));
       sauverTout(); render(); toast("Règlement de " + eur(m) + " enregistré.");
     };
     /* Garde-fou : un règlement bien plus élevé que ce qui reste dû est
        presque toujours une erreur de frappe. */
     var reste = soldeDu(c);
-    if (m > reste + 0.009) confirmer({titre:"Ce règlement dépasse ce qui reste dû",
+    if (m > reste + 0.009) confirmer({titre:"Ce règlement dépasse ce qui reste à recevoir",
       texte:"Il reste " + eur(reste) + " à payer et tu notes " + eur(m) + ". Vérifie le montant, virgule comprise.",
       bouton:"Enregistrer quand même", annuler:"Corriger"}, suite);
     else suite();
@@ -10775,7 +11908,7 @@ function renderCommandeDetail(main, c){
   if (c.statut === "annulee" && enc > 0){
     var zR = el('<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--rule)">'+
       '<p style="margin:0 0 6px"><b>Commande annulée : ' + esc(eur(enc)) + ' déjà reçus</b></p>'+
-      '<p class="hint" style="margin:0 0 10px">Si tu gardes cette somme (arrhes perdues par la cliente, travail déjà engagé), il n\'y a rien à faire : '+
+      '<p class="hint" style="margin:0 0 10px">Si tu gardes cette somme (arrhes gardées après un désistement, travail déjà engagé), il n\'y a rien à faire : '+
       'elle reste dans ton chiffre d\'affaires. Si tu la rends, note-le ici.</p></div>');
     function rembourser(montant, lib){
       confirmer({titre:"Noter un remboursement de " + eur(montant) + " ?",
@@ -10787,7 +11920,7 @@ function renderCommandeDetail(main, c){
         sauverTout(); render(); toast("Remboursement noté");
       });
     }
-    zR.appendChild(bouton("J'ai remboursé " + eur(enc) + " à la cliente", function(){ rembourser(enc, "remboursement"); }));
+    zR.appendChild(bouton("J'ai remboursé " + eur(enc), function(){ rembourser(enc, "remboursement"); }));
     /* Arrhes et c'est l'artisane qui renonce : la loi impose de rendre le
        double (article L214-1 du code de la consommation). */
     if (c.versement && c.versement.type === "arrhes" && Number(c.versement.montant) > 0){
@@ -10811,32 +11944,26 @@ function renderCommandeDetail(main, c){
         '<div class="tile"><div class="k">Temps prévu</div><div class="v">'+esc(dureeTexte(b.heures*60))+
           '</div><div class="s">'+(Number(c.heuresEstimees)>0?'saisi à la main':'d\'après la fiche')+'</div></div>'+
         '<div class="tile acc '+(b.gainHoraire >= (b.tauxHoraire !== undefined ? b.tauxHoraire : (state.reglages.tauxHoraire||0)) - 0.005 ? "acc-good":"acc-warn")+'">'+
-          '<div class="k">Ce que tu gagnes à l\'heure</div>'+
+          '<div class="k">Gain de l\'heure</div>'+
           '<div class="v '+(b.gainHoraire >= (state.reglages.tauxHoraire||0) ? "good":"warn")+'">'+
           esc(eur(b.gainHoraire))+'</div><div class="s">tu vises '+esc(eur(state.reglages.tauxHoraire))+' / h</div></div>'+
-        '<div class="tile"><div class="k">Prix juste</div><div class="v">'+
+        '<div class="tile"><div class="k">Prix conseillé</div><div class="v">'+
           esc(eur(b.r.prixObjectif))+'</div><div class="s">sur le canal de vente choisi</div></div>'+
       '</div>'+
-      '<label class="f" style="max-width:300px;margin-top:14px"><span>Temps de travail pour cette commande (heures)</span>'+
-      '<input id="cmd-h" type="number" min="0" step="0.25" value="'+(c.heuresEstimees||"")+'" '+
-      'placeholder="'+nb(Math.round(b.heures*4)/4)+'"></label>'+
+      '<div class="f" style="max-width:340px;margin-top:14px"><span>Temps de travail pour cette commande</span>'+champsHeuresMinutes("cmd-h", c.heuresEstimees, b.heures)+'</div>'+
       '<p class="hint">Laisse vide pour utiliser le temps de la fiche. Mets le temps total que demande '+
       'cette pièce (mesuré ou estimé) : il sert au calcul de ton gain à l\'heure et à ton plan de travail.</p>'+
       '</div></div>');
-    cB.querySelector("#cmd-h").addEventListener("input", function(e){
-      c.heuresEstimees = Math.max(0, Number(e.target.value)||0);
-      maj();
-    });
-    cB.querySelector("#cmd-h").addEventListener("change", function(){ setTimeout(render, 0); });
+    brancherHeuresMinutes(cB, "cmd-h", function(h){ c.heuresEstimees = h; maj(); }, function(){ setTimeout(render, 0); });
     main.appendChild(cB);
     if (b.r.prixObjectif > 0 && totalDu(c) > 10 * b.r.prixObjectif)
       main.appendChild(el('<div class="banner" role="status" style="background:var(--warn-soft);border-color:var(--warn);margin-bottom:16px">'+
-        '<p><b>Vérifie le prix convenu.</b> Il est plus de dix fois le prix juste de cette création ('+esc(eur(b.r.prixObjectif))+') : une virgule oubliée ?</p></div>'));
+        '<p><b>Vérifie le prix convenu.</b> Il est plus de dix fois le prix conseillé pour cette création ('+esc(eur(b.r.prixObjectif))+') : une virgule oubliée ?</p></div>'));
     if (b.gainHoraire < (state.reglages.tauxHoraire||0) && totalDu(c) > 0){
       main.appendChild(el('<div class="banner" style="background:var(--warn-soft);border-color:var(--warn);margin-bottom:16px">'+
         '<p><b>À ce prix, tu te paies '+esc(eur(b.gainHoraire))+' de l\'heure</b> au lieu des '+
         esc(eur(state.reglages.tauxHoraire))+' que tu vises. Ce n\'est pas forcément une erreur, '+
-        'mais assure-toi que c\'est un choix. Prix pour atteindre ton objectif : '+
+        'mais assure-toi que c\'est un choix. Prix conseillé : '+
         '<b>'+esc(eur(b.r.prixObjectif))+'</b>.</p></div>'));
     }
   } else {
@@ -10845,11 +11972,8 @@ function renderCommandeDetail(main, c){
     var cH = el('<div class="card" style="margin-bottom:16px"><header><h2>Temps de travail</h2>'+
       '<p>Relie cette commande à une de tes créations (plus haut) pour voir ce qu\'elle te rapporte à l\'heure. '+
       'Sinon, indique au moins le temps qu\'elle demande : il compte dans ton plan de travail.</p></header>'+
-      '<div class="body"><label class="f" style="max-width:300px"><span>Temps de travail pour cette commande (heures)</span>'+
-      '<input id="cmd-h" type="number" min="0" step="0.25" value="'+(c.heuresEstimees||"")+'"></label></div></div>');
-    cH.querySelector("#cmd-h").addEventListener("input", function(e){
-      c.heuresEstimees = Math.max(0, Number(e.target.value)||0); maj();
-    });
+      '<div class="body"><div class="f" style="max-width:340px"><span>Temps de travail pour cette commande</span>'+champsHeuresMinutes("cmd-h", c.heuresEstimees, 0)+'</div></div></div>');
+    brancherHeuresMinutes(cH, "cmd-h", function(h){ c.heuresEstimees = h; maj(); }, null);
     main.appendChild(cH);
   }
 
@@ -10880,7 +12004,7 @@ function renderCommandeDetail(main, c){
 
   /* --- la facture --- */
   var manques = manquesFacture(c);
-  var cF = el('<div class="card" style="margin-bottom:16px"><header><h2>Facture</h2>'+
+  var cF = el('<div class="card" id="cmd-facture" style="margin-bottom:16px"><header><h2>Facture</h2>'+
     '<p>Numérotée à la suite de tes factures, avec les mentions obligatoires. Le numéro commence par un code '+
     'qui n\'appartient qu\'à toi.</p></header><div class="body"></div></div>');
   var bodyF = cF.querySelector(".body");
@@ -10892,7 +12016,7 @@ function renderCommandeDetail(main, c){
     bodyF.appendChild(el('<p style="margin:0">Facture <b>'+esc(c.factureNum)+'</b>, émise le '+esc(dateLisible(c.factureLe))+'.'+
       (c.avoirNum ? ' Annulée par l\'avoir <b>'+esc(c.avoirNum)+'</b> du '+esc(dateLisible(c.avoirLe))+'.' : '')+'</p>'));
     if (factureActive(c)) bodyF.appendChild(el('<p class="hint" style="margin:6px 0 0">Une facture émise ne se modifie plus : '+
-      'la cliente, les prix et l\'acompte sont verrouillés. Pour corriger ou annuler, établis un avoir, puis une nouvelle facture si besoin.</p>'));
+      'le nom, les prix et l\'acompte sont verrouillés. Pour corriger ou annuler, établis un avoir, puis une nouvelle facture si besoin.</p>'));
   } else if (manques.length){
     /* Ce qui manque est dit tout de suite, avec le moyen de le compléter. */
     var zM = el('<div class="manques"><p style="margin:0 0 6px"><b>Pour établir la facture, il manque :</b></p><ul></ul></div>');
@@ -10942,7 +12066,7 @@ function renderCommandeDetail(main, c){
         return;
       }
       var F = instantaneFacture(c);
-      var det = ["Cliente : " + F.client.nom];
+      var det = ["Destinataire : " + F.client.nom];
       F.lignes.forEach(function(l){ det.push(l.d + " : " + eur(l.m)); });
       det.push("Total : " + eur(F.total));
       if ((F.versements || []).length) det.push("Déjà payé : " + eur(F.total - F.solde) + " · reste à régler : " + eur(F.solde));
@@ -11013,7 +12137,7 @@ function renderCommandeDetail(main, c){
     var details = [];
     if (encaisse(c) > 0) details.push("les " + eur(encaisse(c)) + " encaissés sur cette commande disparaîtront de tes indicateurs et de ton chiffre d'affaires");
     confirmer({
-      titre: "Supprimer la commande de " + ((c.client && c.client.nom) || "cette cliente") + " ?",
+      titre: "Supprimer la commande de " + ((c.client && c.client.nom) || "sans nom") + " ?",
       texte: details.length ? "Attention :" : "La commande et tout son historique seront supprimés.",
       details: details,
       bouton: "Supprimer la commande", danger: true
@@ -11050,8 +12174,8 @@ function instantaneFacture(c){
   }
   (c.paiements || []).forEach(function(p){
     var m = Number(p.montant) || 0; if (!m) return;
-    versements.push({lib: m < 0 ? (p.moyen ? p.moyen.charAt(0).toUpperCase() + p.moyen.slice(1) : "Correction")
-                                : "Règlement" + (p.moyen ? " (" + p.moyen + ")" : ""), date: p.date || null, m: m});
+    versements.push({lib: m < 0 ? (p.moyen && p.moyen !== "remboursement" ? "Remboursement (" + libelleMoyen(p.moyen) + ")" : p.moyen === "remboursement" ? "Remboursement" : "Correction")
+                                : "Règlement" + (p.moyen ? " (" + libelleMoyen(p.moyen) + ")" : ""), date: p.date || null, m: m});
   });
   var total = totalDu(c), verse = 0;
   versements.forEach(function(v){ v.m = cts(v.m); verse += v.m; });
@@ -11153,7 +12277,7 @@ function ouvrirDocument(F, fenetre){
 
   if (manque){
     h += '<div class="alerte noprint"><b>Cette facture n\'est pas encore valable.</b> '+
-      'Une facture doit permettre d\'identifier le vendeur. Complète ton nom et ton '+
+      'Une facture doit dire clairement qui vend. Complète ton nom et ton '+
       'adresse dans Réglages → Tes mentions de facture, puis rouvre-la.</div>';
   }
 
@@ -11180,7 +12304,7 @@ function ouvrirDocument(F, fenetre){
 
     '<div class="parties">'+
       '<div class="bloc">'+
-        '<p class="lab">'+(avoir ? 'Cliente' : 'Facturé à')+'</p>'+
+        '<p class="lab">'+(avoir ? 'Établi pour' : 'Facturé à')+'</p>'+
         '<p class="val">'+esc(F.client.nom || "—")+'</p>'+
         (F.client.adresse ? '<p class="sec">'+esc(F.client.adresse)+'</p>' : '')+
         (F.client.siren ? '<p class="sec">SIREN '+esc(F.client.siren)+'</p>' : '')+
@@ -11221,13 +12345,13 @@ function ouvrirDocument(F, fenetre){
       (avoir ? '<p><span class="cle">Avoir</span> annulant la facture n° '+esc(F.ref || '')+' pour la totalité de son montant.</p>' : '')+
       ((F.personnalisee && !F.clientePro)
         ? '<p><span class="cle">Pas de droit de rétractation.</span> Article confectionné selon '+
-          'les spécifications de la cliente : conformément à l\'article L221-28 du code de la '+
+          'les spécifications demandées : conformément à l\'article L221-28 du code de la '+
           'consommation, il n\'ouvre pas de droit de rétractation.</p>'
         : '')+
       (!avoir && F.arrhes
         ? '<p><span class="cle">Arrhes.</span> Les sommes versées à la commande ont la nature '+
-          'd\'arrhes au sens de l\'article L214-1 du code de la consommation : la cliente peut '+
-          'se dédire en les perdant, le vendeur en en restituant le double.</p>'
+          'd\'arrhes au sens de l\'article L214-1 du code de la consommation : la partie qui achète peut '+
+          'se dédire en les perdant, la partie qui vend en restituant le double.</p>'
         : (!avoir && F.acompte
           ? '<p><span class="cle">Acompte.</span> Les sommes versées à la commande ont la nature '+
             'd\'acompte : la vente est ferme et définitive pour les deux parties.</p>'
@@ -11261,22 +12385,22 @@ function renderPatrons(main){
   /* Importer un PDF crée le patron d'un geste : titre tiré du nom du
      fichier, pages et texte remplis. */
   var inPdf = el('<input type="file" accept="application/pdf,.pdf,image/*" multiple style="display:none" aria-label="Importer un patron en PDF">');
-  var bPdf = bouton("Importer un PDF", function(){ inPdf.click(); });
+  var bPdf = bouton("Charger un fichier", function(){ inPdf.click(); });
+  function patronAjoute(np){
+    render();
+    toast("Patron « " + np.titre + " » ajouté à tes patrons.", {fn:function(){ view.patronVu = np.id; render(); }, libelle:"Ouvrir"});
+  }
   inPdf.addEventListener("change", function(){
-    var fichiers = [].slice.call(inPdf.files||[]).filter(function(f){ return estImage(f) || estPdf(f); });
+    var fichiers = [].slice.call(inPdf.files||[]);
     inPdf.value = "";
-    if (!fichiers.length){ toast("Choisis un PDF ou des images (JPEG, PNG…)."); return; }
-    var np = nouveauPatron();
-    importerDansPatron(np, fichiers, bPdf, null, function(){
-      if (!(np.pages||[]).length && !np.texte){ state.patrons = patrons().filter(function(x){ return x !== np; }); sauverTout(); render(); return; }
-      view.patronVu = np.id; aller("patrons", {garderVue:true});
-    });
+    if (!fichiers.length) return;
+    dialoguePatronAjout({fichiers: fichiers, siAjoute: patronAjoute});
   });
   var tete = enTete("Mes patrons",
-    "Tes patrons à toi : ceux que tu as achetés, reçus ou écrits. Ils sont privés : toi seule les vois. "+
+    "Tes patrons à toi : ceux que tu as achetés, reçus ou écrits. Ils sont privés : personne d\'autre ne les voit. "+
     "L'outil les garde lisibles à côté de ton ouvrage, avec le compteur de rangs et le chronomètre.",
-    [bPdf, bouton("+ Ajouter un patron", function(){
-      var np = nouveauPatron(); view.patronVu = np.id; render();
+    [bouton("+ Ajouter un patron", function(){
+      dialoguePatronAjout({siAjoute: patronAjoute});
     }, true)]);
   tete.appendChild(inPdf);
   main.appendChild(tete);
@@ -11289,10 +12413,10 @@ function renderPatrons(main){
   }
 
   main.appendChild(el('<div class="banner"><p><b>Ces patrons sont privés.</b> '+
-    'Ils sont enregistrés dans ton compte et toi seule y as accès'+
+    'Ils sont enregistrés dans ton compte et personne d\'autre n\'y a accès'+
     (bibliothequePartagee ? ', sauf si tu choisis toi-même d\'en partager un, patron par patron' : '')+'. '+
     'Un patron acheté est réservé à ton usage personnel : ne le partage pas. '+
-    'C\'est le travail d\'une créatrice, comme le tien.</p></div>'));
+    'Derrière chaque patron, il y a le travail de quelqu\'un, comme le tien.</p></div>'));
 
   if (!liste.length){
     main.appendChild(etatVide("Aucun patron pour l'instant",
@@ -11300,11 +12424,21 @@ function renderPatrons(main){
       "Tu l'auras sous les yeux avec le compteur de rangs pendant que tu crochètes, et tu pourras "+
       "le relier à ta fiche de coût.",
       [bouton("+ Ajouter un patron", function(){
-        var np = nouveauPatron(); view.patronVu = np.id; render();
+        dialoguePatronAjout({siAjoute: patronAjoute});
       }, true)]));
     return;
   }
 
+  var barrePat = barreTri({cle:"pat", defaut:"recent", sens:-1, quand:function(){ render(); }, options:[
+    ["recent","Ajouté récemment"],["titre","Titre"],["auteur","Créé par"],["pages","Nombre de pages"]]});
+  barrePat.style.marginBottom = "12px";
+  if (liste.length > 1) main.appendChild(barrePat);
+  liste = trierListe(liste, etatTri("pat", "recent", -1), {
+    recent: function(p){ return Number(p.cree) || 0; },
+    titre:  function(p){ return p.titre || ""; },
+    auteur: function(p){ return p.auteur || ""; },
+    pages:  function(p){ return (p.pages || []).length; }
+  });
   var box = el('<div class="pat-lib"></div>');
   liste.forEach(function(p){
     var n = (p.pages||[]).length;
@@ -11321,7 +12455,7 @@ function renderPatrons(main){
     if (!bibliothequePartagee){ box.appendChild(c); return; }
     var w = el('<div class="pcard-wrap"></div>');
     w.appendChild(c);
-    var pied = el('<div class="pcard-pied"><span>'+(p.publie ? '<span class="chip good">partagé</span> visible par les autres utilisatrices' : '<span class="chip neutre">privé</span> toi seule le vois')+'</span></div>');
+    var pied = el('<div class="pcard-pied"><span>'+(p.publie ? '<span class="chip good">partagé</span> visible par les autres membres' : '<span class="chip neutre">privé</span> visible par toi uniquement')+'</span></div>');
     if (!p.publie){
       var bS = bouton("Partager…", function(){ dialoguePartage(p); }); bS.classList.add("sm"); bS.setAttribute("data-role", "partager");
       bS.setAttribute("aria-label", "Partager le patron " + (p.titre || "sans titre") + " dans la bibliothèque");
@@ -11348,13 +12482,13 @@ var LICENCES_BIBLIO = [
   {id:"CC BY 4.0", nom:"Partage libre",
    aide:"Tout usage permis, y compris commercial, en te citant."},
   {id:"CC0", nom:"Je renonce à mes droits",
-   aide:"Chacune en fait ce qu'elle veut, sans même te citer. Irréversible."}
+   aide:"Tout le monde peut en faire ce que bon lui semble, sans même te citer. Irréversible."}
 ];
 
 function renderBibliotheque(main){
   main.appendChild(enTete("Bibliothèque partagée",
-    "Un espace d'échange entre utilisatrices de Crochompte. "+
-    "Chacune publie ce qu'elle a écrit, et en est responsable. Tes patrons à toi restent privés : "+
+    "Un espace d'échange entre membres de Crochompte. "+
+    "Chaque personne publie ce qu'elle a écrit, et en est responsable. Tes patrons à toi restent privés : "+
     "seuls ceux que tu choisis de partager, un par un, apparaissent ici."));
   if (view.lierPatronFiche && view.draft){
     var bLien = el('<div class="banner" style="background:var(--good-soft,#e5f1ea);border-color:var(--good)"><p><b>Choisis un patron pour « '+
@@ -11365,13 +12499,13 @@ function renderBibliotheque(main){
 
   /* Dire les choses une fois, clairement, plutôt que de laisser croire que
      l'outil aurait relu et validé ces patrons. Il ne les a pas vus. */
-  main.appendChild(el('<div class="banner"><p><b>C\'est un partage entre artisanes, pas un catalogue de l\'application.</b> '+
+  main.appendChild(el('<div class="banner"><p><b>C\'est un partage entre membres, pas un catalogue de l\'application.</b> '+
     'Crochompte met l\'espace à disposition : il ne relit pas, ne vérifie pas et ne valide pas ce qui est publié ici. '+
-    'Chaque patron reste le travail et la responsabilité de celle qui l\'a mis en ligne, '+
+    'Chaque patron reste le travail et la responsabilité de la personne qui l\'a mis en ligne, '+
     'y compris pour les droits, la justesse des explications et le résultat obtenu.</p>'+
     '<p class="hint" style="margin-top:8px">Tu reconnais un patron protégé publié sans droit, ou un contenu déplacé ? '+
     'Utilise le bouton <b>Signaler</b> présent sur chaque patron, en expliquant le problème. Chaque signalement est examiné par une personne, '+
-    'qui décide de maintenir ou de retirer le patron et en donne la raison à son autrice.</p></div>'));
+    'qui décide de maintenir ou de retirer le patron et en donne la raison à la personne qui l\'a publié.</p></div>'));
 
   var ong = el('<div class="tabs" style="margin-bottom:16px"></div>');
   ong.appendChild(bouton("Mes patrons", function(){ view.sousPatrons = null; render(); }));
@@ -11410,8 +12544,8 @@ function renderBibliotheque(main){
       zone.appendChild(etatVide(
         view.biblioQ ? "Rien ne correspond à cette recherche" : "La bibliothèque est encore vide",
         view.biblioQ ? "Essaie un autre mot."
-          : "Elle se remplira des patrons que les utilisatrices choisiront de partager. "+
-            "Tu peux être la première : ouvre un de tes patrons et publie-le.",
+          : "Elle se remplira des patrons que les membres choisiront de partager. "+
+            "Lance le mouvement : ouvre un de tes patrons et publie-le.",
         [bouton("Voir mes patrons", function(){ view.sousPatrons = null; render(); })]));
       return;
     }
@@ -11442,9 +12576,9 @@ function renderBibliotheque(main){
         '<p class="lecture" style="white-space:pre-wrap">'+esc(p2.texte)+'</p>'+
         (p2.notes ? '<p class="hint" style="white-space:pre-wrap;margin-top:12px">'+esc(p2.notes)+'</p>' : '')+
         '<div class="savebar" style="margin-top:16px"></div>'+
-        '<p class="hint" style="margin-top:12px">Ce patron est partagé par son autrice sous licence '+
+        '<p class="hint" style="margin-top:12px">Ce patron est partagé, par la personne qui l\'a écrit, sous licence '+
         esc(p2.licence)+'. Respecte-la si tu le republies ou si tu vends ce que tu en fais. '+
-        'Il est publié tel quel par une autre utilisatrice : Crochompte ne l\'a ni relu ni vérifié.</p>'+
+        'Il est publié tel quel par un autre membre : Crochompte ne l\'a ni relu ni vérifié.</p>'+
         '</div></div>');
       var bar = det.querySelector(".savebar");
       var pourFiche = !!(view.lierPatronFiche && view.draft);
@@ -11475,13 +12609,13 @@ function renderBibliotheque(main){
         /* L'autrice voit où en est son patron, et peut contester. */
         var etatP = p2.retire && p2.decision === "retire"
           ? "Retiré de la bibliothèque le " + new Date(p2.decision_le).toLocaleDateString("fr-FR") + " après examen. Motif : " + (p2.decision_motif || "non précisé") + "."
-          : p2.masque ? "Masqué provisoirement : des signalements graves sont en cours d'examen. Les autres utilisatrices ne le voient plus pour l'instant."
+          : p2.masque ? "Masqué provisoirement : des signalements graves sont en cours d'examen. Les autres membres ne le voient plus pour l'instant."
           : p2.en_revue ? "Des signalements sont en cours d'examen. Ton patron reste visible en attendant."
           : p2.decision === "maintenu" ? "Examiné après des signalements et maintenu." : "";
         if (etatP) det.querySelector(".body").insertBefore(el('<div class="manques" style="margin-bottom:12px"><p style="margin:0">'+esc(etatP)+'</p></div>'), det.querySelector(".body").firstChild);
         if (p2.masque || (p2.retire && p2.decision === "retire")){
           bar.appendChild(bouton("Contester", function(){
-            dialogueTexte({titre:"Contester la décision", texte:"Explique pourquoi ton patron devrait rester en ligne (patron original, brouillons datés, autorisation de l'autrice…). Ta demande sera examinée par une personne.",
+            dialogueTexte({titre:"Contester la décision", texte:"Explique pourquoi ton patron devrait rester en ligne (patron original, brouillons datés, autorisation de la personne qui l'a créé…). Ta demande sera examinée par une personne.",
                            champ:"Ton explication", min:10, bouton:"Envoyer ma contestation"}, function(txt){
               bibliothequePartagee.contester(p2.id, txt).then(function(x){ toast(x.erreur || "Ta contestation a été envoyée. Elle sera examinée."); });
             });
@@ -11489,7 +12623,7 @@ function renderBibliotheque(main){
         }
         if (!p2.masque && !p2.retire && !p2.en_revue) bar.appendChild(bouton("Retirer de la bibliothèque", function(){
           confirmer({titre:"Retirer « "+p2.titre+" » de la bibliothèque partagée ?",
-                     texte:"Les autres utilisatrices ne le verront plus. Ta copie personnelle, dans « Mes patrons », n'est pas touchée.",
+                     texte:"Les autres membres ne le verront plus. Ta copie personnelle, dans « Mes patrons », n'est pas touchée.",
                      bouton:"Retirer de la bibliothèque", danger:true}, function(){
             bibliothequePartagee.retirer(p2.id).then(function(x){
               if (x.erreur){ toast(x.erreur); return; }
@@ -11501,7 +12635,7 @@ function renderBibliotheque(main){
         bar.appendChild(bouton("Signaler", function(){
           dialogueTexte({titre:"Signaler ce patron",
             texte:"Ton signalement est examiné par une personne. Un signalement abusif ne fait rien retirer.",
-            choix:{lib:"Ce qui pose problème", options:[["droits","Il reproduit le patron d'une autre créatrice sans son accord"],
+            choix:{lib:"Ce qui pose problème", options:[["droits","Il reproduit le patron de quelqu'un d'autre sans son accord"],
                    ["illicite","Contenu illégal ou haineux"],["dangereux","Instructions dangereuses (jouet pour bébé, par exemple)"],
                    ["trompeur","Titre ou contenu trompeur"],["autre","Autre raison"]]},
             champ:"Explique en quelques mots (où, quoi)", min:10, bouton:"Envoyer le signalement"}, function(txt, motif){
@@ -11537,7 +12671,7 @@ function dialoguePartage(p){
     '<p style="margin:0 0 12px">Seul <b>le texte</b> du patron est publié. Tes pages photographiées restent privées : une page scannée est presque toujours '+
     'la reproduction d\'un patron acheté, qui ne peut pas être partagé.</p>'+
     '<div class="grid2">'+
-      '<label class="f"><span>Nom d\'autrice affiché</span><input id="pb-auteur" type="text" maxlength="60" value="'+esc(p.auteur||"")+'" placeholder="le nom que les autres verront"></label>'+
+      '<label class="f"><span>Signature affichée</span><input id="pb-auteur" type="text" maxlength="60" value="'+esc(p.auteur||"")+'" placeholder="le nom que les autres verront"></label>'+
       '<label class="f"><span>Niveau</span><select id="pb-niv"><option value="">—</option><option value="1">Facile</option><option value="2">Intermédiaire</option><option value="3">Exigeant</option></select></label>'+
     '</div>'+
     '<label class="f" style="margin-top:10px"><span>Matériel (fil, crochet, dimensions finies)</span><input id="pb-mat" type="text" maxlength="200" placeholder="coton DK, crochet 3 mm, 18 cm de haut"></label>'+
@@ -11546,8 +12680,8 @@ function dialoguePartage(p){
     '<label style="display:flex;gap:10px;align-items:flex-start;margin-top:14px;cursor:pointer">'+
       '<input type="checkbox" id="pb-droits" style="margin-top:3px;width:18px;height:18px;flex:none">'+
       '<span>Je certifie avoir écrit ce patron moi-même, ou détenir les droits qui me permettent de le partager. Je sais que publier le patron '+
-      'de quelqu\'un d\'autre sans son accord est une contrefaçon, et que <b>j\'en réponds seule</b> : Crochompte met l\'espace de partage à '+
-      'disposition entre utilisatrices, il ne relit ni ne valide ce qui y est publié.</span></label></div>');
+      'de quelqu\'un d\'autre sans son accord est une contrefaçon, et que <b>la responsabilité m\'en revient entièrement</b> : Crochompte met l\'espace de partage à '+
+      'disposition des membres, il ne relit ni ne valide ce qui y est publié.</span></label></div>');
   var selLic = box.querySelector("#pb-lic"), aide = box.querySelector("#pb-lic-aide");
   LICENCES_BIBLIO.forEach(function(l){ selLic.appendChild(el('<option value="'+esc(l.id)+'">'+esc(l.nom)+'</option>')); });
   function majAide(){ var l = LICENCES_BIBLIO.filter(function(x){ return x.id === selLic.value; })[0]; aide.textContent = l ? l.aide : ""; }
@@ -11555,14 +12689,14 @@ function dialoguePartage(p){
   dialogueChamps({titre:"Partager « " + (p.titre || "Patron sans titre") + " »", large:true, contenu: box, champs: [],
     bouton:"Valider", annuler:"Annuler",
     verifier:function(){
-      if (!box.querySelector("#pb-auteur").value.trim()){ box.querySelector("#pb-auteur").focus(); return "Indique le nom d'autrice à afficher : il sera visible par les autres utilisatrices."; }
+      if (!box.querySelector("#pb-auteur").value.trim()){ box.querySelector("#pb-auteur").focus(); return "Indique la signature à afficher : les autres membres la verront."; }
       if (!box.querySelector("#pb-droits").checked) return "Coche la déclaration de droits pour continuer.";
       return null;
     }}, function(){
     var auteur = box.querySelector("#pb-auteur").value.trim(), lic = selLic.value;
     var licNom = (LICENCES_BIBLIO.filter(function(x){ return x.id === lic; })[0] || {}).nom || lic;
     var recap = el('<div class="partage-recap"><b>'+esc(p.titre || "Patron sans titre")+'</b>par '+esc(auteur)+' · licence : '+esc(licNom)+'</div>');
-    confirmer({titre:"Ce patron va devenir visible par toutes les utilisatrices",
+    confirmer({titre:"Ce patron va devenir visible par tous les membres",
       texte:"Relis-le une dernière fois : une fois partagé, d'autres pourront le lire, le copier et le relier à leurs créations, selon la licence choisie.\n"+
             "Tu confirmes en avoir les droits : ce n'est pas un patron acheté, reçu ou recopié.",
       contenu: recap, bouton:"Confirmer le partage", annuler:"Annuler"}, function(){
@@ -11574,7 +12708,7 @@ function dialoguePartage(p){
       }).then(function(r){
         if (r.erreur){ toast(r.erreur); return; }
         p.publie = true; p.auteur = p.auteur || auteur; sauverTout(); render();
-        toast("Patron partagé. Merci, les autres utilisatrices pourront s'en servir.");
+        toast("Patron partagé. Merci, les autres membres pourront s'en servir.");
       });
     });
   });
@@ -11583,6 +12717,94 @@ function dialoguePartage(p){
 /* Ajoute des fichiers (PDF ou images) à un patron, dans l'ordre choisi.
    Un PDF : toutes ses pages (jusqu'à PDF_PAGES_MAX) et son texte, qui remplit
    « Le texte du patron » s'il est encore vide. */
+/* AJOUTER UN PATRON, SANS CHANGER DE PAGE
+   Une seule fenêtre, depuis la fiche comme depuis « Mes patrons » : on choisit
+   un fichier (PDF ou photos) et/ou on colle le texte, on vérifie le titre et la
+   créatrice, on valide. Rien n'est gardé tant qu'on n'a pas validé ; si on
+   annule, les pages déjà lues sont effacées. o = {fichiers (déjà choisis, facultatif),
+   siAjoute(patron)}. */
+var PATRON_TAILLE_MAX = 40 * 1024 * 1024;   /* 40 Mo par fichier */
+function dialoguePatronAjout(o){
+  o = o || {};
+  var np = {id:"pp_" + uid(), titre:"", auteur:"", origine:"", notes:"", texte:"", pages:[], rang:0, cree:Date.now()};
+  var etat = {charge:false, enCours:false, fichiers:0};
+  var box = el('<div class="pat-ajout"></div>');
+  var inFic = el('<input type="file" accept="application/pdf,.pdf,image/*" multiple style="display:none" aria-label="Choisir un patron en PDF ou en photos">');
+  var bFic = bouton("Choisir un fichier (PDF ou photos)", function(){ inFic.click(); });
+  var zoneEtat = el('<p class="hint pat-etat" role="status" style="margin:6px 0 0">Aucun fichier choisi pour l\'instant.</p>');
+  var taTexte = el('<label class="f" style="margin-top:12px"><span>Ou colle le texte du patron (facultatif)</span>'+
+    '<textarea id="pa-texte" rows="4" maxlength="60000" placeholder="Rang 1 : 6 ms dans un cercle magique…" style="min-height:84px;font-family:inherit;font-size:14px"></textarea></label>');
+  box.appendChild(bFic); box.appendChild(inFic); box.appendChild(zoneEtat); box.appendChild(taTexte);
+  box.appendChild(el('<p class="hint" style="margin:10px 0 0">Ce patron reste <b>privé</b> : personne d\'autre ne le voit. Ajoute uniquement un patron que tu as le droit d\'utiliser '+
+    '(acheté, offert, ou écrit par toi). Un patron acheté ne se partage pas.</p>'));
+
+  function messageFichiers(fichiers){
+    var bons = [], refus = [];
+    fichiers.forEach(function(f){
+      if (!(estImage(f) || estPdf(f))) refus.push("« " + f.name + " » n'est ni un PDF ni une image");
+      else if (f.size > PATRON_TAILLE_MAX) refus.push("« " + f.name + " » pèse plus de 40 Mo");
+      else bons.push(f);
+    });
+    return {bons: bons, refus: refus};
+  }
+  function charger(fichiers){
+    var v = messageFichiers(fichiers);
+    if (!v.bons.length){
+      zoneEtat.textContent = (v.refus.length ? v.refus.join(" ; ") + ". " : "") + "Choisis un PDF ou des photos (JPEG, PNG…).";
+      zoneEtat.classList.add("err"); return;
+    }
+    zoneEtat.classList.remove("err");
+    etat.enCours = true; majBouton();
+    bFic.disabled = true;
+    importerDansPatron(np, v.bons, null, zoneEtat, function(){
+      etat.enCours = false; bFic.disabled = false; zoneEtat.hidden = false;
+      var n = (np.pages || []).length;
+      etat.charge = n > 0 || !!String(np.texte || "").trim();
+      etat.fichiers = v.bons.length;
+      zoneEtat.textContent = (n ? "✓ " + pluriel(n, "page lue", "pages lues") : "Aucune page lisible") +
+        (np.texte && String(np.texte).trim() ? (n ? ", texte récupéré" : "") : "") +
+        (v.refus.length ? ". Ignoré : " + v.refus.join(" ; ") : "") + ".";
+      zoneEtat.classList.toggle("err", !etat.charge);
+      var ti = document.getElementById("dlgc-titre-p");
+      if (ti && !ti.value.trim() && np.titre) ti.value = np.titre;
+      majBouton();
+    });
+  }
+  inFic.addEventListener("change", function(){
+    var fs = [].slice.call(inFic.files || []); inFic.value = "";
+    if (fs.length) charger(fs);
+  });
+  function majBouton(){
+    var ok = document.querySelector(".dlg [data-oui]");
+    if (ok){ ok.disabled = etat.enCours; ok.textContent = etat.enCours ? "Lecture en cours…" : (o.bouton || "Ajouter ce patron"); }
+  }
+  function nettoyer(){ (np.pages || []).forEach(function(pg){ effacerPhoto(pg.photo); }); np.pages = []; }
+  dialogueChamps({titre: o.titre || "Ajouter un patron", texte: o.texte || "", contenu: box, large: true,
+    champs: [
+      {id:"titre-p", lib:"Titre du patron", requis:true, max:120, placeholder:"Lapin Pompon, bonnet torsadé…"},
+      {id:"auteur", lib:"Créé par", max:120, placeholder:"Le nom qui figure sur le patron"},
+      {id:"origine", lib:"Provenance (facultatif)", max:200, placeholder:"Acheté sur…, offert par…, magazine…"}
+    ],
+    bouton: o.bouton || "Ajouter ce patron", annuler: "Annuler",
+    ouvert: function(){ majBouton(); },
+    verifier: function(v){
+      if (etat.enCours) return "Attends la fin de la lecture du fichier.";
+      var texte = taTexte.querySelector("textarea").value.trim();
+      if (!etat.charge && !texte) return "Choisis un fichier (PDF ou photos) ou colle le texte du patron.";
+      if (v["titre-p"].length < 2) return "Donne un titre au patron (2 lettres au moins).";
+      return "";
+    },
+    siAnnule: function(){ nettoyer(); }
+  }, function(v){
+    np.titre = v["titre-p"]; np.auteur = v.auteur; np.origine = v.origine;
+    var t = taTexte.querySelector("textarea").value.trim();
+    if (t) np.texte = (np.texte ? np.texte + "\n\n" : "") + t;
+    patrons().unshift(np); sauverTout();
+    if (o.siAjoute) o.siAjoute(np);
+  });
+  if (o.fichiers && o.fichiers.length) setTimeout(function(){ charger(o.fichiers); }, 60);
+}
+
 function importerDansPatron(p, fichiers, bouton, zoneEtat, fin){
   var libelle = bouton ? bouton.textContent : "";
   if (bouton){ bouton.disabled = true; bouton.textContent = "Import en cours…"; }
@@ -11636,11 +12858,11 @@ function renderPatronDetail(main, p){
   var cId = el('<div class="card" style="margin-bottom:16px"><div class="body">'+
     '<div class="grid2">'+
       '<label class="f"><span>Titre du patron</span><input data-p="titre" type="text" placeholder="Lapin Pompon, bonnet torsadé…"></label>'+
-      '<label class="f"><span>Créatrice du patron</span><input data-p="auteur" type="text" placeholder="Le nom qui figure sur le patron"></label>'+
+      '<label class="f"><span>Créé par</span><input data-p="auteur" type="text" placeholder="Le nom qui figure sur le patron"></label>'+
       '<label class="f"><span>Provenance</span><input data-p="origine" type="text" placeholder="Acheté sur…, offert par…, magazine…"></label>'+
       '<label class="f"><span>Notes</span><input data-p="notes" type="text" placeholder="Crochet 3 mm, j\'ai changé les oreilles…"></label>'+
     '</div>'+
-    '<p class="hint">Note toujours la créatrice : c\'est elle qui a fait le travail, et tu en auras '+
+    '<p class="hint">Note toujours qui l\'a créé : c\'est son travail, et tu en auras '+
     'besoin le jour où tu voudras savoir si tu as le droit de vendre ce que tu fabriques avec.</p>'+
     '</div></div>');
   ["titre","auteur","origine","notes"].forEach(function(k){
@@ -11650,6 +12872,14 @@ function renderPatronDetail(main, p){
     var k = e.target.getAttribute("data-p"); if (!k) return;
     p[k] = e.target.value; sauver();
   });
+  var verifPat = attacherVerif(cId, [
+    {sel:'[data-p="titre"]', type:"texte", requis:true, min:2, max:120, msgRequis:"Donne un titre au patron pour le retrouver."},
+    {sel:'[data-p="auteur"]', type:"texte", min:2, max:120},
+    {sel:'[data-p="origine"]', type:"texte", max:200},
+    {sel:'[data-p="notes"]', type:"texte", max:400}
+  ]);
+  cId.querySelector(".body").appendChild(el('<div style="margin-top:12px"></div>')).appendChild(
+    barreEnregistrer({verif: verifPat, libelle: "Enregistrer le patron", message: "Patron enregistré ✓", surOk: function(){ delete p.brouillon; }}));
   main.appendChild(cId);
 
   /* --- compteur de rangs --- */
@@ -11726,7 +12956,7 @@ function renderPatronDetail(main, p){
   if (bibliothequePartagee){
     main.appendChild(el('<p class="hint" style="margin:-4px 0 16px">'+
       (p.publie ? '<b>Ce patron est partagé dans la bibliothèque.</b> Pour le retirer : onglet « Bibliothèque partagée », ouvre-le, puis « Retirer de la bibliothèque ».'
-                : '<b>Ce patron est privé</b> : toi seule le vois. Pour le partager avec les autres utilisatrices, reviens à « Mes patrons » et touche « Partager… » sous ce patron.')+'</p>'));
+                : '<b>Ce patron est privé</b> : personne d\'autre ne le voit. Pour le partager avec les autres membres, reviens à « Mes patrons » et touche « Partager… » sous ce patron.')+'</p>'));
   }
 
   /* --- rattachement à une création --- */
@@ -11838,7 +13068,7 @@ function demarrerVoix(onPlus, onMoins, badge){
          en boucle (le micro s'allumerait et s'éteindrait sans fin). */
       if (++echecsReseau >= 3){
         arreterVoix();
-        toast(ev.error === "network" ? "Le comptage à la voix a besoin d'internet sur ce navigateur. Compte en touchant l'écran, ou réessaie une fois connectée."
+        toast(ev.error === "network" ? "Le comptage à la voix a besoin d'internet sur ce navigateur. Compte en touchant l'écran, ou réessaie dès que la connexion revient."
                                      : "Le micro ne répond pas. Vérifie qu'aucune autre application ne l'utilise, puis réessaie.");
       }
     }
@@ -11915,7 +13145,7 @@ function compteurMainsLibres(obj, apresChangement){
   var aide = el('<p class="hint" style="margin-top:10px">'+
     (voixDisponible()
       ? 'Trois façons d\'avancer sans lâcher ton crochet : toucher la grande zone du '+
-        'bout du doigt, dire <b>« plus »</b> ou <b>« suivant »</b>, ou <b>« moins »</b> si tu t\'es trompée. '+
+        'bout du doigt, dire <b>« plus »</b> ou <b>« suivant »</b>, ou <b>« moins »</b> en cas d\'erreur. '+
         'Tant que le micro est allumé, l\'écran ne s\'éteint pas.'
       : 'Touche la grande zone pour compter un rang. La commande vocale n\'est pas '+
         'disponible sur cet appareil : touche la grande zone pour compter.')+

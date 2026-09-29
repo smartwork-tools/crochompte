@@ -16,10 +16,14 @@ const {graine} = require('./aide.js');
   const pdf = path.join(__dirname, 'patron-test.pdf');
   // 1. Mes patrons → « Importer un PDF » crée le patron
   await p.click('#nav >> text=Mes patrons'); await p.waitForTimeout(300);
-  const [fc] = await Promise.all([p.waitForEvent('filechooser'), p.click('button:has-text("Importer un PDF")')]);
+  await p.click('button:has-text("+ Ajouter un patron")'); await p.waitForTimeout(250);
+  const [fc] = await Promise.all([p.waitForEvent('filechooser'), p.click('.dlg button:has-text("Choisir un fichier")')]);
   await fc.setFiles(pdf);
-  await p.waitForFunction(()=> (window.CrochomptePont.lire().patrons||[]).some(x=>(x.pages||[]).length===3), null, {timeout:30000});
-  await p.waitForTimeout(500);
+  /* V42 : le fichier se charge dans une fenêtre, on vérifie puis on valide */
+  await p.waitForFunction(()=> { const o=document.querySelector('.dlg [data-oui]'); return o && !o.disabled && /^Ajouter ce patron/.test(o.textContent) && /3 pages lues/.test(document.querySelector('.dlg').textContent); }, null, {timeout:30000});
+  R.titre_prerempli = (await p.inputValue('#dlgc-titre-p')) === 'patron-test';
+  await p.click('.dlg [data-oui]'); await p.waitForTimeout(500);
+  await p.locator('.pcard').first().click(); await p.waitForTimeout(500);
   const pat = await p.evaluate(()=> window.CrochomptePont.lire().patrons[0]);
   R.patron_cree = pat.titre === 'patron-test';
   R.trois_pages = pat.pages.length === 3;

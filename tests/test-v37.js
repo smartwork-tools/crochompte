@@ -48,7 +48,7 @@ const auj = () => { const d = new Date(); return d.getFullYear()+'-'+String(d.ge
 
     /* 2. Stock : récapitulatif, alerte d'improbabilité, annulation exacte */
     await onglet(p, 'Matières');
-    await p.getByRole('button', {name:'Stock et mouvements'}).click(); await p.waitForTimeout(200);
+    await p.getByRole('button', {name:'Historique du stock'}).click(); await p.waitForTimeout(200);
     const mid = await p.evaluate(()=>document.querySelector('#mv-mid').value);
     const avant = (await lire(p)).matieres.find(m=>m.id===mid);
     await p.fill('#mv-q', '150'); await p.fill('#mv-p', '810');
@@ -106,7 +106,7 @@ const auj = () => { const d = new Date(); return d.getFullYear()+'-'+String(d.ge
     /* prérequis visibles et devis bloqué */
     await onglet(p, 'Commandes');
     await p.locator('#main tr', {hasText:'Devisée'}).getByRole('button', {name:/^Ouvrir la commande/}).click(); await p.waitForTimeout(250);
-    R.facture_devis_bloquee = (await p.textContent('.manques')).includes("l'accord de la cliente") && await p.isDisabled('button:has-text("Établir la facture")');
+    R.facture_devis_bloquee = (await p.textContent('.manques')).includes("l'accord sur le devis") && await p.isDisabled('button:has-text("Établir la facture")');
     /* registre : 2 documents, et il survit à une remise à zéro */
     await onglet(p, 'Commandes');
     R.registre_liste = (await p.locator('#main tr', {hasText:'Avoir'}).count()) >= 1 && (await p.textContent('#main')).includes('Registre des factures');
@@ -131,7 +131,7 @@ const auj = () => { const d = new Date(); return d.getFullYear()+'-'+String(d.ge
     await p.selectOption('tr[data-pid="pc"] select[data-role="com"]', 'vendu'); await p.waitForTimeout(300);
     let s4 = await lire(p);
     R.piece_reliee_commande = s4.pieces[0].cmdId === 'k9' && s4.commandes[0].pieceId === 'pc';
-    await onglet(p, 'Indicateurs');
+    await onglet(p, 'Mes chiffres');
     R.pas_de_double_comptage = /Encaissé\s*40,00/.test((await p.textContent('#main')).replace(/ | /g,' '));
     R.vente_figee = !!s4.pieces[0].fige && s4.pieces[0].fige.tempsMesure === true;
     const gainAvant = s4.pieces[0].fige.gainHoraire;
@@ -184,7 +184,7 @@ const auj = () => { const d = new Date(); return d.getFullYear()+'-'+String(d.ge
         versement:{montant:0.47, date:arg, type:'acompte'}, paiements:[{montant:0.6, date:arg}], dateCommande:new Date().toISOString(),
         canal:'direct', note:'', variantes:'', libelle:'', datePromise:arg}]; }, auj());
     await onglet(p, 'Matières');
-    await p.getByRole('button', {name:'Stock et mouvements'}).click(); await p.waitForTimeout(200);
+    await p.getByRole('button', {name:'Historique du stock'}).click(); await p.waitForTimeout(200);
     R.v04_clavier_decimal = (await p.getAttribute('#mv-q', 'inputmode')) === 'decimal';
     await onglet(p, 'Commandes');
     await p.locator('#main tr', {hasText:'Wanda'}).getByRole('button', {name:/^Ouvrir la commande/}).click(); await p.waitForTimeout(250);
@@ -215,7 +215,7 @@ const auj = () => { const d = new Date(); return d.getFullYear()+'-'+String(d.ge
     await ecrire(p, function(){ s.reglages.heuresIndirectesMois = 0; s.reglages.tauxHoraire = 18; s.creations[1].temps = {prep:17,crochet:233,assemb:31,finition:11,emball:7}; });
     await p.locator('.crea-card', {hasText:'Bonnet côtelé'}).locator('.crea-id').click(); await p.waitForTimeout(300);
     const objTxt = await p.textContent('#r-obj');
-    const m13 = objTxt.replace(/\u202f|\u00a0/g,' ').match(/vendre ([0-9 ]+,[0-9]{2}) €/);
+    const m13 = objTxt.replace(/\u202f|\u00a0/g,' ').match(/Prix conseillé : ([0-9 ]+,[0-9]{2}) €/);
     if (m13){ await p.fill('#f-prix', m13[1].replace(/ /g,'')); await p.waitForTimeout(250); }
     R.v13_prix_juste_suffit = !!m13 && (await p.textContent('#r-chip')).includes("Tu t'y retrouves");
     /* V-27 : pas de perte sur les articles comptés à l'unité */

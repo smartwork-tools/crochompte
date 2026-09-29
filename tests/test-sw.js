@@ -35,7 +35,7 @@ function serveur(port){
   R.en_cache = await p.evaluate(async ()=>{
     const k = await caches.keys(); if (!k.length) return [];
     const c = await caches.open(k[0]);
-    const l = ['index.html','app.js?v=41','sync.js','vendor/supabase/supabase.min.mjs'];
+    const l = ['index.html','app.js?v=46','sync.js','vendor/supabase/supabase.min.mjs'];
     const ok = await Promise.all(l.map(u=>c.match(u).then(r=>!!r)));
     return ok.every(Boolean);
   });
@@ -43,7 +43,7 @@ function serveur(port){
   await ctx.setOffline(true);
   await p.reload(); await p.waitForTimeout(2500);
   const texte = await p.textContent('#main');
-  R.accueil_hors_ligne = texte.includes('Bonjour') || texte.includes('Pour bien démarrer');
+  R.accueil_hors_ligne = texte.includes('Bonjour') || texte.includes('Pour bien démarrer') || texte.includes('Qu\'est-ce qui te ressemble');
   R.pas_ecran_connexion = !(await p.locator('#sy-c-identifiant').count());
   R.erreurs = errs;
   console.log(JSON.stringify(R,null,1));

@@ -702,7 +702,7 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
          sur un ordinateur partagé, la personne suivante ne doit ni le voir,
          ni le récupérer dans son propre compte. Tout est déjà en ligne. */
       if (pont.oublierAtelier) pont.oublierAtelier();
-      pont.toast("Tu es déconnectée.");
+      pont.toast("Session fermée.");
       peindre();
     }, function(e){
       deconnexionEnCours = false;
@@ -733,6 +733,17 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
 
   /* Les messages d'erreur de Supabase arrivent en anglais et en termes
      techniques : on les traduit en ce que la personne peut faire. */
+  /* Loisir / quelques ventes → amateur ; gros volume → entreprise ; sinon artisanat. */
+  function typeActiviteDuProfil(){
+    try {
+      var st = window.CrochomptePont && window.CrochomptePont.lire ? window.CrochomptePont.lire() : null;
+      var pt = st && st.reglages ? st.reglages.profilType : "";
+      if (pt === "loisir" || pt === "quelques") return "amateur";
+      if (pt === "artisan") return "entreprise";
+      if (pt) return "artisanat";
+    } catch (e) {}
+    return "";
+  }
   function traduire(m){
     var t = String(m || "");
     /* Messages des fonctions serveur, déjà en français : on les aligne sur le
@@ -748,7 +759,7 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
     if (/weak|pwned|compromised/i.test(t)) return "Ce mot de passe est trop courant. Choisis-en un plus difficile à deviner.";
     if (/rate limit|too many/i.test(t)) return "Trop de tentatives en peu de temps. Patiente quelques minutes, puis réessaie.";
     if (/network|fetch|failed to/i.test(t)) return "Impossible de joindre le serveur. Vérifie ta connexion internet, puis réessaie.";
-    if (/jwt|session|not authenticated|expired/i.test(t)) return "Ta connexion a expiré. Déconnecte-toi, puis reconnecte-toi.";
+    if (/jwt|session|not authenticated|non authentifi|expired/i.test(t)) return "Ta connexion a expiré. Déconnecte-toi, puis reconnecte-toi.";
     if (/atelier_trop_gros/.test(t)) return "Tes données dépassent la taille permise (25 Mo) : supprime des patrons au texte très long, puis réessaie.";
     /* Un message technique en anglais n'aide personne : on dit quoi faire. */
     return "Le serveur n'a pas pu enregistrer ta demande. Réessaie dans un instant ; si cela continue, écris-nous à bonjour@crochompte.com.";
@@ -933,13 +944,8 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
             champ({id:"sy-p-ville", label:"Ville", auto:"address-level2", max:100, cap:"words", val:etat.brouillonProfil.ville})+
             champ({id:"sy-p-pays", label:"Pays", auto:"country-name", max:100, cap:"words", val:etat.brouillonProfil.pays})+
           '</div>'+
-          '<label class="f" style="max-width:420px;margin-top:12px" for="sy-p-activite"><span>Mon activité</span>'+
-          '<select id="sy-p-activite">'+
-            '<option value=""' + (!etat.brouillonProfil.typeActivite ? ' selected' : '') + '>Non précisée</option>'+
-            '<option value="amateur"' + (etat.brouillonProfil.typeActivite === "amateur" ? ' selected' : '') + '>Loisir</option>'+
-            '<option value="artisanat"' + (etat.brouillonProfil.typeActivite === "artisanat" ? ' selected' : '') + '>Artisane (activité déclarée ou en cours)</option>'+
-            '<option value="entreprise"' + (etat.brouillonProfil.typeActivite === "entreprise" ? ' selected' : '') + '>Petite entreprise</option>'+
-          '</select></label>'+
+          /* Le type d'activité suit le profil choisi dans Réglages › Mon activité :
+             plus de second réglage du même nom ici. */
           '<div class="et-act" style="margin-top:14px">'+
             '<button type="submit" class="btn" id="sy-p-valider">Enregistrer mes informations</button>'+
           '</div></form>'+
@@ -1007,7 +1013,7 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
         sb.auth.updateUser({password: p1}).then(function(r){
           if (r.error){ peindre({erreur: traduire(r.error.message), champ:"#sy-np1"}); return; }
           etat.recuperation = false;
-          pont.toast("Mot de passe modifié. Tu es connectée.");
+          pont.toast("Mot de passe modifié. Ta session est ouverte.");
           demarrerSession(etat.session, false);
         });
       });
@@ -1216,7 +1222,7 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
         var nom       = (q("#sy-p-nom").value || "").trim();
         var ville     = (q("#sy-p-ville").value || "").trim();
         var pays      = (q("#sy-p-pays").value || "").trim();
-        var activite  = q("#sy-p-activite").value || "";
+        var activite  = typeActiviteDuProfil() || etat.brouillonProfil.typeActivite || "";
         etat.brouillonProfil = {prenom: prenom, nom: nom, dateNaissance: "", ville: ville, pays: pays, typeActivite: activite};
         occupe(q("#sy-p-valider"), "Enregistrement…");
         sb.rpc("modifier_mon_profil", {
@@ -1271,7 +1277,7 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
               pont.toast("Mot de passe modifié. Tes autres appareils devront se reconnecter.");
               peindre({complet:true, garderFocus:true});
             });
-          }, function(){ rendre("Pas de connexion internet : réessaie une fois connectée."); });
+          }, function(){ rendre("Pas de connexion internet : réessaie dès qu'elle revient."); });
         });
       });
 
@@ -1399,8 +1405,9 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
       peindre();
       return synchroniser();
     }).then(function(ok){
-      if (annoncer) pont.toast(ok ? "Tu es connectée. Ton atelier est à jour."
-        : "Tu es connectée. La mise à jour de ton atelier n'a pas abouti : nouvel essai automatique dans un instant.");
+      /* Quand tout va bien, on ne dit rien : l'écran ouvert suffit. Un message
+         n'apparaît que si la mise à jour de l'atelier a échoué. */
+      if (annoncer && !ok) pont.toast("La mise à jour de ton atelier n'a pas abouti : nouvel essai automatique dans un instant.");
       peindre({garderFocus:true});
       traiterSuppressions();
       photosAuDemarrage();
@@ -1466,7 +1473,7 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
       if (!p.droits) return Promise.resolve({erreur:"La déclaration de droits est obligatoire."});
       /* Le pseudo sert à se connecter : il n'est jamais publié à la place
          d'un nom d'autrice que la personne n'a pas choisi. */
-      if (!String(p.auteur||"").trim()) return Promise.resolve({erreur:"Indique le nom d'autrice à afficher avec ce patron."});
+      if (!String(p.auteur||"").trim()) return Promise.resolve({erreur:"Indique la signature à afficher avec ce patron."});
       return sb.from("patrons_publics").insert({
         user_id: etat.session.user.id,
         titre: String(p.titre||"").trim(),
@@ -1517,7 +1524,7 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
     var m = String(brut||"");
     if (m.indexOf("patrons_publics_contenu") !== -1)
       return "Il manque quelque chose : un titre de 2 à 120 caractères, "+
-             "un nom d'autrice, et un patron d'au moins 80 caractères.";
+             "une signature, et un patron d'au moins 80 caractères.";
     if (m.indexOf("patrons_publics_droits") !== -1)
       return "La déclaration de droits est obligatoire.";
     if (m.indexOf("patrons_publics_licence") !== -1)
@@ -1525,7 +1532,7 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
     if (m.indexOf("patron_retire_republie") !== -1)
       return "Ce patron a été retiré de la bibliothèque après examen : il ne peut pas être republié tel quel.";
     if (m.indexOf("auteur_pseudo_autre") !== -1)
-      return "Ce nom d'autrice est le pseudo d'une autre utilisatrice : choisis ton pseudo ou ton propre nom de plume.";
+      return "Cette signature est déjà le pseudo de quelqu'un d'autre : choisis ton pseudo ou ton propre nom de plume.";
     if (m.indexOf("relation") !== -1 && m.indexOf("does not exist") !== -1)
       return "La bibliothèque partagée n'est pas encore installée sur le serveur "+
              "(schema-patrons-publics.sql à exécuter dans Supabase).";

@@ -108,7 +108,7 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
 
     /* 8. Achat en lots : 3 lots remplissent la quantité */
     await dans(p, function(){ aller('stock'); });
-    await p.getByRole('button', {name:'Stock et mouvements'}).click(); await p.waitForTimeout(200);
+    await p.getByRole('button', {name:'Historique du stock'}).click(); await p.waitForTimeout(200);
     const r8 = await dans(p, function(){ var m = matiere(document.querySelector('#mv-mid').value); return {c: m.contenance}; });
     if (r8.c > 1){
       await p.fill('#mv-lots', '3'); await p.waitForTimeout(150);
