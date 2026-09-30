@@ -823,6 +823,30 @@ if (window.top !== window.self){
   td.moins-cher{background:var(--good-soft);}
   td.moins-cher input{border-color:var(--good);}
   .lien-mini{appearance:none;background:none;border:0;padding:0;font:inherit;color:var(--primary);text-decoration:underline;cursor:pointer;}
+  /* V53 — recherche tolérante, couleurs, formulaire adaptatif */
+  .note-rech{margin:4px 0 12px;padding:8px 12px;border-radius:8px;background:var(--primary-soft);color:var(--ink);font-size:13.5px;}
+  .note-rech .lien-mini{font-weight:600;}
+  .matrow-coul{display:flex;align-items:center;gap:8px;margin:-2px 0 4px 10px;font-size:13px;color:var(--muted);}
+  .matrow-coul select{max-width:340px;font-size:13px;padding:4px 8px;}
+  .nm-depart{border:1px dashed var(--rule-strong);border-radius:10px;padding:10px 14px 12px;margin:14px 0 0;}
+  .nm-depart legend{font-size:13px;font-weight:600;padding:0 6px;color:var(--muted);}
+  .case{display:inline-flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;}
+  .case input{width:18px;height:18px;}
+  .nm-case .case{min-height:40px;}
+  label.f > span.nm-cont{display:flex;gap:6px;align-items:center;margin:0;font-size:inherit;color:inherit;font-weight:inherit;}
+  label.f > span.case{display:flex;margin:0;font-size:14px;color:var(--ink);font-weight:400;}
+  .nm-cont input{flex:1;min-width:0;}
+  .nm-cont select{width:auto;min-width:72px;flex:none;}
+  .nm-cont .u{flex:none;color:var(--muted);font-size:14px;padding:0 4px;}
+  .nm-case .case{display:flex;min-height:42px;white-space:nowrap;}
+  .dlg-recap ul{margin:6px 0 0;padding-left:20px;}
+  .dlg-recap li{margin:3px 0;}
+  .dlg-recap .recap-t{margin:0;font-weight:600;}
+  .recap-alerte{margin:10px 0 0;padding:8px 10px;border-radius:8px;background:var(--warn-soft);color:var(--warn);font-weight:600;}
+  tr.sous-var td{border-top:0;padding-top:2px;padding-bottom:4px;font-size:13px;color:var(--muted);}
+  tr.sous-var .retrait{padding-left:16px;}
+  .coul-t input[type=text]{min-width:120px;}
+  .champ-coul .grid2{margin-top:8px;}
   .marges-dl{margin:0;display:grid;grid-template-columns:1fr auto;gap:2px 14px;}
   .marges-dl dt{color:var(--ink);margin-top:6px;}
   .marges-dl dd{margin:6px 0 0;text-align:right;font-weight:600;font-variant-numeric:tabular-nums;}
@@ -1053,7 +1077,7 @@ if (window.top !== window.self){
      Sans ce fichier (ou s'il ne se charge pas), rien ne change : l'objet
      global reste absent et l'application démarre hors ligne, comme avant. -->
 <script src="config.js" onerror="console.info('Crochompte : pas de config.js, mode hors ligne')"></script>
-<script src="app.js?v=46"></script>
+<script src="app.js?v=47"></script>
 
 <!-- ═══ Comptes et synchronisation — facultatifs quand config.js est absent ═══
      Sans config.js, l'application fonctionne hors ligne, exactement comme la

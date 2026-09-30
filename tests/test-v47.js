@@ -37,7 +37,8 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     R.prix_prerempli = (await p.inputValue('#nc-prix')) === '32';
     await p.fill('#dlgc-nom', 'Sam'); await p.selectOption('#nc-cid', 'c2'); await p.waitForTimeout(100);
     R.prix_suit_creation = (await p.inputValue('#nc-prix')) === '28';
-    await p.fill('#nc-date', '2026-12-20'); await p.click('.dlg [data-oui]'); await p.waitForTimeout(400);
+    await p.fill('#nc-date', '2026-12-20'); await p.click('.dlg [data-oui]'); await p.waitForTimeout(200);
+    await p.click('.dlg [data-oui]'); await p.waitForTimeout(400);   /* V53 : récapitulatif */
     const c1 = await dans(p, function(){ var c = commandes()[0]; return {nom:c.client.nom, cid:c.cid, prix:c.prixConvenu, date:c.datePromise, st:c.statut, accord:!!c.accordLe, brouillon:!!c.brouillon, vue:view.cmdVue === c.id}; });
     R.commande_creee = c1.nom === 'Sam' && c1.cid === 'c2' && c1.prix === 28 && c1.date === '2026-12-20' && c1.st === 'acceptee' && c1.accord && !c1.brouillon && c1.vue;
     /* 2. frise et bouton d'étape */

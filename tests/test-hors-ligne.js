@@ -44,6 +44,7 @@ const R = {};
   await p.waitForTimeout(400);
   await p.fill('#f-nom', 'Bonnet du marche c-marche');
   await p.click('button:has-text("Ajouter à mes créations")');
+  await p.waitForTimeout(200); await p.click('.dlg [data-oui]');   /* V53 : récapitulatif avant l'ajout */
   await p.waitForTimeout(700);
   R.travail_enregistre = await p.evaluate(()=>
     (JSON.parse(localStorage.getItem('crochompte-v1')).creations||[]).some(c=>/c-marche/.test(c.nom||'')));

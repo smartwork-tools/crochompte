@@ -40,7 +40,8 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     const avant = await dans(p, function(){ var m = matiere(window.__mid); return {stock:Number(m.stock)||0, cont:m.contenance, prix:m.prix}; });
     await ligne.getByRole('button', {name:"J'ai acheté"}).click(); await p.waitForTimeout(250);
     R.dialogue_achat = (await p.locator('.dlg #am-n').count()) === 1 && /en stock/.test(await p.textContent('#am-aide'));
-    await p.fill('#am-n', '2'); await p.fill('#am-p', '7'); await p.click('.dlg [data-oui]'); await p.waitForTimeout(400);
+    await p.fill('#am-n', '2'); await p.fill('#am-p', '7'); await p.click('.dlg [data-oui]'); await p.waitForTimeout(200);
+    await p.click('.dlg [data-oui]'); await p.waitForTimeout(400);   /* V53 : récapitulatif */
     const apres = await dans(p, function(){ var m = matiere(window.__mid); return {stock:Number(m.stock)||0, prix:m.prix, indic:m.prixIndicatif, mv:(m.mouv||[])[0]}; });
     R.achat_note = Math.abs(apres.stock - (avant.stock + 2 * avant.cont)) < 0.001 && apres.mv && apres.mv.t === 'entree' && Math.abs(apres.mv.p - 7) < 0.001 && !apres.indic && Math.abs(apres.prix - 3.5) < 0.001;
 

@@ -87,6 +87,44 @@ Dernière mise à jour : V39 (28 septembre 2026).
   pour tous les postes (`tempsSaisi`), refige la vente. Relancer le chrono
   efface la marque.
 
+## 0.5 Matières : formulaire par catégorie, couleurs, outils, recherche (V53)
+
+- **Le formulaire « Ajouter une matière » suit la catégorie** choisie en premier (`FORM_MAT`).
+  Fil : prix d'une pelote, poids (g ou m), métrage, composition, grosseur, crochet conseillé.
+  Rembourrage : prix du sac, poids, composition, norme EN 71. Accessoires et finitions : prix du
+  lot, nombre dans le lot, unité, taille, matériau, norme EN 71 (accessoires). Outils : type
+  d'outil, diamètre (seulement pour un crochet), matériau, marque, prix d'un outil.
+  Changer de catégorie garde le nom et le prix déjà tapés. Seuls nom, prix et contenance servent
+  au calcul.
+- **Catégorie « Outils »** (`outil`) : un outil ne se consomme pas. Il n'est pas proposé dans les
+  fiches (sélecteur de matière), il ne compte ni dans la valeur du stock ni dans l'inventaire des
+  matières ; son achat relève des frais fixes. Un outil sans nom prend « Crochet 4 mm »
+  (type + diamètre).
+- **Tailles de crochet** : de 0,5 mm (acier, dentelle) à 30 mm (`CROCHETS`).
+- **Couleurs et bains** (`m.variantes` = `{id, coloris, bain, stock}`) : une matière = un format
+  (« Laine X 50 g » et « Laine X 100 g » sont deux matières). Chaque couleur (et chaque bain d'une
+  couleur) a son stock. `m.stock` reste le total ; la part non rattachée à une couleur est
+  « sans couleur précisée » (`stockLibre`). Un mouvement porte `vid` (couleur) et `vav` (stock de
+  la couleur avant) : l'annulation remet aussi la couleur. Un inventaire d'une couleur ne change
+  que cette couleur ; l'inventaire « sans couleur précisée » ne touche pas les couleurs.
+  L'ancien champ texte « Coloris / bain » devient la première couleur, avec tout le stock.
+- **Fabrication** : la couleur retirée est celle choisie sur la ligne de la fiche (`l.vid`) ; une
+  matière à une seule couleur (et sans stock sans couleur) n'en demande pas ; sinon, quand la pièce
+  passe en « Terminée », rien n'est retiré pour ce fil tant que la couleur n'est pas choisie
+  (`p.couleursAttente`) : une boîte la demande, et « À faire » et le stock le rappellent. Une pesée
+  s'applique sur la même couleur (`p.couleurs`).
+- **Mes fils par couleur** (onglet Historique du stock) : tous les fils, couleur par couleur, en
+  pelotes et en grammes, avec le crochet conseillé.
+- **Recherche tolérante** (`rechercheFloue`, partout où l'on cherche : créations, types
+  d'ouvrage, matières, catalogue, sélecteur, commandes, fils par couleur, bibliothèque partagée) :
+  accents, majuscules et ponctuation ignorés ; une faute par mot de 4 à 6 lettres, deux au-delà.
+  Les résultats exacts d'abord ; s'il n'y en a pas, les plus proches, avec « Tu voulais dire … ? »
+  cliquable.
+- **Confirmation avant chaque ajout** : matière (formulaire, catalogue, sélecteur), achat,
+  mouvement de stock, couleurs, fournisseur, commande, création. Un récapitulatif dit ce qui va
+  être enregistré ; « Corriger » revient au formulaire sans rien perdre ; un doublon de nom est
+  signalé.
+
 ## 1. Vocabulaire
 
 ### 1.0 Un seul nom par notion, et une écriture pour tout le monde (V43)
