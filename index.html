@@ -19,6 +19,7 @@ if (window.top !== window.self){
 <meta name="theme-color" content="#0f5f57">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" href="icones/favicon-48.png">
+<script>try{var t=localStorage.getItem("crochompte-theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}</script>
 <link rel="apple-touch-icon" href="icones/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-title" content="Crochompte">
 <title>Crochompte</title>
@@ -1037,6 +1038,66 @@ if (window.top !== window.self){
     border:1px solid var(--rule);border-top:0;border-radius:0 0 12px 12px;padding:8px 14px;background:var(--surface-2);font-size:12.5px;color:var(--muted);}
   .partage-recap{margin:0 0 10px;padding:10px 12px;border-radius:10px;background:var(--surface-2);font-size:13.5px;}
   .partage-recap b{display:block;margin-bottom:4px;}
+  /* ═══ V54 — un seul système visuel ═══
+     Trois tailles de titre (page, carte, sous-partie) ; les titres « vitrine »
+     de l'Accueil et du portail restent à part. Tous les chiffres ont la même
+     largeur : un montant ne fait plus bouger la ligne en changeant. */
+  body{font-variant-numeric:tabular-nums;}
+  .pagehead h1,.cmd-tete h1{font-size:24px;line-height:1.2;}
+  .reg-tete h2,.card > header h2,.sechead h2,.vide h2,.crea-id h2,.depart-tete h2,details.registre > summary h2,.dlg h2{font-size:18px;line-height:1.3;}
+  .dep h3,.dep.fait h3,.mcard h3,.trow h3,.pcard h3,.reg-bloc h3,.reprise .r-main h3{font-size:15px;}
+  .preuve .row span:last-child,.preuve .big{font-family:inherit;font-weight:600;}
+  .preuve .big{font-weight:700;}
+  :root{--hero-warn:#f3d58a;}
+  .reprise .r-liste b.warn{color:var(--hero-warn);}
+  /* Verdicts : une seule famille de couleurs, partout. */
+  .verdict-ok{color:var(--good);} .verdict-moyen{color:var(--warn);} .verdict-perte{color:var(--bad);}
+  /* Aide « ? » */
+  .aide-q{appearance:none;display:inline-grid;place-items:center;width:18px;height:18px;margin-left:6px;padding:0;border-radius:50%;
+    border:1px solid var(--rule-strong);background:var(--surface);color:var(--primary-ink);font:inherit;font-size:11.5px;font-weight:700;line-height:1;cursor:pointer;vertical-align:1px;}
+  .aide-q:hover,.aide-q:focus-visible{background:var(--primary-soft);border-color:var(--primary);}
+  .aide-ex{margin:10px 0 0;padding:10px 12px;border-radius:8px;background:var(--surface-2);border:1px solid var(--rule);font-size:13.5px;}
+  /* Trois tuiles de l'Accueil */
+  .acc3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:0 0 18px;}
+  .acc3 .t3{background:var(--surface);border:1px solid var(--rule);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:4px;text-align:left;font:inherit;color:inherit;cursor:pointer;}
+  .acc3 .t3:hover{border-color:var(--rule-strong);}
+  .acc3 .k{font-size:12.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);}
+  .acc3 .v{font-size:28px;font-weight:700;letter-spacing:-.02em;line-height:1.1;}
+  .acc3 .v.good{color:var(--good);} .acc3 .v.bad{color:var(--bad);}
+  .acc3 .s{font-size:13px;color:var(--muted);}
+  @media (max-width:720px){ .acc3{grid-template-columns:1fr;} .acc3 .v{font-size:24px;} }
+  /* Recherche globale */
+  .rech-g{position:relative;flex:1;max-width:340px;min-width:0;}
+  .rech-g input{width:100%;padding:8px 12px 8px 34px;border-radius:20px;border:1px solid var(--rule-strong);background:var(--field);color:var(--ink);font:inherit;font-size:14px;}
+  .rech-g .loupe{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none;font-size:14px;}
+  .rech-res{position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:60;background:var(--surface);border:1px solid var(--rule-strong);border-radius:12px;
+    box-shadow:0 12px 30px rgba(0,0,0,.14);max-height:min(70vh,520px);overflow:auto;padding:6px;min-width:280px;}
+  .rech-res .grp{font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:8px 10px 4px;}
+  .rech-res button{appearance:none;display:flex;justify-content:space-between;gap:10px;width:100%;text-align:left;background:none;border:0;border-radius:8px;padding:9px 10px;font:inherit;font-size:14px;color:var(--ink);cursor:pointer;}
+  .rech-res button:hover,.rech-res button:focus-visible{background:var(--primary-soft);}
+  .rech-res button small{color:var(--muted);font-size:12.5px;white-space:nowrap;}
+  .rech-res .vide{padding:12px 10px;color:var(--muted);font-size:13.5px;}
+  @media (max-width:720px){ body.app-ouverte .brandrow{flex-wrap:wrap;row-gap:10px;} .rech-g{max-width:none;order:3;flex-basis:100%;} }
+  /* Bandeau global (conflit entre appareils) */
+  .bandeau-global{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:0 0 16px;padding:12px 16px;border-radius:10px;background:var(--warn-soft);border:1px solid var(--warn);}
+  .bandeau-global p{margin:0;flex:1;min-width:220px;}
+  /* Réglages avancés repliés */
+  details.reg-avance{margin-top:14px;border-top:1px solid var(--rule);padding-top:10px;}
+  details.reg-avance > summary{cursor:pointer;font-weight:600;padding:6px 0;}
+  details.reg-avance > summary span{font-weight:400;color:var(--muted);font-size:13px;}
+  /* Nouveautés */
+  .nouv-pastille{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:10px;background:var(--primary);color:var(--on-primary);font-size:11px;font-weight:700;vertical-align:1px;}
+  .nouv-liste h3{font-size:15px;margin:14px 0 4px;} .nouv-liste ul{margin:0;padding-left:20px;} .nouv-liste li{margin:3px 0;}
+  body.profil-amateur #r-cotis-t,body.profil-amateur #r-cotis{display:none;}
+  details.reg-avance-carte > summary::marker{color:var(--muted);}
+  .doute-gain{margin:2px 0 0;color:var(--warn);font-weight:600;}
+  .doute-bloc{margin:0 0 10px;padding:10px 12px;border-radius:8px;background:var(--warn-soft);border:1px solid var(--warn);font-size:13.5px;}
+  /* Cibles tactiles d'au moins 44 px sur téléphone et tablette */
+  @media (pointer:coarse){
+    button.btn,.fchip,select,input[type=text],input[type=number],input[type=search],input[type=date],input[type=email],input[type=password]{min-height:44px;}
+    .lien-mini{padding:10px 4px;margin:-10px -4px;}
+    .aide-q{width:26px;height:26px;}
+  }
 </style>
 </head>
 <body>
@@ -1077,7 +1138,7 @@ if (window.top !== window.self){
      Sans ce fichier (ou s'il ne se charge pas), rien ne change : l'objet
      global reste absent et l'application démarre hors ligne, comme avant. -->
 <script src="config.js" onerror="console.info('Crochompte : pas de config.js, mode hors ligne')"></script>
-<script src="app.js?v=47"></script>
+<script src="app.js?v=48"></script>
 
 <!-- ═══ Comptes et synchronisation — facultatifs quand config.js est absent ═══
      Sans config.js, l'application fonctionne hors ligne, exactement comme la

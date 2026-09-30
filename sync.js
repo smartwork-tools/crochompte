@@ -347,6 +347,8 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
       .then(function(ok){
         etat.envoiEnCours = null;
         peindre(archive && ok ? {archive: archive, garderFocus: true} : {garderFocus: true});
+        /* Visible sur l'écran où l'on est, pas seulement dans « Mon compte ». */
+        if (archive && ok && pont.conflit) { try { pont.conflit(archive); } catch (e) {} }
         if (etat.relancer){ etat.relancer = false; if (etat.sale) programmerEnvoi(800); }
         else if (!ok && etat.sale) programmerEnvoi(30000);   /* nouvel essai automatique */
         return ok;
@@ -1533,8 +1535,8 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
     if (m.indexOf("auteur_pseudo_autre") !== -1)
       return "Cette signature est déjà le pseudo de quelqu'un d'autre : choisis ton pseudo ou ton propre nom de plume.";
     if (m.indexOf("relation") !== -1 && m.indexOf("does not exist") !== -1)
-      return "La bibliothèque partagée n'est pas encore installée sur le serveur "+
-             "(schema-patrons-publics.sql à exécuter dans Supabase).";
+      return "La bibliothèque partagée n'est pas encore ouverte sur le serveur. "+
+             "Réessaie plus tard, ou écris-nous à bonjour@crochompte.com.";
     if (m.indexOf("trop_de_patrons") !== -1)
       return "Tu as atteint le nombre maximal de patrons partagés (300). Retire ceux qui ne servent plus pour en publier d'autres.";
     return messageServeur(m);

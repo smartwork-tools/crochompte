@@ -6,7 +6,7 @@ règles doit d'abord changer ce document**, et les tests correspondants
 (`tests/test-v37.js`, `tests/test-v37-lot10.js`, `tests/test-v37-lot11.js`,
 `tests/test-v38.js`, `tests/test-v39.js`, `tests/sql/`).
 
-Dernière mise à jour : V39 (28 septembre 2026).
+Dernière mise à jour : V54 (30 septembre 2026). Journal des versions : `CHANGELOG.md`.
 
 ---
 
@@ -125,6 +125,45 @@ Dernière mise à jour : V39 (28 septembre 2026).
   être enregistré ; « Corriger » revient au formulaire sans rien perdre ; un doublon de nom est
   signalé.
 
+## 0.6 Clarté et cohérence (V54)
+
+- **Profil amateur** : statut « non déclaré » ⇒ cotisations 0 % (aussi à la
+  migration d'un atelier existant). Une commande livrée n'attend pas de
+  facture (étape directe « Paiement à recevoir » puis « Payée en entier ») ;
+  ni tuile « À facturer », ni registre des factures, ni achat professionnel /
+  SIREN, ni alerte TVA, ni mention URSSAF dans les textes.
+- **Accueil** : trois tuiles. *Gagné ce mois* = Σ (prix − coût de revient)
+  des pièces vendues ce mois (hors commandes) + Σ `bilanCommande().r.reste`
+  des commandes livrées ce mois. *En attente* = reste à recevoir (hors devis
+  et annulées), commandes à livrer, devis. *Ce qui te coûte* = achats de
+  matières + pertes du mois.
+- **Relances** (« À faire ») : impayé depuis plus de 30 jours après livraison
+  ou facture (rouge) ; livrée à facturer (pro) ; devis sans réponse depuis
+  plus de 7 jours après la date de commande.
+- **Recherche globale** (en-tête) : créations, pièces, matières, commandes,
+  personnes, patrons ; même moteur tolérant que §0.5 ; Entrée ouvre le premier
+  résultat.
+- **Dupliquer** : copie de la fiche (nouvel identifiant, « (copie) », sans
+  pièces ni photo), ouverte comme brouillon ; l'ajout demande confirmation.
+- **Quitter « Vendue »** : confirmation qui liste ce qui sera effacé (prix,
+  date, chiffres figés, lien de commande).
+- **Gain de l'heure invraisemblable** (> max(100 €, 5 × objectif)) : pas de
+  vert ; « temps à vérifier » quand le temps vient de la fiche ; badge « À
+  vérifier » sur la création.
+- **Conflit d'appareils** : bandeau sur l'écran courant (plus seulement dans
+  Mon compte), lien vers l'historique.
+- **Aides « ? »** : `AIDES` (perte, cotisations, frais fixes, frais de vente,
+  coût de revient, gain de l'heure, prix conseillé, taux horaire, heures hors
+  crochet) ; deux phrases et un exemple chiffré.
+- **Affichage** : trois tailles de titre (24 / 18 / 15 px), chiffres
+  tabulaires partout, une famille de couleurs de verdict, thème clair /
+  sombre / automatique propre à l'appareil (`crochompte-theme`), cibles
+  tactiles ≥ 44 px sur écran tactile.
+- **Réglages** : « Réglages avancés » repliés (heures par jour, heures hors
+  crochet, prix de référence des matières) ; rubrique « Affichage ».
+- **Nouveautés** (`NOUVEAUTES`, `VERSION_APP`) et **Signaler un problème**
+  (courriel prérempli : version, écran, navigateur ; rien de personnel).
+
 ## 1. Vocabulaire
 
 ### 1.0 Un seul nom par notion, et une écriture pour tout le monde (V43)
@@ -163,7 +202,7 @@ Dernière mise à jour : V39 (28 septembre 2026).
 | **Matière** | Ce qu'on achète pour fabriquer ou emballer (fil, rembourrage, yeux, étiquettes…). |
 | **Lieu de vente** (canal) | Où la pièce est vendue : main propre, marché, Etsy… avec ses frais. |
 | **Tes frais** | Tout ce que coûte une pièce sauf ton temps : matières, chutes, emballage, frais de vente, cotisations, part des frais fixes. |
-| **Prix juste** | Le prix qui paie tous les frais ET le temps au taux horaire visé. |
+| **Prix conseillé** | Le prix qui paie tous les frais ET le temps au taux horaire visé (anciennement « prix juste »). |
 | **Plancher** | Le prix en dessous duquel on paie pour travailler (frais couverts, temps non payé). |
 | **Gain de l'heure** | Ce qui reste après tous les frais, divisé par les heures de travail. |
 
@@ -199,7 +238,7 @@ exactement.
 9. **Reste** = prix − (matières + part des frais fixes + frais de vente +
    cotisations).
 10. **Gain de l'heure** = reste ÷ heures (si le temps est indiqué).
-11. **Prix juste** = (matières + frais fixes + frais fixes de vente +
+11. **Prix conseillé** = (matières + frais fixes + frais fixes de vente +
     main-d'œuvre) ÷ (1 − taux cotisations − pourcentage de vente), **arrondi
     au centime supérieur**, puis vérifié : au prix affiché, le reste couvre
     vraiment la main-d'œuvre (sinon +1 centime).
@@ -216,12 +255,32 @@ indiquer » ; puis « Très sous-payée » (< 50 % de l'objectif), « Sous-payé
 saisie (ex. taux de perte 0–60 %, cotisations 0–50 %, frais de canal 0–100 %).
 Une valeur ramenée à la borne est réaffichée.
 
+**Pourquoi ces chiffres** (V54) :
+- *Perte plafonnée à 60 %* : au-delà, plus de la moitié du fil acheté serait
+  jetée ; c'est presque toujours une faute de saisie (6 tapé 60). 8 % par
+  défaut correspond aux chutes et rangs défaits courants.
+- *Cotisations plafonnées à 50 %* : aucun taux de micro-entreprise n'approche
+  ce niveau (25,8 % au plus en 2026) ; la marge couvre un cas particulier
+  saisi à la main.
+- *Pas de perte sur ce qui se compte* : un œil de sécurité ne se coupe pas ;
+  l'ajouter gonflerait le coût sans raison.
+- *Seuils du verdict (50 % et 90 % de l'objectif)* : sous la moitié, la pièce
+  ne paie pas le travail ; entre les deux, elle s'en approche ; la marge de
+  10 % évite qu'une pièce à 11,90 € de l'heure pour 12 € visés paraisse
+  « sous-payée ».
+- *Alerte d'achat à 4 fois le prix habituel* : un écart plus faible arrive
+  (promotion, autre marque) ; au-delà, c'est une virgule oubliée.
+- *Gain de l'heure « à vérifier » au-delà de 100 € ou de 5 fois l'objectif*
+  (V54) : un temps de fiche trop court (quelques minutes pour une pièce de
+  plusieurs heures) donne un chiffre flatteur et faux ; il n'est plus montré
+  en vert, et l'écran dit quoi vérifier.
+
 **Saisie** : tous les champs numériques acceptent la virgule (« 45,50 ») et
 « 1.234,56 » ; lettres et signe moins refusés.
 
 **Vraisemblance** (signalée, jamais bloquée) : gain de l'heure supérieur à
-100 € et à 5 fois l'objectif, ou prix supérieur à 10 fois le prix juste (fiche) ;
-prix convenu supérieur à 10 fois le prix juste de la création (commande).
+100 € et à 5 fois l'objectif, ou prix supérieur à 10 fois le prix conseillé (fiche) ;
+prix convenu supérieur à 10 fois le prix conseillé de la création (commande).
 
 **Enregistrer une fiche** que quelqu'un a modifiée ailleurs depuis son
 ouverture (autre appareil, autre onglet) demande confirmation.
@@ -236,7 +295,7 @@ de `calculer` (matières, frais, cotisations **et** main-d'œuvre au taux visé)
 - **Taux de marge** = marge ÷ coût de revient.
 - **Taux de marque** = marge ÷ prix de vente.
 - **Coefficient sur les matières** = prix ÷ coût des matières, comparé à la
-  règle courante « matières × 3 » quand elle donne moins que le prix juste.
+  règle courante « matières × 3 » quand elle donne moins que le prix conseillé.
 - **Pièces par mois pour payer les frais fixes** = frais fixes du mois ÷
   (prix − matières − frais de vente − cotisations), arrondi au-dessus
   (seuil de rentabilité, avant de se payer).
@@ -298,7 +357,7 @@ figées une fois, avec les chiffres connus (marquées « estimé »).
   plus de 4 fois supérieur ou inférieur au prix habituel.
 - **Sortie** : stock − quantité (peut devenir négatif : alerte persistante).
 - **Fabrication** (pièce passée en Terminée) : sortie automatique de
-  quantité × (1 + taux de perte) pour ce qui a une perte (voir §2.3), une
+  quantité × (1 + taux de perte) pour ce qui a une perte (voir §2, point 3), une
   seule fois par pièce.
 - **Inventaire** : remplace le stock par la quantité comptée, et enregistre
   l'**écart** (quantité et valeur).
@@ -360,8 +419,8 @@ figées une fois, avec les chiffres connus (marquées « estimé »).
   cible d'une pièce** = le prix pour lequel son gain serait nul avec SON
   coût réel (matières pesées, temps réel ou provisoire) : au-dessus, elle
   paie plus que ton salaire ; le prix cible de l'en-tête est celui de la
-  fiche (estimation) ; **gain** = prix − coût complet ; gain de
-  l'heure = (prix − coût hors main-d'œuvre) ÷ heures. Code couleur : vert
+  fiche (estimation) ; **gain** = prix − coût de revient (sans le temps,
+  voir §0.4) ; gain de l'heure = gain ÷ heures. Code couleur : vert
   (≥ 90 % de l'objectif), orange (sous l'objectif), rouge (< 50 %, à perte,
   ratée).
 - **Lecture de l'écran « Mes créations »** : en haut de chaque création,
