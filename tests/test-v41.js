@@ -46,7 +46,7 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
       a.prix = k.prixCible; var k0 = coutPiece(a, cr);
       a.prix = k.prixCible + 10; var k1 = coutPiece(a, cr);
       a.prix = null;
-      return {cible: k.prixCible, g0: k0.gain, g1: k1.gain, fiche: k.prixCibleFiche};
+      return {cible: k.prixCible, g0: k0.gainApresObjectif, g1: k1.gainApresObjectif, fiche: k.prixCibleFiche};
     });
     R.cible_piece_gain_nul = c.cible > 0 && Math.abs(c.g0) < 0.03 && c.g1 > 0;
     R.cible_piece_differe_de_la_fiche = c.cible > 0 && c.fiche > 0 && Math.abs(c.cible - c.fiche) > 0.01;

@@ -30,7 +30,7 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
   try {
     const p = await page(b);
     await graine(p);
-    await dans(p, function(){ appliquerProfil('createur', {sansRendu:true}); state.reglages.confirmeLe = Date.now(); sauverTout(); view.sub = 'matieres'; aller('stock'); });
+    await dans(p, function(){ appliquerProfil('pro', {sansRendu:true}); state.reglages.confirmeLe = Date.now(); sauverTout(); view.sub = 'matieres'; aller('stock'); });
     await p.waitForTimeout(300);
     /* 1. Mes matières : stock visible et achat en place */
     R.colonne_stock = /En stock/.test(await p.textContent('#main thead'));

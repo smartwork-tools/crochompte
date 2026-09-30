@@ -29,7 +29,7 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
   try {
     const p = await page(b);
     await graine(p);
-    await dans(p, function(){ appliquerProfil('createur', {sansRendu:true}); state.reglages.confirmeLe = Date.now(); sauverTout(); allerOnglet('commandes'); });
+    await dans(p, function(){ appliquerProfil('pro', {sansRendu:true}); state.reglages.confirmeLe = Date.now(); sauverTout(); allerOnglet('commandes'); });
     await p.waitForTimeout(300);
     /* 1. nouvelle commande en 4 questions */
     await p.getByRole('button', {name:'+ Nouvelle commande'}).first().click(); await p.waitForTimeout(250);

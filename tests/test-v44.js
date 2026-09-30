@@ -1,6 +1,7 @@
-/* V44 — profils : question d'accueil sur un atelier neuf, vrai mode loisir
-   (fiche sans prix, créations sans gain, catalogue sans plancher), onglets
-   selon le profil, Accueil sans doublon, réglage du profil dans Mon activité. */
+/* V44 (revue V51) — deux profils : question en tête de l'Accueil d'un atelier
+   neuf (amateur ou pro), amateur sans facture ni registres ni seuils ni
+   rubrique Facturation, pro avec tout, changement dans Réglages, onglets,
+   Accueil sans doublon, mise en route accessible, ancien atelier deviné. */
 const {chromium} = require('./outils').playwright;
 const path = require('path');
 const {graine} = require('./aide.js');
@@ -28,54 +29,54 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
   const b = await chromium.launch(require('./outils').lancement);
   try {
     const p = await page(b);
-    /* 1. atelier neuf : la question est sur l'Accueil, 5 cartes, pas de boîte modale */
-    R.question_accueil = (await p.locator('.profil-accueil .profil-carte').count()) === 5 && (await p.locator('.dlg-fond').count()) === 0;
-    await p.click('.profil-carte[data-p="loisir"]'); await p.getByRole('button', {name:"C'est moi"}).click(); await p.waitForTimeout(400);
+    /* 1. atelier neuf : la question est sur l'Accueil, 2 cartes, pas de boîte modale */
+    R.question_accueil = (await p.locator('.profil-accueil .profil-carte').count()) === 2 && (await p.locator('.dlg-fond').count()) === 0 && /amateur ou en pro/.test(await p.textContent('.profil-accueil'));
+    await p.click('.profil-carte[data-p="amateur"]'); await p.getByRole('button', {name:"C'est moi"}).click(); await p.waitForTimeout(400);
     const tabs = await p.$$eval('#nav button', bs => bs.map(b => b.textContent.trim()));
-    R.onglets_loisir = tabs.join(',') === 'Accueil,Mes créations,Mes patrons,Matières,Mes chiffres,Réglages';
-    R.profil_applique = await dans(p, function(){ return state.reglages.profilType === 'loisir' && state.reglages.profil === 'passion' && state.reglages.mode === 'complet'; });
+    R.onglets_amateur = tabs.join(',') === 'Accueil,Mes créations,Commandes,Mes ventes,Mes patrons,Matières,Mes chiffres,Réglages';
+    R.profil_applique = await dans(p, function(){ return state.reglages.profilType === 'amateur' && state.reglages.profil === 'vend' && state.reglages.mode === 'complet' && state.reglages.statut === 'non_declare' && !estPro(); });
     R.question_disparue = (await p.locator('.profil-accueil').count()) === 0;
-    const acc = await p.textContent('#main');
-    R.accueil_loisir_sans_vente = !/à perte|Prix conseillé|encaissé|Nouvelle commande/i.test(acc);
 
-    /* 2. fiche en mode loisir : matières et temps, rien sur le prix */
+    /* 2. amateur : pas de rubrique Facturation, pas de facture sur une commande, pas de registres ni de seuils */
     await graine(p); await p.waitForTimeout(300);
-    await dans(p, function(){ ouvrirFiche('c1'); }); await p.waitForTimeout(400);
-    const f = (await p.textContent('#main')).replace(/\s+/g, ' ');
-    R.fiche_loisir_cout_matieres = /Cette pièce te coûte/.test(f) && /de matières/.test(f) && !/Prix de vente|cotisations|Prix conseillé|Tes marges|Comment tu la vends/i.test(f);
-    R.fiche_loisir_temps_en_heures = /Temps de travail/.test(f) && !/de l'heure/.test(f);
-    R.fiche_barre_bas = /de matières/.test(await p.textContent('#bf-t'));
+    await dans(p, function(){ view.regSection = null; aller('reglages'); }); await p.waitForTimeout(300);
+    R.amateur_sans_facturation = !/Facturation/.test(await p.textContent('#main')) && /Canaux de vente/.test(await p.textContent('#main'));
+    await dans(p, function(){ var c = nouvelleCommande(); c.client = {nom:'Sam', contact:'', note:''}; c.cid = 'c1'; c.prixConvenu = 30; c.statut = 'livree'; c.livreeLe = aujourdhuiISO(); c.brouillon = false; sauverTout(); view.cmdVue = c.id; aller('commandes', {garderVue:true}); });
+    await p.waitForTimeout(300);
+    R.amateur_sans_facture = (await p.locator('#cmd-facture').count()) === 0 && /Pas de facture en profil amateur/.test(await p.textContent('#main'));
+    await dans(p, function(){ allerOnglet('indicateurs'); }); await p.waitForTimeout(300);
+    R.amateur_sans_registres = !/Tes registres|Tes seuils/.test(await p.textContent('#main'));
 
-    /* 3. Mes créations en mode loisir */
-    await dans(p, function(){ allerOnglet('creations'); }); await p.waitForTimeout(300);
-    const c = (await p.textContent('#main')).replace(/\s+/g, ' ');
-    R.creations_loisir = /Matières par pièce/.test(c) && !/Gain de l'heure|À revoir|objectif|sous-payée|Prix conseillé/i.test(c);
-    R.colonne_matieres = /Matières/.test(await p.textContent('#main thead').catch(()=>'')) || !(await p.locator('#main thead').count());
+    /* 3. passer en pro dans Réglages */
+    await dans(p, function(){ view.regSection = 'activite'; aller('reglages', {garderVue:true}); }); await p.waitForTimeout(300);
+    R.reglage_profil = /Créateur ou créatrice amateur/.test(await p.textContent('#main')) && !/Je crée…|Suivi des pièces/.test(await p.textContent('#main'));
+    await p.getByRole('button', {name:'Changer de profil'}).click(); await p.waitForTimeout(200);
+    R.dialogue_deux_cartes = (await p.locator('.dlg .profil-carte').count()) === 2;
+    await p.click('.dlg .profil-carte[data-p="pro"]'); await p.click('.dlg [data-oui]'); await p.waitForTimeout(400);
+    R.pro_applique = await dans(p, function(){ return state.reglages.profilType === 'pro' && state.reglages.statut === '' ; });
+    await dans(p, function(){ state.reglages.statut = 'marchandises'; view.regSection = null; aller('reglages'); }); await p.waitForTimeout(300);
+    R.pro_facturation = /Facturation/.test(await p.textContent('#main')) && await dans(p, function(){ return estPro(); });
+    await dans(p, function(){ view.cmdVue = commandes()[0].id; aller('commandes', {garderVue:true}); }); await p.waitForTimeout(300);
+    R.pro_facture = (await p.locator('#cmd-facture').count()) === 1;
+    await dans(p, function(){ allerOnglet('indicateurs'); }); await p.waitForTimeout(300);
+    R.pro_registres = /Tes registres/.test(await p.textContent('#main')) && /Tes seuils/.test(await p.textContent('#main'));
 
-    /* 4. catalogue : pas de plancher ni de prix conseillé */
+    /* 4. onglets pro, catalogue et mise en route seulement pendant qu'on y est */
+    const tabs2 = (await p.$$eval('#nav button', bs => bs.map(b => b.textContent.trim()))).filter(x => !/^Fiche/.test(x));
+    R.onglets_pro = tabs2.indexOf('Commandes') >= 0 && tabs2.indexOf('Mes ventes') >= 0 && tabs2.indexOf('Catalogue') < 0 && tabs2.indexOf('Mise en route') < 0 && tabs2.length === 8;
     await dans(p, function(){ view.modeleVu = 'bonnet'; aller('catalogue', {garderVue:true}); }); await p.waitForTimeout(300);
-    const cat = await p.textContent('#main');
-    R.catalogue_loisir = /Matières et emballage/.test(cat) && !/Plancher|Prix conseillé|dépasse le prix du marché/.test(cat);
     R.onglet_catalogue_visible_pendant = (await p.$$eval('#nav button', bs => bs.map(b => b.textContent.trim()))).indexOf('Catalogue') >= 0;
 
-    /* 5. changer de profil dans Réglages */
-    await dans(p, function(){ view.regSection = 'activite'; aller('reglages', {garderVue:true}); }); await p.waitForTimeout(300);
-    R.reglage_profil = /Je crochète pour le plaisir/.test(await p.textContent('#main')) && !/Je crée…|Suivi des pièces/.test(await p.textContent('#main'));
-    await p.getByRole('button', {name:'Changer de profil'}).click(); await p.waitForTimeout(200);
-    await p.click('.dlg .profil-carte[data-p="marche"]'); await p.click('.dlg [data-oui]'); await p.waitForTimeout(400);
-    const tabs2 = (await p.$$eval('#nav button', bs => bs.map(b => b.textContent.trim()))).filter(x => !/^Fiche/.test(x));
-    R.onglets_vente = tabs2.indexOf('Commandes') >= 0 && tabs2.indexOf('Marché') >= 0 && tabs2.indexOf('Catalogue') < 0 && tabs2.indexOf('Mise en route') < 0 && tabs2.length === 8;
-    R.mode_vente = await dans(p, function(){ return state.reglages.profil === 'vend' && state.reglages.profilType === 'marche'; });
-
-    /* 6. Accueil en mode vente : une seule liste de créations, mise en route accessible */
+    /* 5. Accueil : une seule liste de créations, mise en route accessible */
     await dans(p, function(){ allerOnglet('accueil'); }); await p.waitForTimeout(300);
     R.accueil_sans_doublon = (await p.locator('.crea-mini').count()) === 0 && (await p.locator('#lien-mise-en-route').count()) === 1;
     await p.click('#lien-mise-en-route'); await p.waitForTimeout(300);
     R.mise_en_route_ouverte = (await p.$$eval('#nav button', bs => bs.map(b => b.textContent.trim()))).indexOf('Mise en route') >= 0 && /Mise en route/.test(await p.textContent('#main h1, #main h2'));
 
-    /* 7. atelier ancien sans profil : deviné, pas de question */
-    await dans(p, function(){ delete state.reglages.profilType; state.reglages.profil = 'vend'; sauverTout(); allerOnglet('accueil'); }); await p.waitForTimeout(300);
-    R.ancien_atelier_devine = (await p.locator('.profil-accueil').count()) === 0 && await dans(p, function(){ return !!state.reglages.profilType; });
+    /* 6. atelier ancien sans profil : deviné (pro si statut déclaré), pas de question ; anciens identifiants ramenés */
+    await dans(p, function(){ delete state.reglages.profilType; state.reglages.statut = 'marchandises'; sauverTout(); allerOnglet('accueil'); }); await p.waitForTimeout(300);
+    R.ancien_atelier_devine = (await p.locator('.profil-accueil').count()) === 0 && await dans(p, function(){ return state.reglages.profilType === 'pro'; });
+    R.alias_anciens = await dans(p, function(){ appliquerProfil('loisir', {sansRendu:true}); var a = state.reglages.profilType; appliquerProfil('marche', {sansRendu:true}); return a === 'amateur' && state.reglages.profilType === 'pro'; });
 
     await p.setViewportSize({width:390, height:844}); await p.waitForTimeout(300);
     R.tel_sans_debordement = await p.evaluate(()=> document.documentElement.scrollWidth <= window.innerWidth + 1);

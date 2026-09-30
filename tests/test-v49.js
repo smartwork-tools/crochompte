@@ -30,7 +30,7 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     const p = await page(b);
     await graine(p);
     await dans(p, function(){
-      appliquerProfil('createur', {sansRendu:true}); state.reglages.confirmeLe = Date.now(); state.reglages.statut = 'marchandises';
+      appliquerProfil('pro', {sansRendu:true}); state.reglages.confirmeLe = Date.now(); state.reglages.statut = 'marchandises';
       var y = new Date().getFullYear();
       /* une vente au comptant, une commande avec acompte et solde, un achat, un marché */
       var pv = vendrePiece('c1', 35, 'carte', {le: new Date(y, 2, 10).getTime()});
@@ -64,7 +64,7 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     await p.selectOption('#r-statut', 'marchandises'); await p.waitForTimeout(300);
     R.encart_disparait = !/Faut-il déclarer mes ventes/.test(await p.textContent('#main'));
     /* loisir : pas de registres */
-    await dans(p, function(){ appliquerProfil('loisir'); allerOnglet('indicateurs'); }); await p.waitForTimeout(300);
+    await dans(p, function(){ appliquerProfil('amateur'); allerOnglet('indicateurs'); }); await p.waitForTimeout(300);
     R.loisir_sans_registres = !/Tes registres/.test(await p.textContent('#main'));
     await p.close();
   } catch (e) { R._echec = String(e && e.stack || e); }

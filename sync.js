@@ -738,9 +738,8 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
     try {
       var st = window.CrochomptePont && window.CrochomptePont.lire ? window.CrochomptePont.lire() : null;
       var pt = st && st.reglages ? st.reglages.profilType : "";
-      if (pt === "loisir" || pt === "quelques") return "amateur";
-      if (pt === "artisan") return "entreprise";
-      if (pt) return "artisanat";
+      if (pt === "amateur") return "amateur";
+      if (pt === "pro") return "artisanat";
     } catch (e) {}
     return "";
   }

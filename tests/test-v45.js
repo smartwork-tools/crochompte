@@ -29,9 +29,9 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
   try {
     const p = await page(b);
     await graine(p);
-    await dans(p, function(){ appliquerProfil('createur', {sansRendu:true}); state.reglages.confirmeLe = Date.now(); ajouterPieces('c1', 2, 'termine', 'envente'); sauverTout(); allerOnglet('accueil'); });
+    await dans(p, function(){ appliquerProfil('pro', {sansRendu:true}); state.reglages.confirmeLe = Date.now(); ajouterPieces('c1', 2, 'termine', 'envente'); sauverTout(); allerOnglet('accueil'); });
     await p.waitForTimeout(300);
-    R.bouton_vendre_accueil = (await p.getByRole('button', {name:'Vendre une pièce'}).count()) === 1 && (await p.getByRole('button', {name:'Jour de marché'}).count()) === 1;
+    R.bouton_vendre_accueil = (await p.getByRole('button', {name:'Vendre une pièce'}).count()) === 1 && (await p.getByRole('button', {name:'Mes ventes du jour'}).count()) === 1;
 
     /* 1. vente rapide d'une pièce en stock */
     await p.getByRole('button', {name:'Vendre une pièce'}).click(); await p.waitForTimeout(250);
@@ -49,32 +49,41 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     const s2 = await dans(p, function(){ var v = state.pieces.filter(function(x){ return x.com === 'vendu' && x.cid === 'c3'; }); return {n:v.length, prix:v[0] && v[0].prix, prod:v[0] && v[0].prod}; });
     R.vente_cree_piece = s2.n === 1 && s2.prix === 35 && s2.prod === 'termine';
 
-    /* 3. jour de marché */
-    await dans(p, function(){ aller('marche'); }); await p.waitForTimeout(300);
-    R.onglet_marche_pendant = (await p.$$eval('#nav button', bs => bs.map(b => b.textContent.trim()))).indexOf('Marché') >= 0;
+    /* 3. Mes ventes : le stand */
+    await dans(p, function(){ view.ventesPeriode = 'jour'; view.ventesDate = null; aller('ventes'); }); await p.waitForTimeout(300);
+    R.onglet_marche_pendant = (await p.$$eval('#nav button', bs => bs.map(b => b.textContent.trim()))).indexOf('Mes ventes') >= 0;
     R.stand_lignes = (await p.locator('.stand-ligne').count()) === 3;
     await p.locator('.stand-ligne', {hasText:'Panier'}).locator('input').fill('40');
     await p.locator('.stand-ligne', {hasText:'Panier'}).getByRole('button', {name:'Vendu'}).click(); await p.waitForTimeout(300);
     await p.getByRole('radio', {name:'Carte'}).click(); await p.waitForTimeout(300);
     await p.locator('.stand-ligne', {hasText:'Bonnet'}).getByRole('button', {name:'Vendu'}).click(); await p.waitForTimeout(300);
     const m = (await p.textContent('#main')).replace(/ | /g, ' ');
-    R.total_jour = /Vendu aujourd'hui\s*68,00 €/.test(m) && /Espèces\s*40,00 €/.test(m) && /Carte et autres\s*28,00 €/.test(m);
-    R.ventes_listees = (await p.locator('.vente-ligne').count()) === 2;
+    R.total_jour = /Vendu\s*138,00 €/.test(m) && /(Espèces 75,00 € · Carte 63,00 €|Carte 63,00 € · Espèces 75,00 €)/.test(m);
+    R.ventes_listees = (await p.locator('.t-ventes tbody tr').count()) === 4;
     await p.fill('#mk-frais', '15'); await p.locator('#mk-frais').dispatchEvent('change'); await p.waitForTimeout(300);
-    R.caisse_du_soir = /= 53,00 € pour la journée/.test((await p.textContent('#main')).replace(/ | /g, ' '));
+    R.caisse_du_soir = /Caisse du jour\s*123,00 €/.test((await p.textContent('#main')).replace(/\u202f|\u00a0/g, ' '));
     R.marche_enregistre = await dans(p, function(){ return state.marches.length === 1 && state.marches[0].frais === 15; });
-    await p.locator('.vente-ligne').first().getByRole('button', {name:'Annuler'}).click(); await p.waitForTimeout(300);
-    R.annulation = (await p.locator('.vente-ligne').count()) === 1 && await dans(p, function(){ return state.pieces.filter(function(x){ return x.com === 'vendu'; }).length === 3 && state.pieces.filter(function(x){ return x.com === 'atelier' && x.cid === 'c2'; }).length === 1; });
+    await p.locator('.t-ventes tbody tr', {hasText:'Bonnet'}).getByRole('button', {name:'Annuler'}).click(); await p.waitForTimeout(300);
+    R.annulation = (await p.locator('.t-ventes tbody tr').count()) === 3 && await dans(p, function(){ return state.pieces.filter(function(x){ return x.com === 'vendu'; }).length === 3 && state.pieces.filter(function(x){ return x.com === 'atelier' && x.cid === 'c2'; }).length === 1; });
     R.canal_marche = await dans(p, function(){ return state.pieces.filter(function(x){ return x.com === 'vendu' && x.canal === 'marche' && x.paiement === 'especes'; }).length === 1; });
 
     /* 4. profil marché : onglet permanent ; règlement d'une commande en liste */
-    await dans(p, function(){ appliquerProfil('marche'); allerOnglet('accueil'); }); await p.waitForTimeout(300);
-    R.onglet_marche_profil = (await p.$$eval('#nav button', bs => bs.map(b => b.textContent.trim()))).indexOf('Marché') >= 0 && (await p.getByRole('button', {name:'Jour de marché'}).count()) === 1;
-    await dans(p, function(){ var c = nouvelleCommande(); c.client = {nom:'Sam', contact:'', note:''}; c.cid = 'c1'; c.prixConvenu = 30; c.statut = 'livree'; c.brouillon = false; sauverTout(); view.cmdVue = c.id; aller('commandes', {garderVue:true}); });
+    await dans(p, function(){ appliquerProfil('pro'); allerOnglet('accueil'); }); await p.waitForTimeout(300);
+    R.onglet_marche_profil = (await p.$$eval('#nav button', bs => bs.map(b => b.textContent.trim()))).indexOf('Mes ventes') >= 0 && (await p.getByRole('button', {name:'Mes ventes du jour'}).count()) === 1;
+    await dans(p, function(){ var c = nouvelleCommande(); c.client = {nom:'Sam', contact:'', note:''}; c.cid = 'c1'; c.prixConvenu = 30; c.statut = 'livree'; c.livreeLe = aujourdhuiISO(); c.brouillon = false; c.versement = {montant:10, date:aujourdhuiISO(), type:'acompte'}; sauverTout(); view.cmdVue = c.id; aller('commandes', {garderVue:true}); });
     await p.waitForTimeout(300);
     R.moyen_en_liste = (await p.locator('select#cmd-p-moy option').count()) === 6;
+    /* 5. la commande livrée apparaît dans Mes ventes avec son reste à recevoir */
+    await dans(p, function(){ view.ventesFiltre = 'toutes'; aller('ventes'); }); await p.waitForTimeout(300);
+    const v = (await p.textContent('#main')).replace(/\u202f|\u00a0/g, ' ');
+    R.commande_dans_ventes = (await p.locator('.t-ventes tbody tr', {hasText:'Sam'}).count()) === 1 && /20,00 €/.test(await p.locator('.t-ventes tbody tr', {hasText:'Sam'}).textContent()) && /Reste à recevoir\s*20,00 €/.test(v);
+    R.bouton_encaisser = (await p.locator('.t-ventes tbody tr', {hasText:'Sam'}).getByRole('button', {name:'Encaisser'}).count()) === 1;
+    await p.getByRole('button', {name:/^Reste à recevoir/}).click(); await p.waitForTimeout(300);
+    R.filtre_reste = (await p.locator('.t-ventes tbody tr').count()) === 1;
+    await p.getByRole('button', {name:/^Payées en entier/}).click(); await p.waitForTimeout(300);
+    R.filtre_payees = (await p.locator('.t-ventes tbody tr', {hasText:'Sam'}).count()) === 0 && (await p.locator('.t-ventes tbody tr').count()) === 3;
 
-    await p.setViewportSize({width:390, height:844}); await dans(p, function(){ aller('marche'); }); await p.waitForTimeout(300);
+    await p.setViewportSize({width:390, height:844}); await dans(p, function(){ view.ventesFiltre = 'toutes'; aller('ventes'); }); await p.waitForTimeout(300);
     R.tel_sans_debordement = await p.evaluate(()=> document.documentElement.scrollWidth <= window.innerWidth + 1);
     await p.close();
   } catch (e) { R._echec = String(e && e.stack || e); }

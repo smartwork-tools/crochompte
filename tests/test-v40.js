@@ -51,8 +51,8 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     R.total_compte_le_transport = r.kE.transport === 5 && Math.abs(r.kE.total - r.sE) < 0.011 && Math.abs(r.kF.total - r.sF) < 0.011;
     R.en_cours_garde_le_temps_de_la_fiche = r.minE === 395 && r.kE.provisoire === true && r.kE.mainOeuvre > 50;
     R.terminee_prend_le_chronometre = r.minF === 19 && r.kF.provisoire === false && r.kF.tempsMesure === true;
-    R.en_cours_moins_bien_paye_que_terminee = r.kE.gainH < r.kF.gainH && r.kE.gain < r.kF.gain;
-    R.vente_figee_transport_une_fois = r.kV.transport === 5 && Math.abs(r.kV.total - r.sV) < 0.011 && Math.abs(r.kV.gain - (r.kV.prix - r.kV.total)) < 0.011;
+    R.en_cours_moins_bien_paye_que_terminee = r.kE.gainH < r.kF.gainH && r.kE.gainApresObjectif < r.kF.gainApresObjectif;
+    R.vente_figee_transport_une_fois = r.kV.transport === 5 && Math.abs(r.kV.total - r.sV) < 0.011 && Math.abs(r.kV.gain - (r.kV.prix - r.kV.coutRevient)) < 0.011 && Math.abs(r.kV.gainApresObjectif - (r.kV.prix - r.kV.total)) < 0.011;
     /* cotisations calculées sur le prix de la pièce, pas sur celui de la fiche */
     const c2 = await dans(p, function(){
       var cr = creation('cv40'), e = piece('pe40'); e.prix = 200; var k = coutPiece(e, cr); e.prix = null;
@@ -67,12 +67,12 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     R.liste_dit_provisoire = /provisoire/.test(await p.locator('tr[data-pid="pe40"]').textContent()) && !/provisoire/.test(await p.locator('tr[data-pid="pf40"]').textContent());
     await p.click('tr[data-pid="pe40"] [data-role="cout"]'); await p.waitForTimeout(250);
     const d = await p.textContent('.dlg');
-    R.detail_dit_provisoire = /Pièce pas encore terminée/.test(d) && /Coût de revient complet \(provisoire\)/.test(d) && /19 min déjà chronométrées/.test(d);
+    R.detail_dit_provisoire = /Pièce pas encore terminée/.test(d) && /Coût de revient \(provisoire\)/.test(d) && /19 min déjà chronométrées/.test(d);
     const lignes = await p.$$eval('.dlg .cout-piece .row', rs => rs.map(x => [x.firstElementChild.textContent, x.lastElementChild.textContent]));
     const nb = t => parseFloat(t.replace(/[^\d,\-−]/g,'').replace('−','-').replace(',','.'));
     const val = m => { const l = lignes.find(x => m.test(x[0])); return l ? nb(l[1]) : 0; };
-    const somme = val(/^Matières/) + val(/^Conditionnement/) + val(/^Main-d/) + val(/^Transport/) + val(/^Frais de vente/) + val(/^Cotisations/);
-    R.lignes_affichees_egales_au_total = Math.abs(somme - val(/^Coût de revient complet/)) < 0.02;
+    const somme = val(/^Matières/) + val(/^Conditionnement/) + val(/^Transport/) + val(/^Frais de vente/) + val(/^Cotisations/);
+    R.lignes_affichees_egales_au_total = Math.abs(somme - val(/^Coût de revient/)) < 0.02 && Math.abs(val(/^Prix de vente/) - val(/^Coût de revient/) - val(/^Gain/)) < 0.02;
     await p.click('.dlg [data-oui]'); await p.waitForTimeout(200);
     await p.click('tr[data-pid="pe40"] [data-role="reel"]'); await p.waitForTimeout(300);
     R.prevu_reel_dit_pas_terminee = /pas terminée : au moins le temps de la fiche/.test(await p.textContent('.dlg')) && !/6 h 35\s*→\s*19 min/.test(await p.textContent('.dlg'));

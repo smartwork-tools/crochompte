@@ -10,20 +10,23 @@ Dernière mise à jour : V39 (28 septembre 2026).
 
 ---
 
-## 0. Profils (V44)
+## 0. Profils (V44, revu en V51)
 
-- Une seule question à la première ouverture, en tête de l'Accueil : « Qu'est-ce
-  qui te ressemble ? ». Cinq profils : **loisir**, **quelques ventes**,
-  **créateur qui vend**, **artisan en quantité**, **marchés**. Le profil règle
-  le mode (plaisir / vente), le suivi des pièces et les onglets. Un atelier
-  d'avant la V44 reçoit un profil deviné (toast avec « Changer »).
-- Onglets : loisir → Accueil, Mes créations, Mes patrons, Matières, Mes
-  chiffres, Réglages. Vente → + Commandes (+ Marché pour le profil marchés).
-  Catalogue, Mise en route et Marché n'apparaissent que pendant qu'on y est.
-- **Mode loisir** : la fiche dit ce que la pièce coûte en matières et combien
-  de temps elle prend, sans convertir le temps en euros ; pas de prix de
-  vente, de cotisations, de marges, de « à perte » ; le catalogue n'affiche
-  ni plancher ni prix conseillé ; pas de registres.
+- Une seule question à la première ouverture, en tête de l'Accueil : « Tu
+  crochètes en amateur ou en pro ? ». Deux profils : **Créateur ou
+  créatrice amateur** (pas de statut déclaré : coûts, prix, ventes ; pas de
+  facture, de registres, de seuils ni de rubrique Facturation ; statut
+  « pas encore déclarée » par défaut) et **Artisan ou artisane pro**
+  (activité déclarée : tout est affiché). Le profil se change dans Réglages ›
+  Mon activité. Un atelier d'avant reçoit un profil deviné (pro si un statut
+  déclaré ou une facture existe). Les cinq profils du rapport de test
+  (loisir, quelques ventes, créateur, artisan, marchés) servaient aux tests ;
+  leurs identifiants sont ramenés aux deux profils.
+- Onglets : Accueil, Mes créations, Commandes, Mes ventes, Mes patrons,
+  Matières, Mes chiffres, Réglages. Catalogue et Mise en route n'apparaissent
+  que pendant qu'on y est.
+- Le mode « pour le plaisir » (matières et temps sans euros) reste dans le
+  code (`profil = "passion"`) mais n'est plus proposé.
 
 ## 0.1 Vendre (V45)
 
@@ -31,11 +34,17 @@ Dernière mise à jour : V39 (28 septembre 2026).
   virement, PayPal, chèque, autre), où, quand, à qui. La pièce en stock la
   plus ancienne passe en « Vendue » ; sans stock, une pièce terminée et
   vendue est créée et ses matières sortent. Annulable depuis le message.
-- **Jour de marché** : un écran par date ; une touche « Vendu » par création
-  (prix modifiable), moyen de paiement choisi une fois ; total du jour,
-  espèces / carte et autres, frais du stand, caisse du soir ; annulation
-  d'une vente. Les ventes sont des pièces vendues (canal « Marché / salon »,
-  `p.marche` = date) ; `state.marches[]` garde lieu et frais.
+- **Mes ventes** (onglet, profils vente) : toutes les ventes au même endroit,
+  par période (ce jour, 7 jours, ce mois, cette année, tout). Une ligne par
+  pièce vendue hors commande (payée sur le champ) et par commande livrée
+  (montant, reçu, reste à recevoir, bouton « Encaisser » qui ouvre la
+  commande). Filtres : payées en entier, reste à recevoir, stand et vente
+  directe, commandes livrées. Tuiles : vendu, reçu (par moyen), reste à
+  recevoir, caisse du jour (reçu − frais du stand). Le stand (« Vendre
+  vite ») est en haut sur la vue d'un jour : moyen de paiement et lieu
+  (marché / main propre) choisis une fois, une touche « Vendu » par
+  création, lieu et frais du jour. `state.marches[]` garde lieu et frais
+  par date ; une vente de stand porte `p.marche` = date.
 - Les règlements de commande ont un moyen de paiement en liste.
 
 ## 0.2 Listes et commandes (V46–V47)
@@ -61,6 +70,22 @@ Dernière mise à jour : V39 (28 septembre 2026).
   en tableur (CSV) ou à imprimer (PDF). Sous le statut « pas encore
   déclarée » : encart « Faut-il déclarer mes ventes ? » avec le guichet
   unique et l'URSSAF.
+
+## 0.4 Gain d'une pièce et temps réel (V52)
+
+- **Coût de revient** d'une pièce = matières (pesées ou de la fiche) +
+  emballage + transport + frais de vente + cotisations + part des frais
+  fixes. **Sans ton temps** : le temps n'est pas une dépense.
+- **Gain** = prix de vente − coût de revient. C'est ce qui paie ton temps.
+  **Gain de l'heure** = gain ÷ heures réelles. Un seul sens partout : ligne
+  de « Mes créations », détail de la pièce, Accueil, Mes chiffres.
+- Le temps valorisé à ton objectif sert seulement au **prix conseillé**
+  (celui qui paierait ce temps à ton objectif) et au « coût complet »
+  (`total`, `gainApresObjectif`) gardés pour information.
+- **Temps saisi à la main** : sur toute pièce, vendue comprise (« saisir le
+  temps » / « corriger » sous le chrono). Il remplace le chronomètre, vaut
+  pour tous les postes (`tempsSaisi`), refige la vente. Relancer le chrono
+  efface la marque.
 
 ## 1. Vocabulaire
 

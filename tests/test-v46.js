@@ -31,7 +31,7 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     const p = await page(b);
     await graine(p);
     await dans(p, function(){
-      appliquerProfil('artisan', {sansRendu:true}); state.reglages.confirmeLe = Date.now();
+      appliquerProfil('pro', {sansRendu:true}); state.reglages.confirmeLe = Date.now();
       /* 25 créations, 3 pièces chacune dont une vendue */
       for (var i = 0; i < 22; i++){ var cr = clone(creation('c1')); cr.id = 'x' + i; cr.nom = 'Création ' + (i + 10); state.creations.push(cr); }
       state.creations.forEach(function(c){ ajouterPieces(c.id, 1, 'termine', 'vendu'); ajouterPieces(c.id, 1, 'termine', 'envente'); ajouterPieces(c.id, 1, 'encours', 'atelier'); });

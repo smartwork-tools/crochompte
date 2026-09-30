@@ -87,7 +87,7 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
       var minA = minutesReellesPiece(a, cr);   /* 300 min de crochet chronométrées + les autres postes de la fiche */
       return {mo: minA > 300 && Math.abs(k.mainOeuvre - cts((minA + (r.minutesIndirectes||0)) / 60 * tauxH)) < 0.011, mesure: k.tempsMesure, total: Math.abs(k.total - (k.matieres + k.mainOeuvre + k.fixe + k.fraisVente + k.cotisations)) < 0.011,
               /* une pièce ratée a coûté ses matières jetées ET le temps passé */
-              jete: kj.jete && kj.matieres === cts(j.perteFigee) && kj.total === cts(j.perteFigee + kj.mainOeuvre) && kj.gain === -kj.total && kj.etat.k === 'bad' && kj.fraisVente === 0,
+              jete: kj.jete && kj.matieres === cts(j.perteFigee) && kj.total === cts(j.perteFigee + kj.mainOeuvre) && kj.gain === -kj.coutRevient && kj.etat.k === 'bad' && kj.fraisVente === 0,
               retMin: ke.retouche.min === 30, retMat: ke.matieres === cts(calculer(creation('c2')).matieres + 2), retN: ke.retouche.n === 1};
     });
     R.cout_piece_temps_reel = r4.mo && r4.mesure && r4.total;
@@ -107,12 +107,12 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     /* 6. Le gain de la ligne suit le prix tapé ; le détail s'ouvre */
     await p.fill('tr[data-pid="pa"] input[data-role="prix"]', '120'); await p.waitForTimeout(250);
     const g6 = await p.locator('tr[data-pid="pa"] [data-l="Gain"]').textContent();
-    const att6 = await dans(p, function(){ var k = coutPiece(piece('pa'), creation('c1')); return eur(k.gain) + eur(k.gainH) + ' / h'; });
+    const att6 = await dans(p, function(){ var k = coutPiece(piece('pa'), creation('c1')); return eur(k.gain) + eur(k.gainH) + ' / h pour ' + dureeLisible(k.minutes); });
     const nz = t => t.replace(/[\s\u00a0\u202f]/g,'');
     R.gain_suit_le_prix = /\/ h/.test(g6) && nz(g6) === nz(att6) && (await dans(p, function(){ var k = coutPiece(piece('pa'), creation('c1')); return Math.abs(k.prix - 120) < 0.001; }));
     await p.click('tr[data-pid="pa"] [data-role="cout"]'); await p.waitForTimeout(250);
     const d6 = await p.textContent('.dlg');
-    R.detail_cout_complet = /Matières/.test(d6) && /Main-d'œuvre/.test(d6) && /Conditionnement/.test(d6) && /Transport/.test(d6) && /dont retouches/.test(d6) && /Prix conseillé/.test(d6) && /Coût de revient complet/.test(d6);
+    R.detail_cout_complet = /Matières/.test(d6) && /Temps de travail/.test(d6) && /de retouche/.test(d6) && /Conditionnement/.test(d6) && /Transport/.test(d6) && /Prix conseillé/.test(d6) && /Coût de revient/.test(d6) && /Gain/.test(d6);
     await p.click('.dlg [data-oui]'); await p.waitForTimeout(200);
 
     /* 7. Ajouter des pièces par la boîte */
