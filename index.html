@@ -7,7 +7,7 @@
      seules connexions permises sont celles vers le serveur Supabase. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://upload.wikimedia.org https://www.gutenberg.org; connect-src 'self' https://jsmmajntopdozkmzrniy.supabase.co wss://jsmmajntopdozkmzrniy.supabase.co; font-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<script src="boot.js?v=56"></script>
+<script src="boot.js?v=561"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0f5f57">
 <link rel="manifest" href="manifest.webmanifest">
@@ -755,9 +755,10 @@
     color:#fff;min-width:0;}
   .pipeleg{display:flex;gap:14px;flex-wrap:wrap;margin-top:11px;font-size:12.5px;color:var(--muted);}
   .pipeleg b{color:var(--ink);font-family:"Public Sans",system-ui,sans-serif;font-variant-numeric:tabular-nums;}
-  /* Sur téléphone, les tableaux larges deviennent des cartes empilées :
-     un tableau de 820px sur un écran de 390px est inutilisable. */
-  @media (max-width:720px){
+  /* Sur téléphone et tablette en portrait (jusqu'à 900 px), les tableaux
+     larges deviennent des cartes empilées : un tableau de 820 px sur un
+     écran de 390 ou de 820 px oblige à faire défiler de côté (V56.1). */
+  @media (max-width:900px){
     /* l'en-tête collant doit rester mince : le slogan est déjà dit sur l'accueil */
     .brandnote{display:none;}
     .resp table{min-width:0!important;width:100%;}
@@ -893,7 +894,7 @@
   .sel-barre{position:sticky;top:calc(var(--safe-top, 0px) + 8px);z-index:5;display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px 14px;margin:0 0 12px;border:1.5px solid var(--primary);border-radius:12px;background:var(--surface)}
   .sel-barre .sel-n{font-weight:600}
   .sel-barre .sel-act{display:flex;flex-wrap:wrap;gap:8px}
-  @media (max-width:720px){
+  @media (max-width:900px){
     .resp.t-pieces tbody tr, .tablewrap.resp .t-pieces tbody tr{padding:8px 12px}
     .t-pieces td[data-l="Temps passé"] .hint, .t-pieces td[data-l="Coût réel"] .hint, .t-pieces td[data-l="Matières"] .hint, .t-pieces td[data-l="Prix de vente"] .hint{display:none}
     .t-pieces td{padding:4px 0}
@@ -935,7 +936,11 @@
   .t-pieces td.n .cel{align-items:flex-end;}
   .t-pieces .tps{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
   .t-pieces .cli{margin-top:6px;font-size:13px;}
-  .t-pieces select{width:100%;min-width:130px;}
+  .t-pieces select{width:100%;min-width:0;}
+  /* Le tableau des pièces tient dans le cadre : les petites lignes grises (coût, gain) passent à la ligne au lieu d'élargir la colonne (V56.1). */
+  .t-pieces th, .t-pieces td{padding:9px 8px;}
+  .t-pieces td.n{white-space:normal;}
+  .t-pieces td.n b{white-space:nowrap;}
   .t-pieces .act-col{display:flex;gap:4px;align-items:center;justify-content:flex-end;}
   .t-pieces b.good{color:var(--good);} .t-pieces b.warn{color:var(--warn);} .t-pieces b.bad{color:var(--bad);} .t-pieces b.neutre{color:var(--muted);}
   .t-pieces input[data-role=prix]{text-align:right;max-width:110px;}
@@ -1151,13 +1156,13 @@
      Sans ce fichier (ou s'il ne se charge pas), rien ne change : l'objet
      global reste absent et l'application démarre hors ligne, comme avant. -->
 <script src="config.js"></script>
-<script src="app.js?v=56"></script>
+<script src="app.js?v=561"></script>
 
 <!-- Comptes et synchronisation (module facultatif) : sans config.js,
      l'application fonctionne hors ligne, tout reste dans le navigateur.
      Avec config.js, se connecter devient obligatoire. Le message de repli
      (si ce module ne se charge pas) et l'écouteur d'erreur vivent dans
      app.js, section DÉMARRAGE. -->
-<script type="module" src="sync.js?v=56" id="script-sync"></script>
+<script type="module" src="sync.js?v=561" id="script-sync"></script>
 </body>
 </html>

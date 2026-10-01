@@ -3219,7 +3219,10 @@ function renderAccueil(main){
      même calcul sur un exemple, présenté comme tel. */
   var calcs = creationsActives().map(function(c){ return {c:c, r:calculer(c)}; });
   var avecPrix = calcs.filter(function(x){ return Number(x.c.prix) > 0 && x.r.heures > 0; });
-  var meilleure = avecPrix.slice().sort(function(a, b){ return b.r.gainHoraire - a.r.gainHoraire; })[0] || null;
+  /* « Ta meilleure création » : jamais une fiche au chiffre invraisemblable
+     (temps oublié, virgule en trop) : elle ferait annoncer 900 € de l'heure. */
+  var meilleure = avecPrix.filter(function(x){ return !invraisemblance(x.r); })
+    .sort(function(a, b){ return b.r.gainHoraire - a.r.gainHoraire; })[0] || null;
   var vitrine = meilleure || calcs[calcs.length - 1] || null;
   var bmH = bornesIndicateur("mois");
   var encMois = vend ? sommeEntre(encaissements(), bmH.debut, bmH.fin) : 0;
@@ -3447,8 +3450,12 @@ function renderAccueil(main){
 
 
 /* ═════ NOUVEAUTÉS ET SIGNALEMENT ═════ */
-var VERSION_APP = "V56";
+var VERSION_APP = "V56.1";
 var NOUVEAUTES = [
+  {v:"V56.1", d:"Octobre 2026", l:[
+    "Une pièce en cours dont tu as saisi seulement quelques minutes n'affiche plus un gain de l'heure absurde : tant qu'elle n'est pas terminée, le temps compté est au moins celui de la fiche.",
+    "Le prix conseillé de la pièce suit la même règle."
+  ]},
   {v:"V56", d:"Octobre 2026", l:[
     "Sur téléphone, l'Accueil ne clignote plus à l'ouverture, et le message « Atelier mis à jour » n'apparaît plus pour rien.",
     "Vendre une pièce pour une commande note le règlement sur la commande : l'argent est compté, une seule fois.",
@@ -4236,7 +4243,7 @@ function carteCreation(x, filtre, vend, complet, opts){
   var tout = view.creaTout && view.creaTout[c.id];
   var visibles = tout ? actives : actives.slice(0, LIM);
   var wrap = el('<div class="tablewrap resp"></div>');
-  var t = el('<table class="t-pieces" style="min-width:'+(vend?940:720)+'px"><thead><tr>'+
+  var t = el('<table class="t-pieces" style="min-width:'+(vend?820:640)+'px"><thead><tr>'+
     '<th style="width:34px"><input type="checkbox" class="sel-tout" aria-label="Sélectionner toutes les pièces de '+esc(c.nom)+'"></th>'+
     '<th style="width:124px">Pièce</th><th style="width:140px">Fabrication</th>'+
     (vend ? '<th style="width:150px">Destination</th>' : '')+
@@ -4268,7 +4275,7 @@ function carteCreation(x, filtre, vend, complet, opts){
     var ca = passees.reduce(function(a, p){ return a + (p.com === "vendu" ? Number(p.prix) || 0 : 0); }, 0);
     var hist = el('<details class="crea-hist"><summary>'+(vend ? 'Historique : ' + esc(pluriel(venduesN, "vendue")) + (ca ? ' · ' + esc(eur(ca)) : '') + (passees.length > venduesN ? ' · ' + (passees.length - venduesN) + ' ' + (passees.length - venduesN > 1 ? 'offertes ou ratées' : 'offerte ou ratée') : '')
                                                        : 'Historique : ' + esc(pluriel(passees.length, "pièce")))+'</summary><div class="tablewrap resp"></div></details>');
-    var t2 = el('<table class="t-pieces t-hist" style="min-width:'+(vend?1020:790)+'px"><thead><tr><th style="width:34px"></th><th style="width:150px">Pièce</th><th style="width:156px">Fabrication</th>'+
+    var t2 = el('<table class="t-pieces t-hist" style="min-width:'+(vend?860:660)+'px"><thead><tr><th style="width:34px"></th><th style="width:150px">Pièce</th><th style="width:156px">Fabrication</th>'+
       (vend ? '<th style="width:170px">Destination</th>' : '')+'<th style="width:160px">Temps passé</th><th class="n" style="width:130px">'+(vend ? 'Coût réel' : 'Matières')+'</th>'+
       (vend ? '<th class="n" style="width:110px">Prix de vente</th><th class="n" style="width:130px">Gain</th>' : '')+'<th style="width:40px"></th></tr></thead><tbody></tbody></table>');
     var tb2 = t2.querySelector("tbody");
@@ -8928,16 +8935,16 @@ function renderIndicateurs(main){
       var cR = el('<div class="card" style="margin-bottom:18px"><header><h2>Ce qui te rapporte le plus</h2>'+
         '<p>Tout ce que chaque création t\'a rapporté (ventes de pièces et commandes) et ce qu\'elle te paie de l\'heure.</p>'+
         '</header><div class="body" style="padding-top:14px"></div></div>');
-      var wR = el('<div class="tablewrap"></div>');
+      var wR = el('<div class="tablewrap resp"></div>');
       var tR = el('<table style="min-width:560px"><thead><tr><th>Création</th><th class="n">Vendues</th>'+
         '<th class="n">Reçu</th><th class="n">Gain de l\'heure</th><th class="n">En stock</th></tr></thead><tbody></tbody></table>');
       lignes.forEach(function(x){
         var stt = x.douteux ? {k:"warn"} : statut(x.gain);
-        tR.querySelector("tbody").appendChild(el('<tr><td><b>'+esc(x.nom)+'</b></td><td class="n">'+x.vendues+'</td>'+
-          '<td class="n">'+esc(eur(x.ca))+'</td>'+
-          '<td class="n" style="color:'+(stt.k==="good"?"var(--good)":stt.k==="warn"?"var(--warn)":"var(--bad)")+'">'+esc(eur(x.gain))+
+        tR.querySelector("tbody").appendChild(el('<tr><td><b>'+esc(x.nom)+'</b></td><td class="n" data-l="Vendues">'+x.vendues+'</td>'+
+          '<td class="n" data-l="Reçu">'+esc(eur(x.ca))+'</td>'+
+          '<td class="n" data-l="Gain de l\'heure" style="color:'+(stt.k==="good"?"var(--good)":stt.k==="warn"?"var(--warn)":"var(--bad)")+'">'+esc(eur(x.gain))+
             (x.douteux ? '<span class="hint" style="display:block;margin:0;font-size:11.5px">⚠ temps à vérifier</span>' : x.reel ? '' : '<span class="hint" style="display:block;margin:0;font-size:11.5px">prix de la fiche</span>')+'</td>'+
-          '<td class="n">'+x.stock+'</td></tr>'));
+          '<td class="n" data-l="En stock">'+x.stock+'</td></tr>'));
       });
       wR.appendChild(tR);
       cR.querySelector(".body").appendChild(wR);
@@ -12692,9 +12699,16 @@ function pieceProvisoire(p){
   return !!p && p.com !== "vendu" && p.com !== "jete" && (p.prod === "afaire" || p.prod === "encours");
 }
 function minutesReellesPiece(p, cr){
-  /* Temps saisi à la main : c'est le total réel, tous postes confondus. */
-  if (p && p.tempsSaisi) return minutesMesurees(p);
-  var m = mesureDe(p), t = 0, prov = pieceProvisoire(p);
+  var prov = pieceProvisoire(p);
+  /* Temps saisi à la main : c'est le total réel, tous postes confondus. Mais
+     sur une pièce pas terminée, « 8 min » veut dire « 8 min déjà faites », pas
+     « 8 min en tout » : on compte au moins le temps de la fiche (V56.1). */
+  if (p && p.tempsSaisi){
+    var estTot = 0;
+    if (prov && cr) POSTES.forEach(function(x){ estTot += Number(cr.temps[x.k]) || 0; });
+    return Math.max(minutesMesurees(p), estTot);
+  }
+  var m = mesureDe(p), t = 0;
   POSTES.forEach(function(x){
     var mes = Number(m[x.k]) || 0, est = cr ? Number(cr.temps[x.k]) || 0 : 0;
     /* Pièce pas terminée : le chronomètre n'a compté que le début. Tant
@@ -13202,7 +13216,7 @@ function renderCommandes(main){
   main.appendChild(noteCmdEl);
 
   var wrap = el('<div class="tablewrap resp" style="margin-top:8px"></div>');
-  var t = el('<table class="t-cmd" style="min-width:1000px"><thead><tr><th data-tri="num" style="width:110px">N°</th><th data-tri="client">Commandé par</th><th>Articles</th>'+
+  var t = el('<table class="t-cmd" style="min-width:900px"><thead><tr><th data-tri="num" style="width:110px">N°</th><th data-tri="client">Commandé par</th><th>Articles</th>'+
     '<th data-tri="pour" style="width:118px">Pour le</th><th data-tri="etape" style="width:190px">Étape et suite</th>'+
     '<th class="n" data-tri="convenu" style="width:105px">Prix convenu</th><th class="n" data-tri="verse" style="width:95px">Reçu</th><th class="n" data-tri="reste" style="width:105px">Reste à recevoir</th>'+
     '<th style="width:70px"><span class="sr-only">Actions</span></th></tr></thead><tbody></tbody></table>');

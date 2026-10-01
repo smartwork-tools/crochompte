@@ -125,7 +125,7 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     await p.waitForTimeout(300);
     R.catalogue_sans_type = !/Tous les types|types affichés|type affiché/.test(await p.locator('#main').textContent());
     R.categories_unifiees = await dans(p, function(){ return CATS === FAMILLES_MAT && famNomMat('garn') === 'Rembourrage'; });
-    R.version_56 = await dans(p, function(){ return VERSION_APP === 'V56' && NOUVEAUTES[0].v === 'V56'; });
+    R.version_56 = await dans(p, function(){ return VERSION_APP === 'V56.1' && NOUVEAUTES[1].v === 'V56'; });
   } catch (e) { errs.push('TEST: ' + e.message); }
   R.pas_d_erreur = errs.length === 0;
   console.log(JSON.stringify(R, null, 1)); console.log('ERREURS JS: ' + (errs.length ? errs.join(' | ') : 'aucune'));
