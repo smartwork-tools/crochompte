@@ -65,6 +65,19 @@ function siteAutorise(v: unknown): string {
   return defaut;
 }
 
+
+// L'adresse IP de la personne : d'abord l'en-tête que pose la passerelle
+// (cf-connecting-ip, x-real-ip), sinon le DERNIER élément de x-forwarded-for
+// (le premier peut être fourni par le client lui-même). Avec le seul dernier
+// élément, derrière certains relais, toutes les visites portaient la même
+// adresse interne et une seule personne pouvait bloquer tout le monde (V56).
+function adresseIp(req: Request): string {
+  const direct = req.headers.get("cf-connecting-ip") || req.headers.get("x-real-ip");
+  if (direct && direct.trim()) return direct.trim().slice(0, 64);
+  const xff = (req.headers.get("x-forwarded-for") ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+  return (xff.length ? xff[xff.length - 1] : "inconnue").slice(0, 64);
+}
+
 function origineAutorisee(o: string | null): string {
   const ok = !!o && (/^https:\/\/(www\.)?crochompte\.com$/.test(o) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(o));
   return ok ? o! : "https://crochompte.com";
@@ -176,9 +189,7 @@ Deno.serve(async (req: Request) => {
     .from("pseudos").select("user_id").eq("courriel", email).limit(5);
   if (eLect) return json({ erreur: "Inscription impossible pour l'instant. Réessaie dans un moment." }, 500);
   // Au plus 20 inscriptions par adresse IP en 15 minutes (anti-robots).
-  // L'adresse IP : le DERNIER élément de x-forwarded-for est celui qu'ajoute
-  // la passerelle Supabase ; le premier peut être fourni par le client lui-même.
-  const ip = (req.headers.get("x-forwarded-for") ?? "").split(",").map((x) => x.trim()).filter(Boolean).pop() || "inconnue";
+  const ip = adresseIp(req);
   try {
     const { data: n } = await admin.rpc("compter_tentative", { p_cle: "insc-ip:" + ip });
     if ((Number(n) || 0) > 20) return json({ erreur: "Trop d'inscriptions depuis ce réseau. Patiente 15 minutes, puis réessaie." }, 429);

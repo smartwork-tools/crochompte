@@ -57,7 +57,8 @@ create policy "chacune purge ses versions"
   using ( (select auth.uid()) = user_id );
 
 -- ─────────────────────────────────────────────────────────────────────────
--- Ne garder que les 20 dernières versions par compte.
+-- Ne garder que les 30 dernières versions par compte (même plafond que le
+-- déclencheur serveur ateliers_versions_plafond de schema-abonnement.sql).
 -- Un historique sans limite finirait par peser plus lourd que l'atelier
 -- lui-même, pour un bénéfice nul : au-delà de quelques jours, personne ne
 -- restaure une version. La fonction est appelée après chaque archivage.
@@ -66,7 +67,7 @@ create or replace function public.purger_versions()
 returns void
 language sql
 security definer
-set search_path = public
+set search_path = public, pg_temp
 as $$
   delete from public.ateliers_versions
    where user_id = auth.uid()
@@ -74,7 +75,7 @@ as $$
        select id from public.ateliers_versions
         where user_id = auth.uid()
         order by cree desc
-        limit 20
+        limit 30
      );
 $$;
 

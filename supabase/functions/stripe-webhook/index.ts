@@ -62,14 +62,44 @@ Deno.serve(async (req: Request) => {
 
   const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
+  // Chaque événement n'est traité qu'une fois : Stripe peut renvoyer le même
+  // deux fois, ou un ancien après un plus récent (V56).
+  {
+    const { error: eIns } = await admin.from("stripe_evenements").insert({ id: ev.id, type: ev.type });
+    if (eIns) {
+      if (/duplicate|23505/i.test(eIns.message + " " + ((eIns as { code?: string }).code ?? ""))) {
+        return new Response(JSON.stringify({ recu: true, deja: true }), { headers: { "Content-Type": "application/json" } });
+      }
+      console.error("stripe-webhook : journal des événements indisponible", eIns.message);   // table absente : on continue sans garde
+    }
+  }
+
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  // Statut Stripe → statut Crochompte. Un impayé ne prolonge jamais l'accès :
+  // la fin reste celle de la dernière période réellement payée (V56).
+  function statutDe(sub: Stripe.Subscription): { statut: string; prolonger: boolean } {
+    switch (sub.status) {
+      case "active": case "trialing": return { statut: "actif", prolonger: true };
+      case "past_due": return { statut: "actif", prolonger: false };
+      case "canceled": case "unpaid": case "incomplete_expired": return { statut: "resilie", prolonger: false };
+      default: return { statut: "actif", prolonger: false };   // incomplete, paused
+    }
+  }
+
   // Met la ligne d'abonnement à jour pour un compte, sans jamais raccourcir
-  // une période déjà acquise.
+  // une période déjà acquise, ni retirer un accès offert sans limite.
   async function activer(uid: string, champs: Record<string, unknown>) {
+    if (!UUID.test(uid)) { console.error("stripe-webhook : identifiant de compte invalide", uid); return; }
     const { data: actuel } = await admin.from("abonnements").select("fin, statut").eq("user_id", uid).maybeSingle();
     const finActuelle = actuel?.fin ? new Date(actuel.fin).getTime() : 0;
     const finNouvelle = champs.fin ? new Date(String(champs.fin)).getTime() : 0;
-    if (actuel?.statut === "offert" && !actuel.fin) delete champs.fin;             // accès illimité offert : on ne le retire pas
-    else if (finNouvelle && finNouvelle < finActuelle) delete champs.fin;         // jamais en arrière
+    if (actuel?.statut === "offert" && !actuel.fin) {
+      // Accès illimité offert : on ne note que les identifiants Stripe, le
+      // statut « offert » reste (sinon « actif » sans fin = accès fermé).
+      delete champs.fin; delete champs.statut; delete champs.offre; delete champs.annulation_prevue;
+    } else if (finNouvelle && finNouvelle < finActuelle) delete champs.fin;         // jamais en arrière
+    if (!Object.keys(champs).length) return;
     const { error } = await admin.from("abonnements").upsert({ user_id: uid, ...champs, maj: new Date().toISOString() }, { onConflict: "user_id" });
     if (error) throw new Error(error.message);
   }
@@ -93,7 +123,7 @@ Deno.serve(async (req: Request) => {
       case "checkout.session.completed": {
         const session = ev.data.object as Stripe.Checkout.Session;
         const uid = session.client_reference_id;
-        if (!uid || session.mode !== "subscription" || !session.subscription) break;
+        if (!uid || !UUID.test(uid) || session.mode !== "subscription" || !session.subscription) break;
         const subId = typeof session.subscription === "string" ? session.subscription : session.subscription.id;
         const sub = await stripe.subscriptions.retrieve(subId, { expand: ["items.data.price"] });
         // On note le compte sur l'abonnement Stripe : les renouvellements le retrouveront.
@@ -129,11 +159,10 @@ Deno.serve(async (req: Request) => {
         const sub = ev.data.object as Stripe.Subscription;
         const uid = await compteDeLAbonnement(sub);
         if (!uid) break;
-        await activer(uid, {
-          annulation_prevue: !!sub.cancel_at_period_end,
-          statut: sub.status === "active" || sub.status === "trialing" ? "actif" : sub.status === "canceled" ? "resilie" : "actif",
-          fin: new Date(sub.current_period_end * 1000).toISOString(),
-        });
+        const st = statutDe(sub);
+        const champs: Record<string, unknown> = { annulation_prevue: !!sub.cancel_at_period_end, statut: st.statut };
+        if (st.prolonger) champs.fin = new Date(sub.current_period_end * 1000).toISOString();
+        await activer(uid, champs);
         break;
       }
       case "customer.subscription.deleted": {

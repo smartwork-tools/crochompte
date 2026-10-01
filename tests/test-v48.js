@@ -51,7 +51,7 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     R.recherche_tous_types = (await p.textContent('#main')).indexOf('Bonnet adulte') >= 0;
     await dans(p, function(){ view.modeleVu = 'bonnet'; render(); }); await p.waitForTimeout(300);
     const boutons = await p.$$eval('#main button', bs => bs.map(b => b.textContent.trim()));
-    R.bouton_fiche_en_haut = boutons.indexOf('Créer ma fiche à partir de ce modèle') >= 0 && boutons.indexOf('Créer ma fiche à partir de ce modèle') < 4;
+    R.bouton_fiche_en_haut = boutons.indexOf('En faire une création') >= 0 && boutons.indexOf('En faire une création') < 4;
     R.droits_replies = (await p.locator('details:has-text("Photo du modèle et droits")').count()) === 1 && !(await p.locator('details:has-text("Photo du modèle et droits")').evaluate(d => d.open));
 
     /* 3. fiche : marges repliées, prix conseillé visible */

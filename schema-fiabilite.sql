@@ -56,6 +56,18 @@ as $$
 $$;
 revoke all on function public.compter_tentative(text) from public, anon, authenticated;
 
+-- Connexion réussie : les compteurs de cet identifiant repartent de zéro
+-- (seuls les échecs comptent, V56). Réservée aux fonctions serveur.
+create or replace function public.oublier_tentatives(p_cles text[])
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  delete from tentatives where cle = any(p_cles);
+$$;
+revoke all on function public.oublier_tentatives(text[]) from public, anon, authenticated;
+
 -- Ménage : les compteurs de plus d'un jour ne servent plus à rien.
 create or replace function public.purger_tentatives()
 returns void
@@ -89,24 +101,7 @@ create trigger patrons_publics_dates
   before insert or update on public.patrons_publics
   for each row execute function public.patrons_publics_dates();
 
--- ── 4. Historique : 30 versions ────────────────────────────────────────────
-create or replace function public.purger_versions()
-returns void
-language sql
-security definer
-set search_path = public
-as $$
-  delete from public.ateliers_versions
-   where user_id = auth.uid()
-     and id not in (
-       select id from public.ateliers_versions
-        where user_id = auth.uid()
-        order by cree desc
-        limit 30
-     );
-$$;
-revoke all on function public.purger_versions() from public;
-grant execute on function public.purger_versions() to authenticated;
+-- ── 4. Historique : 30 versions — voir schema-versions.sql (une seule définition, V56)
 
 -- ─────────────────────────────────────────────────────────────────────────
 -- Vérification (facultatif) :

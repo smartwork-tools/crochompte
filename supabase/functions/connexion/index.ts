@@ -19,6 +19,19 @@
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
+
+// L'adresse IP de la personne : d'abord l'en-tête que pose la passerelle
+// (cf-connecting-ip, x-real-ip), sinon le DERNIER élément de x-forwarded-for
+// (le premier peut être fourni par le client lui-même). Avec le seul dernier
+// élément, derrière certains relais, toutes les visites portaient la même
+// adresse interne et une seule personne pouvait bloquer tout le monde (V56).
+function adresseIp(req: Request): string {
+  const direct = req.headers.get("cf-connecting-ip") || req.headers.get("x-real-ip");
+  if (direct && direct.trim()) return direct.trim().slice(0, 64);
+  const xff = (req.headers.get("x-forwarded-for") ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+  return (xff.length ? xff[xff.length - 1] : "inconnue").slice(0, 64);
+}
+
 function origineAutorisee(o: string | null): string {
   const ok = !!o && (/^https:\/\/(www\.)?crochompte\.com$/.test(o) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(o));
   return ok ? o! : "https://crochompte.com";
@@ -49,7 +62,7 @@ Deno.serve(async (req: Request) => {
   // client qui n'enverrait pas encore "identifiant".
   const identifiant = String(body.identifiant || body.pseudo || "").trim();
   const motDePasse = String(body.motDePasse || "");
-  if (!identifiant || !motDePasse) return json(ECHEC, 401);
+  if (!identifiant || !motDePasse || identifiant.length > 254 || motDePasse.length > 200) return json(ECHEC, 401);
 
   const url = Deno.env.get("SUPABASE_URL")!;
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -60,9 +73,7 @@ Deno.serve(async (req: Request) => {
   // 15 minutes. Sans elle, on pourrait essayer des mots de passe à l'infini
   // sur un pseudo connu. (Nécessite schema-fiabilite.sql ; sans lui, la
   // connexion fonctionne comme avant.)
-  // L'adresse IP : le DERNIER élément de x-forwarded-for est celui qu'ajoute
-  // la passerelle Supabase ; le premier peut être fourni par le client lui-même.
-  const ip = (req.headers.get("x-forwarded-for") ?? "").split(",").map((x) => x.trim()).filter(Boolean).pop() || "inconnue";
+  const ip = adresseIp(req);
   try {
     // Trois compteurs : identifiant + adresse IP (10), adresse IP (50), et
     // identifiant toutes adresses confondues (100). Une personne mal
@@ -113,6 +124,14 @@ Deno.serve(async (req: Request) => {
     return json({ erreur: "Ton adresse e-mail n'est pas encore confirmée. Clique sur le lien reçu par e-mail, puis reconnecte-toi." }, 403);
   }
   if (!rep.ok || !jeton.access_token) return json(ECHEC, 401);
+
+  // Connexion réussie : les compteurs de cet identifiant repartent de zéro.
+  // Seuls les échecs comptent ; dix connexions légitimes en un quart d'heure
+  // ne bloquent personne (V56).
+  try {
+    const cleOk = identifiant.toLowerCase();
+    await admin.rpc("oublier_tentatives", { p_cles: ["cx:" + cleOk + "|" + ip, "cx:" + cleOk] });
+  } catch (_e) { /* sans gravité */ }
 
   return json({
     access_token: jeton.access_token,

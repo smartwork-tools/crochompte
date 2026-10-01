@@ -65,7 +65,7 @@ async function connecter(p){
     // 3. Historique : fiche → précédent → liste
     await p.click('#nav >> text=Mes créations'); await p.waitForTimeout(300);
     await p.locator('.crea-id').first().click(); await p.waitForTimeout(300);
-    R.fiche_ouverte = (await p.textContent('#nav [aria-current="true"]')).includes('Fiche');
+    R.fiche_ouverte = (await p.textContent('#nav [aria-current="true"]')).includes('Création');
     await p.goBack(); await p.waitForTimeout(400);
     R.precedent_revient_liste = (await p.textContent('#nav [aria-current="true"]')).trim() === 'Mes créations';
     await p.goBack(); await p.waitForTimeout(400);

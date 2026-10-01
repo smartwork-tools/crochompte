@@ -142,7 +142,7 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     /* 7. « Partir d'une fiche vide » : aucune matière, aucun temps */
     const r7 = await dans(p, function(){
       state.creations = []; view.draft = null; aller('creations'); render();
-      const bt = [...document.querySelectorAll('#main button')].find(x=>x.textContent.trim() === "Partir d'une fiche vide");
+      const bt = [...document.querySelectorAll('#main button')].find(x=>x.textContent.trim() === "Partir d'une création vide");
       if (!bt) return null;
       bt.click();
       const d = view.draft; let t = 0; for (const k in d.temps) t += Number(d.temps[k])||0;

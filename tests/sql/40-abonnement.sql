@@ -107,3 +107,42 @@ reset role;
 insert into public.ateliers_versions (user_id, donnees, maj, raison)
   select '00000000-0000-0000-0000-0000000000c1', '{}'::jsonb, now() - (i || ' minutes')::interval, 'remplacee' from generate_series(1, 40) i;
 select 'C versions plafonnées (30 attendu)' t, count(*) from public.ateliers_versions where user_id = '00000000-0000-0000-0000-0000000000c1';
+
+-- 14. (V56) Un atelier vide ne remplace jamais un atelier rempli.
+set role authenticated; select set_config('test.uid','00000000-0000-0000-0000-0000000000c1',false);
+select 'C envoi vide sur atelier rempli (erreur vierge attendue)' t, r->>'erreur' erreur
+  from public.enregistrer_atelier('{"creations":[],"pieces":[],"commandes":[],"patrons":[],"reglages":{"profilType":"amateur"}}'::jsonb, null, 'test') r;
+select 'C atelier intact (creations [9] attendu)' t, donnees from public.ateliers where user_id = '00000000-0000-0000-0000-0000000000c1';
+select 'atelier_vierge({}) (true attendu)' t, public.atelier_vierge('{}'::jsonb);
+select 'atelier_vierge(stock) (false attendu)' t, public.atelier_vierge('{"matieres":[{"stock":3}]}'::jsonb);
+select 'atelier_vierge(remise à zéro) (false attendu)' t, public.atelier_vierge('{"reinitialiseLe":1}'::jsonb);
+
+-- 15. (V56) Abonnement terminé : plus d'écriture, lecture conservée.
+reset role;
+update public.abonnements set statut = 'expire', essai_fin = now() - interval '1 day', fin = null where user_id = '00000000-0000-0000-0000-0000000000c1';
+set role authenticated; select set_config('test.uid','00000000-0000-0000-0000-0000000000c1',false);
+select 'C expiré : acces_actif (false attendu)' t, public.acces_actif();
+select 'C expiré : enregistrer_atelier (erreur abonnement_requis attendue)' t, r->>'erreur' erreur
+  from public.enregistrer_atelier('{"creations":[9,10]}'::jsonb, null, 'test') r;
+select 'C expiré : update direct (0 ligne ou ERREUR attendue)' t;
+update public.ateliers set donnees = '{"creations":[99]}'::jsonb where user_id = '00000000-0000-0000-0000-0000000000c1';
+select 'C expiré : atelier intact (creations [9] attendu)' t, donnees from public.ateliers where user_id = '00000000-0000-0000-0000-0000000000c1';
+select 'C expiré : lecture possible (1 attendu)' t, count(*) from public.ateliers where user_id = '00000000-0000-0000-0000-0000000000c1';
+select 'C expiré : archive refusée (ERREUR attendue)' t;
+insert into public.ateliers_versions (user_id, donnees, maj, raison) values ('00000000-0000-0000-0000-0000000000c1', '{}'::jsonb, now(), 'remplacee');
+select 'C expiré : facture refusée (ERREUR abonnement_requis attendue)' t;
+select public.emettre_facture(2026, 0, 'facture', 'cmd-x', '{"numero":"x"}'::jsonb);
+-- Un code cadeau rouvre l'accès, et l'écriture repart.
+reset role;
+set role authenticated; select set_config('test.uid','00000000-0000-0000-0000-0000000000a1',false);
+create temp table t_code56 as select public.admin_creer_code(30, 1, 'réouverture') as code;
+select set_config('test.uid','00000000-0000-0000-0000-0000000000c1',false);
+select 'C code (ok true attendu)' t, (public.utiliser_code((select code from t_code56)))->>'ok' ok;
+select 'C rouvert : acces_actif (true attendu)' t, public.acces_actif();
+select 'C rouvert : envoi (maj non null attendu)' t, (r->>'maj') is not null maj
+  from public.enregistrer_atelier('{"creations":[9,10]}'::jsonb, null, 'test') r;
+
+-- 16. (V56) Journal des événements Stripe fermé aux rôles du navigateur.
+select 'C stripe_evenements (ERREUR attendue)' t;
+select count(*) from public.stripe_evenements;
+reset role;

@@ -7,7 +7,7 @@
      seules connexions permises sont celles vers le serveur Supabase. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://upload.wikimedia.org https://www.gutenberg.org; connect-src 'self' https://jsmmajntopdozkmzrniy.supabase.co wss://jsmmajntopdozkmzrniy.supabase.co; font-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<script src="boot.js?v=56"></script>
+<script src="boot.js?v=551"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0f5f57">
 <link rel="manifest" href="manifest.webmanifest">
@@ -191,6 +191,7 @@
     .reg-liste .reg-item[aria-current="true"]{background:none;}
     .reg-detail .reg-nav{display:none;}
   }
+  main.wide{max-width:1100px;}
 
   /* buttons + fields */
   button.btn{appearance:none;font:inherit;font-weight:500;font-size:14px;cursor:pointer;border-radius:7px;padding:8px 14px;border:1px solid var(--rule-strong);background:var(--surface);color:var(--ink);}
@@ -437,6 +438,7 @@
   .todo .ico.bad{background:var(--bad-soft);color:var(--bad);} .todo .ico.warn{background:var(--warn-soft);color:var(--warn);}
   .todo li.avec-ico{grid-template-columns:30px minmax(0,1fr) auto;}
   @media (max-width:560px){ .todo li.avec-ico{grid-template-columns:30px minmax(0,1fr);} }
+  .dash-bloc{margin-bottom:18px;}
   /* Cibles tactiles d'au moins 44 px sur écran tactile (WCAG 2.5.5). */
   @media (pointer:coarse){
     button.btn, a.btn, button.btn.sm, .btn.sm{min-height:44px!important;}
@@ -459,6 +461,7 @@
     body.avec-barre main{padding-bottom:120px;}
     body.avec-barre #toasts{bottom:calc(env(safe-area-inset-bottom,0px) + 78px);}
   }
+  .sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
   .manques{background:var(--warn-soft);border:1px solid var(--warn);border-radius:10px;padding:12px 14px;}
   .manques ul{margin:0;padding:0;list-style:none;display:grid;gap:8px;}
   .manques li{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;font-size:14px;}
@@ -479,6 +482,9 @@
   .todo .d{display:block;font-size:13px;color:var(--muted);margin-top:2px;}
   @media (max-width:560px){ .todo li{grid-template-columns:10px minmax(0,1fr);} .todo li .btn{grid-column:2;justify-self:start;} }
   .dash-tiles{margin:0;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));}
+  .crea-mini{display:flex;flex-direction:column;gap:8px;}
+  .crea-mini .trow{width:100%;text-align:left;font:inherit;color:inherit;}
+  .crea-mini .trow .c b.good{color:var(--good);} .crea-mini .trow .c b.warn{color:var(--warn);} .crea-mini .trow .c b.bad{color:var(--bad);}
   .ind-guide li.fait::before{content:"✓";background:var(--good-soft);color:var(--good);}
   .ind-guide li.fait b{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--rule-strong);}
   main .foot{margin-top:36px;padding-left:0;padding-right:0;}
@@ -662,11 +668,18 @@
   .band{position:relative;display:block;aspect-ratio:16/10;border-radius:9px;overflow:hidden;
     margin:-4px -4px 4px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;}
   .band img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
+  .band .band-mot{opacity:.5;}
+  .band .band-lab{font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;
+    color:var(--muted);}
   .band .credit{position:absolute;left:0;right:0;bottom:0;padding:4px 7px;font-size:9.5px;
     color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.62));text-align:right;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .band.a-photo{background:var(--surface-2);}
   .band.a-photo .band-repli{display:none;}
+  .band.vide.f-ami{background:var(--f-ami-b);} .band.vide.f-bebe{background:var(--f-bebe-b);}
+  .band.vide.f-mode{background:var(--f-mode-b);} .band.vide.f-maison{background:var(--f-maison-b);}
+  .band.vide.f-vegetal{background:var(--f-vegetal-b);} .band.vide.f-fete{background:var(--f-fete-b);}
+  .band.vide.f-perso{background:var(--f-perso-b);}
   .photoslot.grand{width:150px;height:150px;}
   .slot-lab{position:absolute;bottom:8px;left:0;right:0;text-align:center;font-size:10.5px;
     font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);}
@@ -755,6 +768,15 @@
     color:#fff;min-width:0;}
   .pipeleg{display:flex;gap:14px;flex-wrap:wrap;margin-top:11px;font-size:12.5px;color:var(--muted);}
   .pipeleg b{color:var(--ink);font-family:"Public Sans",system-ui,sans-serif;font-variant-numeric:tabular-nums;}
+  .srch{font-size:12px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);
+    margin:22px 0 10px;display:flex;align-items:center;gap:8px;}
+  .srch:first-child{margin-top:0;}
+  .srcs{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;}
+  a.src{display:flex;flex-direction:column;gap:3px;text-decoration:none;color:var(--ink);
+    border:1px solid var(--rule);border-radius:9px;padding:12px 14px;background:var(--surface-2);}
+  a.src:hover{border-color:var(--primary);}
+  a.src .s-t{font-weight:600;font-size:14px;}
+  a.src .s-d{font-size:12.5px;color:var(--muted);line-height:1.4;}
   /* Sur téléphone, les tableaux larges deviennent des cartes empilées :
      un tableau de 820px sur un écran de 390px est inutilisable. */
   @media (max-width:720px){
@@ -880,7 +902,9 @@
   .stand-prix{margin:0;width:96px;flex:none}
   .stand-prix input{width:96px;text-align:right}
   .stand-btn{flex:none;min-width:88px}
-  @media (max-width:600px){ .stand-ligne{flex-wrap:wrap} .stand-nom{flex-basis:calc(100% - 52px)} .stand-prix{width:auto;flex:1} .stand-btn{flex:1} }
+  .ventes-jour{display:flex;flex-direction:column;gap:6px}
+  .vente-ligne{display:grid;grid-template-columns:52px 1fr auto auto auto;gap:10px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--rule)}
+  @media (max-width:600px){ .stand-ligne{flex-wrap:wrap} .stand-nom{flex-basis:calc(100% - 52px)} .stand-prix{width:auto;flex:1} .stand-btn{flex:1} .vente-ligne{grid-template-columns:44px 1fr auto;grid-auto-rows:auto} }
   .crea-deplier{display:block;width:100%;text-align:left;padding:10px 16px;border:none;border-top:1px solid var(--rule);background:var(--surface-2);font:inherit;font-size:13.5px;color:var(--muted);cursor:pointer;border-radius:0 0 12px 12px}
   .crea-deplier:hover{color:var(--ink)}
   .crea-hist{border-top:1px solid var(--rule);padding:8px 16px 12px}
@@ -1019,6 +1043,7 @@
   :root{--hero-warn:#f3d58a;}
   .reprise .r-liste b.warn{color:var(--hero-warn);}
   /* Verdicts : une seule famille de couleurs, partout. */
+  .verdict-ok{color:var(--good);} .verdict-moyen{color:var(--warn);} .verdict-perte{color:var(--bad);}
   /* Aide « ? » */
   .aide-q{appearance:none;display:inline-grid;place-items:center;width:18px;height:18px;margin-left:6px;padding:0;border-radius:50%;
     border:1px solid var(--rule-strong);background:var(--surface);color:var(--primary-ink);font:inherit;font-size:11.5px;font-weight:700;line-height:1;cursor:pointer;vertical-align:1px;}
@@ -1090,7 +1115,7 @@
     .achats-resp td::before{content:attr(data-l) " : ";color:var(--muted);font-size:12px;}
     .achats-resp td:first-child::before{content:none;}
     /* cibles : « J'ai acheté », « Couleurs », « × » */
-    .lien-mini.stk{padding:10px 6px;margin:-8px -2px;}
+    .stk-liens .lien-mini, .lien-mini.stk{padding:10px 6px;margin:-8px -2px;}
   }
   .matrow .matpick{overflow:hidden;text-overflow:ellipsis;}
   /* Matières : bouton d'ajout en tête d'onglet */
@@ -1151,13 +1176,18 @@
      Sans ce fichier (ou s'il ne se charge pas), rien ne change : l'objet
      global reste absent et l'application démarre hors ligne, comme avant. -->
 <script src="config.js"></script>
-<script src="app.js?v=56"></script>
+<script src="app.js?v=551"></script>
 
-<!-- Comptes et synchronisation (module facultatif) : sans config.js,
-     l'application fonctionne hors ligne, tout reste dans le navigateur.
-     Avec config.js, se connecter devient obligatoire. Le message de repli
-     (si ce module ne se charge pas) et l'écouteur d'erreur vivent dans
-     app.js, section DÉMARRAGE. -->
-<script type="module" src="sync.js?v=56" id="script-sync"></script>
+<!-- ═══ Comptes et synchronisation — facultatifs quand config.js est absent ═══
+     Sans config.js, l'application fonctionne hors ligne, exactement comme la
+     version publique : tout reste dans le navigateur. Quand config.js est
+     rempli, se connecter devient obligatoire (voir renderPortail() plus haut
+     dans le script principal) : ce petit script ne sert plus alors qu'en
+     repli, si sync.js ne parvient pas à se charger avant même d'atteindre
+     l'écran de connexion. -->
+<!-- Si le module ne peut pas se charger (pas de réseau pour sa bibliothèque),
+     on n'attend pas les 7 secondes de sécurité : l'atelier s'ouvre tout de
+     suite en mode hors ligne, ou le message d'erreur s'affiche. -->
+<script type="module" src="sync.js?v=551" id="script-sync"></script>
 </body>
 </html>

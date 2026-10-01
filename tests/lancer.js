@@ -23,6 +23,10 @@ function serveur(port){
     });
   }).listen(port, "127.0.0.1");
 }
+/* Avant tout : le numéro de version doit être le même partout (CHANGELOG.md
+   fait foi ; « node outils/version.js » le recopie). */
+try{ cp.execFileSync(process.execPath, [path.join(racine, "outils", "version.js"), "--verifier"], {stdio: "inherit"}); }
+catch(e){ console.log("✗ version : les numéros de version divergent (voir ci-dessus)."); process.exit(1); }
 var s1 = serveur(8934), s2 = serveur(8936);
 fs.mkdirSync(path.join(__dirname, "captures"), {recursive:true});
 

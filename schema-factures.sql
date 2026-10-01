@@ -119,8 +119,15 @@ as $$
 declare
   v_uid uuid := auth.uid();
   v_num text;
+  v_ok boolean;
 begin
   if v_uid is null then raise exception 'Connexion requise'; end if;
+  -- Abonnement terminé : plus d'écriture (acces_actif vient de schema-abonnement.sql,
+  -- exécuté après ce fichier ; tant qu'elle n'existe pas, rien ne bloque).
+  if to_regprocedure('public.acces_actif()') is not null then
+    execute 'select public.acces_actif()' into v_ok;
+    if not v_ok then raise exception 'abonnement_requis'; end if;
+  end if;
   if p_type is null or p_type not in ('facture','avoir') then raise exception 'Type invalide'; end if;
   if p_donnees is null or jsonb_typeof(p_donnees) <> 'object' then raise exception 'Facture invalide'; end if;
   if octet_length(p_donnees::text) > 200000 then raise exception 'Facture trop volumineuse'; end if;

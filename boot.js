@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   Crochompte — démarrage (V55)
+   Crochompte — démarrage
    Ce qui doit s'exécuter avant tout le reste, et qui vivait dans index.html.
    Sorti de la page pour que la politique de sécurité (CSP) puisse interdire
    tout script écrit dans la page : une injection ne pourrait plus s'exécuter.
@@ -17,7 +17,6 @@
     if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
   }catch(e){}
   /* config.js absent : mode local, sans compte. Le script est facultatif. */
-  var sc = document.currentScript;
   var cfgScript = document.querySelector('script[src^="config.js"]');
   if (cfgScript) cfgScript.addEventListener("error", function(){ try{ console.info("Crochompte : pas de config.js, mode hors ligne"); }catch(e){} });
 })();

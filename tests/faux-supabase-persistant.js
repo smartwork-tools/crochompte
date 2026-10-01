@@ -107,6 +107,11 @@ export function createClient(url, key){
         window.__fauxEnvois = window.__fauxEnvois || [];
         window.__fauxEnvois.push({donnees: params.p_donnees});
         var srvA = lireServeur(), archiveA = null;
+        /* V56 : le serveur refuse un atelier vide sur un atelier rempli, et
+           tout envoi quand l'abonnement est terminé (window.__fauxAccesFerme). */
+        if (window.__fauxAccesFerme) return Promise.resolve({data:{erreur:"abonnement_requis"}, error:null});
+        var viergeA = function(d){ return !d || (!(d.creations||[]).length && !(d.pieces||[]).length && !(d.commandes||[]).length && !(d.patrons||[]).length && !d.reinitialiseLe && !(d.reglages && d.reglages.confirmeLe)); };
+        if (srvA.atelier && viergeA(params.p_donnees) && !viergeA(srvA.atelier.donnees)) return Promise.resolve({data:{erreur:"vierge", maj: srvA.atelier.maj}, error:null});
         if (srvA.atelier && srvA.atelier.maj !== (params.p_maj_connue || null)){
           srvA.versions.push({donnees: srvA.atelier.donnees, maj: srvA.atelier.maj, raison:"remplacee", appareil: params.p_appareil || ""});
           archiveA = srvA.atelier.maj;

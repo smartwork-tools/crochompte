@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════════════════
--- Crochompte — abonnement, codes cadeaux, administration (V55)
+-- Crochompte — abonnement, codes cadeaux, administration
 -- À coller dans Supabase : menu « SQL Editor », puis « Run ». Rejouable.
 -- À exécuter APRÈS tous les autres fichiers schema*.sql.
 --
@@ -18,6 +18,11 @@
 --   5. enregistrer_atelier : envoi de l'atelier en UNE transaction (archive +
 --      remplacement), pour que deux appareils ne s'écrasent jamais sans trace.
 --   6. Plafond serveur de l'historique des versions (30 par compte).
+--   7. acces_actif() : le serveur refuse d'écrire (atelier, versions, photos,
+--      patrons partagés, factures) quand l'abonnement est terminé. L'atelier
+--      reste lisible. Sans cette règle, l'abonnement n'était vérifié que par
+--      le navigateur (V56).
+--   8. stripe_evenements : chaque événement Stripe n'est traité qu'une fois.
 --
 -- Le paiement (Stripe) n'écrit rien ici directement : la fonction serveur
 -- supabase/functions/stripe-webhook met la ligne à jour avec la clé service.
@@ -411,7 +416,102 @@ grant execute on function public.admin_codes() to authenticated;
 grant execute on function public.admin_creer_code(int, int, text, timestamptz) to authenticated;
 grant execute on function public.admin_desactiver_code(text, boolean) to authenticated;
 
--- ─── 7. Envoi de l'atelier en une seule transaction ──────────────────────
+-- ─── 7. Accès actif : la règle du serveur ────────────────────────────────
+-- Même verdict que mon_abonnement(), sans rien écrire (utilisable dans une
+-- règle de sécurité). Pas de ligne d'abonnement (compte d'avant cette
+-- version, jamais rouvert) : on laisse passer, mon_abonnement() la créera.
+create or replace function public.acces_actif()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select coalesce((
+    select public.est_admin()
+        or (a.statut = 'essai' and a.essai_fin > now())
+        or (a.statut in ('actif', 'resilie') and a.fin is not null and a.fin > now())
+        or (a.statut = 'offert' and (a.fin is null or a.fin > now()))
+      from public.abonnements a
+     where a.user_id = auth.uid()
+  ), true);
+$$;
+revoke execute on function public.acces_actif() from public, anon;
+grant execute on function public.acces_actif() to authenticated;
+
+-- Les écritures exigent un accès actif ; la lecture reste ouverte (l'atelier
+-- est consultable, et exportable, après la fin de l'abonnement).
+drop policy if exists "chacun crée son atelier"    on public.ateliers;
+drop policy if exists "chacun modifie son atelier" on public.ateliers;
+create policy "chacun crée son atelier"
+  on public.ateliers for insert to authenticated
+  with check ( (select auth.uid()) = user_id and public.acces_actif() );
+create policy "chacun modifie son atelier"
+  on public.ateliers for update to authenticated
+  using      ( (select auth.uid()) = user_id )
+  with check ( (select auth.uid()) = user_id and public.acces_actif() );
+drop policy if exists "chacune archive ses versions" on public.ateliers_versions;
+create policy "chacune archive ses versions"
+  on public.ateliers_versions for insert to authenticated
+  with check ( (select auth.uid()) = user_id and public.acces_actif() );
+drop policy if exists "chacune publie ses patrons"  on public.patrons_publics;
+drop policy if exists "chacune modifie ses patrons" on public.patrons_publics;
+create policy "chacune publie ses patrons"
+  on public.patrons_publics for insert to authenticated
+  with check ( (select auth.uid()) = user_id and public.acces_actif() );
+create policy "chacune modifie ses patrons"
+  on public.patrons_publics for update to authenticated
+  using      ( (select auth.uid()) = user_id )
+  with check ( (select auth.uid()) = user_id and public.acces_actif() );
+drop policy if exists "photos : dépôt dans son dossier"        on storage.objects;
+drop policy if exists "photos : remplacement dans son dossier" on storage.objects;
+create policy "photos : dépôt dans son dossier"
+  on storage.objects for insert to authenticated
+  with check ( bucket_id = 'photos' and (storage.foldername(name))[1] = (select auth.uid())::text and public.acces_actif() );
+create policy "photos : remplacement dans son dossier"
+  on storage.objects for update to authenticated
+  using      ( bucket_id = 'photos' and (storage.foldername(name))[1] = (select auth.uid())::text )
+  with check ( bucket_id = 'photos' and (storage.foldername(name))[1] = (select auth.uid())::text and public.acces_actif() );
+
+-- Un atelier « vierge » : rien que la personne ait saisi (même règle que
+-- estViergeDonnees dans sync.js).
+create or replace function public.atelier_vierge(d jsonb)
+returns boolean
+language sql
+immutable
+as $$
+  select d is null or jsonb_typeof(d) <> 'object' or (
+    (d->>'reinitialiseLe') is null
+    and (d->'reglages'->>'confirmeLe') is null
+    and coalesce(case when jsonb_typeof(d->'creations') = 'array' then jsonb_array_length(d->'creations') end, 0) = 0
+    and coalesce(case when jsonb_typeof(d->'pieces')    = 'array' then jsonb_array_length(d->'pieces')    end, 0) = 0
+    and coalesce(case when jsonb_typeof(d->'commandes') = 'array' then jsonb_array_length(d->'commandes') end, 0) = 0
+    and coalesce(case when jsonb_typeof(d->'patrons')   = 'array' then jsonb_array_length(d->'patrons')   end, 0) = 0
+    and not exists (
+      select 1 from jsonb_array_elements(case when jsonb_typeof(d->'matieres') = 'array' then d->'matieres' else '[]'::jsonb end) m
+       where (m->>'perso') = 'true'
+          or coalesce(case when jsonb_typeof(m->'mouv') = 'array' then jsonb_array_length(m->'mouv') end, 0) > 0
+          or coalesce(nullif(m->>'stock', '')::numeric, 0) > 0)
+    and not exists (
+      select 1 from jsonb_each(case when jsonb_typeof(d->'photosModeles') = 'object' then d->'photosModeles' else '{}'::jsonb end) pm
+       where pm.value->>'photo' is not null)
+  );
+$$;
+revoke execute on function public.atelier_vierge(jsonb) from public, anon;
+grant execute on function public.atelier_vierge(jsonb) to authenticated;
+
+-- ─── 8. Événements Stripe : chacun traité une seule fois ─────────────────
+-- Stripe renvoie parfois le même événement deux fois, ou dans le désordre.
+-- La fonction serveur stripe-webhook inscrit l'identifiant ici avant de
+-- traiter ; s'il y est déjà, elle répond « déjà fait » sans rien changer.
+create table if not exists public.stripe_evenements (
+  id        text primary key,
+  type      text not null,
+  traite_le timestamptz not null default now()
+);
+revoke all on table public.stripe_evenements from anon, authenticated;
+
+-- ─── 9. Envoi de l'atelier en une seule transaction ──────────────────────
 -- L'application envoie l'atelier et la version qu'elle connaissait. Si la
 -- version en ligne n'est pas celle-là, elle est archivée AVANT d'être
 -- remplacée, dans la même transaction : deux appareils ne peuvent plus
@@ -428,9 +528,16 @@ declare
   nouveau timestamptz := now();
 begin
   if auth.uid() is null then raise exception 'non authentifiée'; end if;
+  if not public.acces_actif() then return jsonb_build_object('erreur', 'abonnement_requis'); end if;
   if pg_column_size(p_donnees) > 25 * 1024 * 1024 then raise exception 'atelier_trop_gros'; end if;
   select * into courant from public.ateliers where user_id = auth.uid() for update;
   if found then
+    -- Un appareil vide ne remplace jamais un atelier rempli : l'application
+    -- récupère la version en ligne à la place (vérifié ici, en une requête,
+    -- au lieu de retélécharger l'atelier avant chaque envoi — V56).
+    if public.atelier_vierge(p_donnees) and not public.atelier_vierge(courant.donnees) then
+      return jsonb_build_object('erreur', 'vierge', 'maj', courant.maj);
+    end if;
     if p_maj_connue is null or courant.maj is distinct from p_maj_connue then
       insert into public.ateliers_versions (user_id, donnees, maj, appareil, raison)
       values (auth.uid(), courant.donnees, courant.maj, left(coalesce(p_appareil, ''), 40), 'remplacee');
@@ -448,7 +555,7 @@ $$;
 revoke execute on function public.enregistrer_atelier(jsonb, timestamptz, text) from public, anon;
 grant execute on function public.enregistrer_atelier(jsonb, timestamptz, text) to authenticated;
 
--- ─── 8. Plafond serveur de l'historique : 30 versions par compte ─────────
+-- ─── 10. Plafond serveur de l'historique : 30 versions par compte ────────
 create or replace function public.ateliers_versions_plafond()
 returns trigger
 language plpgsql
@@ -467,19 +574,4 @@ create trigger ateliers_versions_plafond
   after insert on public.ateliers_versions
   for each row execute function public.ateliers_versions_plafond();
 
--- Cohérence avec purger_versions (30 partout).
-create or replace function public.purger_versions()
-returns void
-language sql
-security definer
-set search_path = public, pg_temp
-as $$
-  delete from public.ateliers_versions
-   where user_id = auth.uid()
-     and id not in (
-       select id from public.ateliers_versions
-        where user_id = auth.uid()
-        order by cree desc
-        limit 30
-     );
-$$;
+-- purger_versions() (schema-versions.sql) garde le même plafond de 30.

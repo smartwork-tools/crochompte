@@ -16,8 +16,8 @@
      • les photos et les pages de patrons stockées en ligne.
 
    Comment ça marche, en bref : Supabase authentifie par adresse de courriel,
-   pas par pseudo. Trois fonctions serveur (supabase/functions/inscription, connexion,
-   mot-de-passe-oublie) font le lien entre le pseudo ou l'adresse que la
+   pas par pseudo. Trois fonctions serveur (edge/inscription, edge/connexion,
+   edge/mot-de-passe-oublie) font le lien entre le pseudo ou l'adresse que la
    personne tape et le compte réel — sans jamais renvoyer l'adresse de
    courriel au navigateur quand seul le pseudo a été donné. C'est ce qui
    empêche quiconque de deviner des pseudos pour en déduire des adresses.
@@ -165,7 +165,7 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
 
   /* Âge en années pleines à partir d'une date « AAAA-MM-JJ ». Renvoie null si
      la date est absente, mal formée, dans le futur, ou trop ancienne pour
-     être vraisemblable. Recalculé aussi côté serveur (supabase/functions/inscription) :
+     être vraisemblable. Recalculé aussi côté serveur (edge/inscription) :
      ceci n'est qu'un retour immédiat, pas la vérification qui compte. */
   function ageEnAnnees(iso){
     var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || "").trim());
@@ -230,30 +230,17 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
      Tant que le serveur n'a pas répondu, rien n'est bloqué. */
   etat.abonnement = null;
   var abonnementLuLe = 0;
-  function fonctionAbsente(err){
-    return /schema cache|42883|PGRST202|Could not find the function|404/i.test(String(err && err.message || "") + " " + String(err && err.code || ""));
-  }
-  /* Le serveur a refusé d'écrire : l'abonnement est terminé. On relit l'état
-     pour que l'écran d'offres s'affiche avec les bons chiffres. */
-  function accesRefuse(){
-    abonnementLuLe = 0;
-    return lireAbonnement(true);
-  }
   function lireAbonnement(force){
     if (!etat.session) return Promise.resolve(null);
     if (!force && Date.now() - abonnementLuLe < 10 * 60000) return Promise.resolve(etat.abonnement);
     return sb.rpc("mon_abonnement").then(function(r){
       if (r.error){
         /* Fonction absente (schema-abonnement.sql pas encore exécuté) : on
-           ne bloque personne, l'application fonctionne comme avant. Toute
-           autre erreur (réseau, serveur) garde le dernier état connu : un
-           incident ne doit ni ouvrir ni fermer l'accès (V56). */
-        if (fonctionAbsente(r.error)) etat.abonnement = {indisponible: true, acces: true};
-        else if (!etat.abonnement) etat.abonnement = null;
+           ne bloque personne, l'application fonctionne comme avant. */
+        etat.abonnement = {indisponible: true, acces: true};
       } else {
         etat.abonnement = r.data || null;
         abonnementLuLe = Date.now();
-        if (etat.abonnement && etat.abonnement.acces && etat.accesRefuse){ etat.accesRefuse = false; if (etat.sale) programmerEnvoi(500); }
       }
       if (pont.definirAbonnement) { try { pont.definirAbonnement(etat.abonnement); } catch (e) {} }
       return etat.abonnement;
@@ -436,32 +423,32 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
     var gen = etat.generation;
     var corps = JSON.parse(JSON.stringify(pont.lire()));   /* instantané : l'état peut changer pendant l'envoi */
     var archive = null;
-    /* Depuis la V55, archive et remplacement se font en UNE transaction côté
-       serveur (enregistrer_atelier) : deux appareils ne peuvent plus
-       s'écraser sans trace. Le serveur vérifie aussi qu'un appareil vide ne
-       remplace pas un atelier rempli, et que l'abonnement est actif : plus
-       besoin de télécharger l'atelier avant chaque envoi (V56). Si la
-       fonction n'existe pas encore, on fait comme avant. */
-    var envoiRpc = rpcEnregistrerDisponible === false ? Promise.resolve(null)
-      : sb.rpc("enregistrer_atelier", {p_donnees: corps, p_maj_connue: etat.vuLe || null, p_appareil: nomAppareil()}).then(function(rr){
-          if (rr.error){
-            if (fonctionAbsente(rr.error) || /enregistrer_atelier/i.test(String(rr.error.message || ""))){ rpcEnregistrerDisponible = false; return null; }
-            throw new Error(rr.error.message);
-          }
-          rpcEnregistrerDisponible = true;
-          var d = rr.data || {};
-          if (d.erreur) throw new Error(d.erreur);
-          archive = d.archive || null;
-          return {data: {maj: d.maj}};
-        });
-    etat.envoiEnCours = envoiRpc.then(function(res){
-        if (res) return res;
-        return sb.from(TABLE).select("donnees, maj").eq("user_id", uid).maybeSingle().then(function(r){
-          if (r.error) throw new Error(r.error.message);
-          if (r.data && estViergeDonnees(corps) && !estViergeDonnees(r.data.donnees)) throw new Error("vierge");
-          if (r.data && r.data.maj !== etat.vuLe) archive = r.data.maj;
-          return envoiClassique(r, uid, corps);
-        });
+    etat.envoiEnCours = sb.from(TABLE).select("donnees, maj").eq("user_id", uid).maybeSingle()
+      .then(function(r){
+        if (r.error) throw new Error(r.error.message);
+        if (r.data && estViergeDonnees(corps) && !estViergeDonnees(r.data.donnees)) throw new Error("vierge");
+        var ecrase = !!(r.data && r.data.maj !== etat.vuLe);
+        if (ecrase) archive = r.data.maj;
+        /* Depuis la V55, archive et remplacement se font en UNE transaction
+           côté serveur (enregistrer_atelier) : deux appareils ne peuvent plus
+           s'écraser sans trace. Si la fonction n'existe pas encore, on fait
+           comme avant (archive, puis remplacement). */
+        if (rpcEnregistrerDisponible !== false){
+          return sb.rpc("enregistrer_atelier", {p_donnees: corps, p_maj_connue: etat.vuLe || null, p_appareil: nomAppareil()}).then(function(rr){
+            if (rr.error){
+              if (/enregistrer_atelier|schema cache|42883|404/i.test(String(rr.error.message || "") + String(rr.error.code || ""))){
+                rpcEnregistrerDisponible = false;
+                return envoiClassique(r, uid, corps);
+              }
+              throw new Error(rr.error.message);
+            }
+            rpcEnregistrerDisponible = true;
+            var d = rr.data || {};
+            if (d.archive) archive = d.archive; else archive = null;
+            return sb.rpc("purger_versions").then(function(){}, function(){}).then(function(){ return {data: {maj: d.maj}}; });
+          });
+        }
+        return envoiClassique(r, uid, corps);
       })
       .then(function(res){
         if (res.error) throw new Error(res.error.message);
@@ -483,14 +470,6 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
           return false;
         }
         if (m === "vierge"){ etat.sale = false; marquerAEnvoyer(false); etat.pret = true; return false; }
-        if (m === "abonnement_requis"){
-          /* Le serveur a refusé : abonnement terminé. Les modifications restent
-             sur l'appareil et repartiront dès que l'accès est rouvert. */
-          etat.derniereErreur = "Ton abonnement est terminé : les modifications restent sur cet appareil et partiront dès que l'accès sera rouvert.";
-          etat.accesRefuse = true;
-          accesRefuse();
-          return false;
-        }
         etat.derniereErreur = traduire(m);
         return false;
       })
@@ -500,7 +479,7 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
         /* Visible sur l'écran où l'on est, pas seulement dans « Mon compte ». */
         if (archive && ok && pont.conflit) { try { pont.conflit(archive); } catch (e) {} }
         if (etat.relancer){ etat.relancer = false; if (etat.sale) programmerEnvoi(800); }
-        else if (!ok && etat.sale && !etat.accesRefuse) programmerEnvoi(30000);   /* nouvel essai automatique */
+        else if (!ok && etat.sale) programmerEnvoi(30000);   /* nouvel essai automatique */
         return ok;
       });
     return etat.envoiEnCours;
@@ -638,7 +617,7 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
   /* Filet : si une mise à jour ou un envoi a échoué, on réessaie chaque minute. */
   setInterval(function(){
     if (etat.session && !etat.recuperation && (!etat.pret || etat.sale) && !etat.envoiEnCours && !syncEnCours &&
-        !etat.accesRefuse && document.visibilityState !== "hidden") synchroniser();
+        document.visibilityState !== "hidden") synchroniser();
   }, 60000);
 
   /* Fin d'une session (déconnexion, expiration, suppression) : plus rien ne
@@ -787,7 +766,7 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
      du dossier), l'historique des versions, l'atelier, enfin l'identité de
      connexion par la fonction serveur. Chaque étape vérifie son résultat :
      le message final dit exactement ce qui a été fait. */
-  function effacerToutLeCompte(journal, motDePasse){
+  function effacerToutLeCompte(journal){
     if (!etat.session) return Promise.resolve({ok:false});
     var uid = etat.session.user.id;
     etat.suppression = true;
@@ -802,7 +781,7 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
     return Promise.all([etat.envoiEnCours, photosEnCours].filter(Boolean)).catch(function(){})
       .then(function(){
         if (journal) journal("Suppression du compte…");
-        return sb.functions.invoke("supprimer-compte", {body: {motDePasse: motDePasse || ""}})
+        return sb.functions.invoke("supprimer-compte")
           .then(function(f){ identiteEffacee = !f.error && !!(f.data && f.data.efface); }, function(){ identiteEffacee = false; });
       })
       .then(function(){
@@ -1510,7 +1489,7 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
           (courriel ? sb.auth.signInWithPassword({email: courriel, password: mdp}) : Promise.resolve({error:{message:"session"}})).then(function(v){
             if (v.error){ b.disabled = false; b.textContent = "Supprimer mon compte"; pont.toast("Le mot de passe actuel n'est pas le bon."); return; }
             occupe(b, "Suppression…");
-            return effacerToutLeCompte(function(etape){ b.textContent = etape; }, mdp).then(function(r){
+            return effacerToutLeCompte(function(etape){ b.textContent = etape; }).then(function(r){
             if (!r.ok){ b.disabled = false; b.textContent = "Supprimer mon compte";
               peindre({erreur: "La suppression n'a pas abouti. " + traduire(r.message)}); return; }
             if (pont.oublierAtelier) pont.oublierAtelier();

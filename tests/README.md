@@ -12,6 +12,10 @@ npx playwright install chromium
 node tests/lancer.js
 ```
 
+Avant de lancer les tests, `lancer.js` vérifie que le numéro de version
+(première ligne de `CHANGELOG.md`) est le même dans `app.js`, `index.html`,
+`sw.js` et `test-sw.js` ; sinon : `node outils/version.js`.
+
 Pour ne lancer que certains tests : `node tests/lancer.js v33 auth`.
 
 ## Ce qui est vérifié
@@ -37,6 +41,8 @@ Pour ne lancer que certains tests : `node tests/lancer.js v33 auth`.
 | `test-v53.js` | Formulaire de matière par catégorie, outils et petites tailles de crochet, stock par couleur et bain, fabrication qui retire la bonne couleur, recherche tolérante, confirmations avant ajout |
 | `test-v54.js` | Profil amateur (0 % de cotisations, pas de facture), Accueil à trois tuiles, relances, recherche globale, dupliquer, avertissement avant de quitter « Vendue », gain de l'heure invraisemblable signalé, aides « ? », thème, nouveautés, signalement, conflit visible partout, réglages avancés, titres et chiffres, cibles de 44 px sur téléphone |
 | `test-v55.js` | Reconnexion sans question de profil (base connue effacée, atelier en ligne récupéré, réglages faits avant réception conservés et renvoyés), déconnexion confirmée, abonnement (bandeau d'essai, écran « essai terminé », navigation masquée, sauvegarde accessible, code cadeau refusé puis accepté, Réglages › Mon abonnement), administration (vue d'ensemble, création d'un code illimité, accès offert), vente d'une pièce en fabrication sans doublon, gain figé après changement de prix, vente reliée à une commande, facture exigeant statut et livraison, deux messages au plus et effacés au changement d'onglet, pluriels des unités, stock négatif silencieux sans suivi, situation demandée après le profil pro, vocabulaire « modèle », essai sans compte (ouverture, bandeau, fin après 14 jours) |
+| `test-v551.js` | Téléphone : quatre ouvertures de suite d'un atelier vide ne montrent ni « Récupération… » ni « Atelier mis à jour » (base connue fiable) |
+| `test-v56.js` | Solidité (23 vérifications) : vente reliée à une commande = règlement noté (montant, moyen, pièce), compté une fois, retiré à l'annulation ; bilan figé qui suit le prix tant que pas facturée ; commande annulée qui rend sa pièce aux ventes ; bilan minimal d'un article sans création ; temps et taux figés d'une vente passée, « saisir le temps » qui garde les matières ; bornes de période ; registre des achats avec matière supprimée ; dates sûres ; impression sans script inline et bouton branché ; repli d'image sans `onerror` ; accès refusé par le serveur (bloqué, en attente, reprise après réouverture) ; Désignation / Précisions, frise amateur sans « Facturée », catalogue sans « type », catégories unifiées, version |
 | `test-limites.js` | Seuils légaux datés (TVA, plafonds micro, taux 2026), cas limites de calcul (temps nul, quantité nulle, matière supprimée, frais extrêmes, arrondis au centime, stock négatif), atelier chargé (200 matières, 2 000 pièces, 300 commandes), contraste des couleurs |
 | `sql/` | Tests de la base PostgreSQL (cloisonnement RLS, modération, registre des factures) : voir `sql/LISEZMOI.md` |
 | `test-v35.js` | Synchronisation (rien n'est envoyé sans modification, la modification arrive au serveur), chronomètre oublié plus de 4 h, remboursement d'une commande annulée, sauvegarde avec photos et restauration, sauvegarde abîmée refusée, numéros de facture (code propre au compte, suite sans trou, refus propre sans réseau), tous les onglets et rubriques sur ordinateur et téléphone sans « NaN », sans erreur et sans débordement |

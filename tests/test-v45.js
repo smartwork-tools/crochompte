@@ -64,6 +64,8 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     R.caisse_du_soir = /Caisse du jour\s*123,00 €/.test((await p.textContent('#main')).replace(/\u202f|\u00a0/g, ' '));
     R.marche_enregistre = await dans(p, function(){ return state.marches.length === 1 && state.marches[0].frais === 15; });
     await p.locator('.t-ventes tbody tr', {hasText:'Bonnet'}).getByRole('button', {name:'Annuler'}).click(); await p.waitForTimeout(300);
+    R.annulation_confirmee = /n'est plus vendue/.test(await p.locator('.dlg').textContent());   /* V56 : confirmation avant d'effacer la vente */
+    await p.click('.dlg [data-oui]'); await p.waitForTimeout(300);
     R.annulation = (await p.locator('.t-ventes tbody tr').count()) === 3 && await dans(p, function(){ return state.pieces.filter(function(x){ return x.com === 'vendu'; }).length === 3 && state.pieces.filter(function(x){ return x.com === 'atelier' && x.cid === 'c2'; }).length === 1; });
     R.canal_marche = await dans(p, function(){ return state.pieces.filter(function(x){ return x.com === 'vendu' && x.canal === 'marche' && x.paiement === 'especes'; }).length === 1; });
 

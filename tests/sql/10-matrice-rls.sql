@@ -114,9 +114,9 @@ select t.note('ateliers_versions','delete','autre', t.essai('authenticated', :B,
 select t.note('ateliers_versions','delete','anon', t.essai('anon', null, 'delete from public.ateliers_versions'), 'REFUS');
 select t.note('ateliers_versions','500 versions sans appeler purger_versions()','propriétaire', t.essai('authenticated', :A,
   'insert into public.ateliers_versions(user_id, donnees, maj) select ' || quote_literal(:A) || ', jsonb_build_object(''i'', g), now() from generate_series(1,500) g'), 'OK (500)');
-select t.note('ateliers_versions','nombre conservé tant que le client n''appelle pas la purge','—', (select count(*)::text from public.ateliers_versions where user_id = :A), '502');
+select t.note('ateliers_versions','plafond serveur : 30 gardées sans appeler la purge (V55)','—', (select count(*)::text from public.ateliers_versions where user_id = :A), '30');
 select t.note('ateliers_versions','purger_versions() par B ne touche pas A','autre', t.essai('authenticated', :B, 'select public.purger_versions()'), 'OK+');
-select t.note('ateliers_versions','après purge par B, A garde','—', (select count(*)::text from public.ateliers_versions where user_id = :A), '502');
+select t.note('ateliers_versions','après purge par B, A garde','—', (select count(*)::text from public.ateliers_versions where user_id = :A), '30');
 select t.note('ateliers_versions','purger_versions() par A','propriétaire', t.essai('authenticated', :A, 'select public.purger_versions()'), 'OK+');
 select t.note('ateliers_versions','après purge, A garde 30','—', (select count(*)::text from public.ateliers_versions where user_id = :A), '30');
 select t.note('ateliers_versions','delete','propriétaire', t.essai('authenticated', :A, 'delete from public.ateliers_versions where user_id = ' || quote_literal(:A)), 'OK+');

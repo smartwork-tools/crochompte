@@ -10,40 +10,41 @@ appareil à l'autre.
 
 ## Ce qu'il y a dans le dossier
 
+**L'application (servie telle quelle, sans construction)**
+
 | Fichier | Rôle |
 |---|---|
-| `index.html` | la page : styles, structure, politique de sécurité |
-| `app.js` | l'application elle-même (calculs, écrans). Chargée par `index.html` |
-| `REGLES-METIER.md` | **les règles de calcul et de gestion**, à relire avant toute modification |
-| `sync.js` | comptes et synchronisation. **Facultatif** |
-| `vendor/supabase/` | la bibliothèque de connexion Supabase, servie par le site lui-même (plus de CDN extérieur) |
-| `schema-fiabilite.sql`, `schema-factures.sql`, `schema-securite-moderation.sql`, `schema-versions.sql` | compléments de la base : heure serveur, limites de tentatives, factures et avoirs, sécurité et modération |
-| `config.example.js` | modèle de `config.js` (adresse du projet Supabase et clé publique) |
-| `schema.sql` | les tables et les règles de sécurité, à coller dans Supabase |
-| `schema-pseudo.sql` | la table des pseudos et les fonctions de vérification, à coller dans Supabase |
-| `schema-patrons-publics.sql` | la bibliothèque de patrons partagés, à coller dans Supabase |
-| `LICENSE` | tous droits réservés — nécessaire parce que le dépôt GitHub est public |
-| `.gitignore` | fichiers à ne pas envoyer sur GitHub |
-| `confidentialite.html` | politique de confidentialité (à relire à chaque changement de ce que l'application garde) |
-| `RGPD.md` | liste de contrôle : ce qui est fait, ce qui reste à ta charge |
-| `supabase/functions/inscription/` | fonction serveur : création du compte (pseudo, adresse e-mail, mot de passe, « 15 ans ou plus ») |
-| `supabase/functions/connexion/` | fonction serveur : connexion avec pseudo **ou** adresse e-mail + mot de passe |
-| `supabase/functions/mot-de-passe-oublie/` | fonction serveur : envoi du lien de réinitialisation à partir du pseudo ou de l'adresse e-mail |
-| `supabase/functions/supprimer-compte/` | fonction serveur pour l'effacement complet du compte |
-| `supabase/functions/stripe-webhook/` | fonction serveur : réception des paiements Stripe (abonnement) — voir « Abonnement » plus bas |
-| `schema-abonnement.sql` | abonnement (essai de 14 jours, offres, codes cadeaux, administration), envoi atomique de l'atelier, plafond des versions — à coller en dernier |
-| `boot.js` | ce qui démarre avant tout (anti-cadre, thème) : sorti de la page pour une politique de sécurité sans script inline |
-| `cgv.html` | conditions générales de vente et d'utilisation de l'abonnement (à compléter : identité, SIREN, médiateur) |
-| `schema-signalements.sql` | un signalement par personne et par patron partagé, à coller dans Supabase |
-| `sw.js` | garde une copie de l'application sur l'appareil, pour l'ouvrir sans réseau |
-| `manifest.webmanifest`, `icones/` | nom et icônes pour « Ajouter à l'écran d'accueil » sur téléphone |
-| `polices/` | les polices, hébergées sur le site (licence SIL OFL) |
-| `vendor/pdfjs/` | pdf.js (Mozilla, licence Apache 2.0) : lecture des PDF sur l'appareil, chargé seulement à l'import d'un PDF |
-| `tests/` | les tests automatiques (voir `tests/README.md`) |
+| `index.html` | la page : styles, structure, politique de sécurité (balise `meta`) |
+| `boot.js` | ce qui démarre avant tout (anti-cadre, thème) |
+| `app.js` | l'application elle-même (calculs, écrans). Voir « Carte du code » plus bas |
+| `sync.js` | comptes, synchronisation, abonnement. **Facultatif** (sans `config.js`, rien ne part nulle part) |
+| `sw.js` | copie de l'application sur l'appareil, pour l'ouvrir sans réseau |
+| `config.js` / `config.example.js` | adresse du projet Supabase, clé publique, liens de paiement. Public et versionné |
+| `manifest.webmanifest`, `icones/`, `polices/` | « Ajouter à l'écran d'accueil », icônes, polices (licence SIL OFL) |
+| `vendor/supabase/`, `vendor/pdfjs/` | bibliothèques servies par le site lui-même (aucun CDN extérieur) |
+| `confidentialite.html`, `cgv.html` | politique de confidentialité ; conditions générales (à compléter : identité, SIREN, médiateur) |
+| `CNAME`, `_headers` | le nom de domaine (GitHub Pages) ; les en-têtes HTTP (pris en compte par Cloudflare Pages ou Netlify, ignorés par GitHub Pages) |
 
-> `netlify.toml` ne sert qu'avec l'hébergeur Netlify. Avec **GitHub Pages**, il
-> est ignoré (comme `_headers`) : la politique de sécurité est donc aussi posée
-> dans `index.html` (balise `meta`), qui, elle, s'applique partout.
+**Le serveur (Supabase)** — à coller ou déployer, dans l'ordre de la mise en ligne
+
+| Fichier | Rôle |
+|---|---|
+| `schema.sql` → `schema-abonnement.sql` (9 fichiers) | les tables, les règles de sécurité et les fonctions de la base, **dans l'ordre de l'étape 1** |
+| `supabase/functions/inscription`, `connexion`, `mot-de-passe-oublie` | compte : création, connexion par pseudo ou adresse, lien de réinitialisation (l'adresse e-mail ne passe jamais par le navigateur) |
+| `supabase/functions/supprimer-compte` | effacement complet d'un compte (mot de passe vérifié côté serveur, abonnement Stripe résilié) |
+| `supabase/functions/stripe-webhook` | réception des paiements Stripe |
+| `emails/` | gabarits des courriels de confirmation et de mot de passe oublié (à coller dans Supabase › Authentication › Emails) |
+
+**Pour travailler dessus**
+
+| Fichier | Rôle |
+|---|---|
+| `REGLES-METIER.md` | **les règles de calcul et de gestion**, à relire avant toute modification |
+| `CHANGELOG.md` | le journal des versions : sa première ligne est **le** numéro de version |
+| `outils/version.js` | recopie ce numéro partout (`node outils/version.js`) ; les tests vérifient qu'il concorde |
+| `tests/` | les tests automatiques (navigateur et base de données), voir `tests/README.md` |
+| `RGPD.md` | liste de contrôle : ce qui est fait, ce qui reste à ta charge |
+| `LICENSE`, `.gitignore` | tous droits réservés (le dépôt GitHub est public) ; fichiers à ne pas envoyer |
 
 **Sans `config.js`, l'application marche exactement comme avant** : tout reste
 dans le navigateur, rien ne part nulle part. C'est ce qui permet de servir la
@@ -70,37 +71,32 @@ Compte 30 minutes la première fois. Tout est gratuit à cette échelle.
    indique la région du projet : si tu en changes, mets-la à jour (la région
    se lit dans *Project Settings → General*).
 2. Note le mot de passe de la base quand il s'affiche — il ne sera plus montré.
-3. Ouvre **SQL Editor**, colle tout le contenu de `schema.sql`, clique **Run**.
-   Tu dois voir *Success*. Ça crée la table des ateliers, le stockage des
-   photos, et les règles qui font que personne ne peut lire l'atelier d'un
-   autre.
-4. Toujours dans **SQL Editor**, colle maintenant tout le contenu de
-   `schema-pseudo.sql`, clique **Run**. Ça crée la table qui associe pseudo,
-   identité facultative (prénom, nom, ville, pays, type d'activité) et
-   compte, et les fonctions qui permettent de la consulter ou
-   de la corriger sans jamais exposer les adresses courriel au navigateur.
-   > Tu avais déjà exécuté une version précédente de ce fichier (sans les
-   > colonnes de profil) ? Recolle celle-ci et relance **Run** : elle est
-   > écrite pour être rejouée sans rien casser.
-5. Toujours dans **SQL Editor**, colle enfin `schema-patrons-publics.sql` et
-   clique **Run**. Ça crée la bibliothèque de patrons partagés : la table, ses
-   règles d'accès, et la fonction de signalement.
-   > Sans ce fichier, l'application fonctionne normalement — l'onglet
-   > « Bibliothèque partagée » affiche simplement qu'elle n'est pas installée.
-   > Lis la section correspondante de `RGPD.md` avant de l'ouvrir au public :
-   > héberger les patrons d'autres personnes t'engage.
-6. Colle ensuite, dans cet ordre, `schema-versions.sql`, `schema-signalements.sql`,
-   `schema-fiabilite.sql`, `schema-factures.sql` et **en dernier**
-   `schema-securite-moderation.sql` (chacun : coller, **Run**). Tous sont
-   rejouables sans risque, **à condition de toujours finir par
-   `schema-securite-moderation.sql`** : si tu rejoues un autre fichier plus
-   tard, rejoue celui-ci juste après (il remet les protections des fonctions).
-7. **Authentication → Sign In / Providers → Email** : règle la longueur
+3. Ouvre **SQL Editor** et colle, **un fichier à la fois et dans cet ordre**
+   (coller, **Run**, *Success*, fichier suivant) :
+
+   1. `schema.sql` — les ateliers, le stockage des photos, les règles qui font
+      que personne ne lit l'atelier d'une autre ;
+   2. `schema-pseudo.sql` — pseudo et profil, sans jamais exposer l'adresse ;
+   3. `schema-versions.sql` — l'historique des versions (30 par compte) ;
+   4. `schema-patrons-publics.sql` — la bibliothèque de patrons partagés ;
+   5. `schema-signalements.sql` — un signalement par personne et par patron ;
+   6. `schema-fiabilite.sql` — heure serveur, limites de tentatives, taille maximale ;
+   7. `schema-factures.sql` — numérotation et registre des factures ;
+   8. `schema-securite-moderation.sql` — protections des fonctions, revue des signalements ;
+   9. `schema-abonnement.sql` — abonnement, codes cadeaux, administration,
+      envoi atomique, **accès vérifié par le serveur** (un compte expiré ne
+      peut plus écrire). Il fait de `karimfarhani01@gmail.com` un administrateur.
+
+   Tous sont rejouables sans risque. Si tu rejoues un fichier plus tard,
+   rejoue aussi **tous ceux qui le suivent** dans la liste : c'est l'ordre
+   qui garantit que la dernière définition de chaque fonction est la bonne.
+   Le même ordre est utilisé par les tests (`tests/sql/LISEZMOI.md`).
+4. **Authentication → Sign In / Providers → Email** : règle la longueur
    minimale du mot de passe à **12** et active la protection contre les mots
    de passe divulgués si ton offre la propose. (L'application l'exige déjà ;
    ce réglage l'impose aussi à quelqu'un qui appellerait le serveur
    directement.)
-8. Va dans **Project Settings → API** et copie deux valeurs :
+5. Va dans **Project Settings → API** et copie deux valeurs :
    - **Project URL** (`https://xxxx.supabase.co`)
    - **anon public** (une longue chaîne qui commence par `eyJ`)
 
@@ -109,65 +105,83 @@ Compte 30 minutes la première fois. Tout est gratuit à cette échelle.
 > les règles du `schema.sql`. En revanche, la clé **`service_role`** ne doit
 > jamais sortir d'un serveur : elle contourne toutes les règles.
 
-### 2. Déployer les fonctions serveur de connexion
+> L'adresse du projet est écrite à **trois endroits** : `config.js`, la
+> politique de sécurité dans `index.html` (`connect-src`) et `_headers`. Si tu
+> changes de projet Supabase, change les trois.
 
-L'application ne se connecte plus par lien magique : elle utilise un pseudo et
-un mot de passe, mais **l'adresse courriel ne doit jamais être visible depuis
-le navigateur**. C'est pour ça que trois opérations passent par des fonctions
-serveur plutôt que par du code exécuté chez l'utilisatrice :
+### 2. Déployer les fonctions serveur
 
-- `inscription` : crée le compte (pseudo, courriel, mot de passe ; le reste
-  est facultatif), envoie le courriel de confirmation, et exige la case
-  « J'ai 15 ans ou plus », dont la date est gardée dans le compte.
-- `connexion` : accepte le pseudo **ou** l'adresse de courriel. Si c'est un
-  pseudo, retrouve le courriel correspondant côté serveur uniquement ; sinon
-  utilise directement l'adresse fournie.
-- `mot-de-passe-oublie` : même principe (pseudo ou courriel) pour envoyer le
-  lien de réinitialisation, sans jamais confirmer si l'un ou l'autre existe.
+L'application se connecte par pseudo et mot de passe, mais **l'adresse e-mail
+ne doit jamais être visible depuis le navigateur** : ces opérations passent
+par des fonctions serveur, qui tournent avec la clé `service_role`.
+
+- `inscription` : crée le compte (pseudo, courriel, mot de passe), envoie le
+  courriel de confirmation, exige « J'ai 15 ans ou plus » ;
+- `connexion` : pseudo **ou** adresse + mot de passe (le pseudo est résolu
+  côté serveur) ; seuls les échecs comptent dans la limite de tentatives ;
+- `mot-de-passe-oublie` : même principe, sans jamais révéler si l'identifiant
+  existe (réponse identique et délai constant) ;
+- `supprimer-compte` : effacement complet, mot de passe vérifié côté serveur,
+  abonnement Stripe résilié avant l'effacement ;
+- `stripe-webhook` : réception des paiements (voir « Abonnement »).
+
+Les cinq commandes, une fois pour toutes (puis à chaque modification d'une
+fonction) :
 
 ```bash
 npm install -g supabase
 supabase login
-supabase link --project-ref TON-REF-DE-PROJET
-supabase functions deploy inscription
-supabase functions deploy connexion
-supabase functions deploy mot-de-passe-oublie
+supabase link --project-ref TON-REF-DE-PROJET      # Project Settings → General
+supabase functions deploy inscription --no-verify-jwt
+supabase functions deploy connexion --no-verify-jwt
+supabase functions deploy mot-de-passe-oublie --no-verify-jwt
+supabase functions deploy supprimer-compte
+supabase functions deploy stripe-webhook --no-verify-jwt
 ```
 
-(La référence du projet se trouve dans *Project Settings → General*.)
+`--no-verify-jwt` : ces fonctions sont appelées **avant** d'avoir une session
+(ou par Stripe, qui signe ses appels) ; elles vérifient elles-mêmes ce qu'il
+faut. `supprimer-compte`, elle, exige la session de la personne.
 
-> **Important** : l'outil `supabase` exige que chaque fonction se trouve dans
-> `supabase/functions/<nom>/index.ts`, exactement à cet endroit — c'est pour
-> ça que ce dossier contient un sous-dossier `supabase/functions/`. Le dossier
-> `edge/` (ancienne copie) ne sert plus : supprime-le.
+Secrets (Supabase → Edge Functions → Secrets, ou en ligne de commande) :
+`SUPABASE_URL`, `SUPABASE_ANON_KEY` et `SUPABASE_SERVICE_ROLE_KEY` sont fournis
+par Supabase ; `STRIPE_SECRET_KEY` et `STRIPE_WEBHOOK_SECRET` viennent de
+Stripe (étape « Abonnement »).
 
-## Abonnement (V55)
+> L'outil `supabase` exige que chaque fonction soit dans
+> `supabase/functions/<nom>/index.ts`, exactement à cet endroit.
 
-1. Colle `schema-abonnement.sql` dans le SQL Editor (après tous les autres).
-   Il crée les tables, met chaque compte existant en essai de 14 jours, et
-   fait de `karimfarhani01@gmail.com` un administrateur (Réglages ›
-   Administration : vue d'ensemble, codes cadeaux, accès offerts, comptes).
-2. Sans rien d'autre, tout fonctionne déjà : essai, codes cadeaux, écran
-   « essai terminé ». Les boutons de paiement affichent « Bientôt disponible ».
-3. Pour encaisser : dans Stripe, crée un produit « Crochompte » avec trois
+**Sans les quatre premières fonctions déployées, personne ne peut créer de
+compte, se connecter, ni effacer son compte.** Fais-le avant d'annoncer le
+site à qui que ce soit.
+
+## Abonnement
+
+1. `schema-abonnement.sql` est collé (étape 1, dernier fichier). Sans rien
+   d'autre, tout fonctionne déjà : essai de 14 jours, codes cadeaux
+   (Réglages › Administration pour les créer, Réglages › Mon abonnement pour
+   les saisir), écran « essai terminé », écritures refusées par le serveur
+   quand l'accès est fermé (l'atelier reste lisible et exportable).
+   Le bouton de paiement dit « Demander un code d'accès » tant que Stripe
+   n'est pas configuré.
+2. Pour encaisser : dans Stripe, crée un produit « Crochompte » avec trois
    prix récurrents (7,90 € / mois, 42 € / 6 mois, 75 € / an ; donne à chaque
    prix la clé de recherche `mensuel`, `semestriel`, `annuel`), puis un **lien
    de paiement** par prix, et active le **portail client**. Colle les trois
    liens et le lien du portail dans `config.js › abonnement`.
-4. Déploie la fonction qui reçoit les paiements, avec ses deux secrets :
+3. Donne ses deux secrets à la fonction de paiement, puis (re)déploie-la :
    ```bash
    supabase secrets set STRIPE_SECRET_KEY=sk_live_... STRIPE_WEBHOOK_SECRET=whsec_...
    supabase functions deploy stripe-webhook --no-verify-jwt
+   supabase functions deploy supprimer-compte      # elle lit STRIPE_SECRET_KEY pour résilier
    ```
    Dans Stripe → Développeurs → Webhooks, ajoute l'adresse
    `https://<projet>.supabase.co/functions/v1/stripe-webhook` avec les
    événements `checkout.session.completed`, `invoice.paid`,
    `customer.subscription.updated`, `customer.subscription.deleted`.
-5. Complète `cgv.html` (identité, SIREN, adresse, médiateur) avant d'ouvrir
+   Chaque événement n'est traité qu'une fois (table `stripe_evenements`).
+4. Complète `cgv.html` (identité, SIREN, adresse, médiateur) avant d'ouvrir
    les paiements.
-
-**Sans ces quatre fonctions déployées, personne ne peut créer de compte ni se
-connecter.** Fais-le avant d'annoncer le site à qui que ce soit.
 
 ### 3. Régler l'envoi des courriels
 
@@ -180,7 +194,7 @@ service d'envoi (Brevo, Resend, Postmark…). Sans ça, les liens n'arriveront
 plus passé quelques dizaines par jour.
 
 Pendant ce temps, vérifie **Authentication → URL Configuration** :
-- *Site URL* = l'adresse de ton site (voir étape 3) ;
+- *Site URL* = l'adresse de ton site (voir étape 4) ;
 - ajoute cette même adresse dans *Redirect URLs*.
 
 Sans ça, le lien du courriel ramène au mauvais endroit.
@@ -231,15 +245,26 @@ Vérifie ensuite dans Supabase que *Table Editor → ateliers → RLS enabled* e
 **vert**. S'il est rouge, n'importe qui avec la clé lirait tout. **Vérifie-le
 avant d'ouvrir à qui que ce soit.**
 
-**4.4 — Modifier le site ensuite**
+**4.4 — Publier une nouvelle version**
+
+1. Ajoute une ligne en tête du tableau de `CHANGELOG.md` (`| V57 | date | … |`).
+2. `node outils/version.js` : le numéro est recopié dans `app.js`,
+   `index.html`, `sw.js` et le test du service worker (un seul endroit à
+   écrire ; les tests refusent de tourner si ça diverge).
+3. Décris ce qui change pour les utilisatrices dans `NOUVEAUTES` (`app.js`,
+   section « NOUVEAUTÉS ET SIGNALEMENT »), et dans `REGLES-METIER.md` si une
+   règle de calcul change.
+4. `node tests/lancer.js`, puis :
 
 ```bash
 git add .
-git commit -m "ce que j'ai changé"
+git commit -m "V57 : ce qui a changé"
 git push
 ```
 
-GitHub Pages redéploie en une à trois minutes.
+GitHub Pages redéploie en une à trois minutes. Le nouveau `sw.js` (nom de
+cache différent) fait recharger l'application complète au passage suivant,
+sans jamais mélanger deux versions.
 
 ---
 
@@ -354,18 +379,16 @@ t'appartient, avec un motif que l'autrice verra :
 
 Seule l'administration (le SQL Editor) peut appeler cette fonction.
 
-## Effacement du compte — une étape à ne pas oublier
+## Effacement du compte
 
-Le bouton « Supprimer mon compte » (Réglages › Mon compte) efface les photos,
-l'historique des versions et l'atelier, puis appelle la fonction serveur
-`supprimer-compte`, qui supprime l'identité de connexion (et, par cascade, le
-profil et le compteur de factures). Cette fonction doit être déployée :
-*Supabase → Edge Functions → supprimer-compte → Code*, coller le contenu de
-`supabase/functions/supprimer-compte/index.ts`, puis *Deploy*.
-
-Sans cette fonction, l'application le **dit** à l'utilisatrice au lieu de lui
-faire croire que tout est parti. Mais déploie-la avant d'ouvrir à des tiers :
-sinon le droit à l'effacement n'est pas complètement honoré.
+Le bouton « Supprimer mon compte » (Réglages › Mon compte) demande le mot de
+passe, puis appelle la fonction serveur `supprimer-compte` (étape 2) : elle
+vérifie le mot de passe, résilie l'abonnement Stripe s'il y en a un, vide le
+dossier de photos et supprime l'identité de connexion ; la base efface en
+cascade l'atelier, l'historique, le profil, l'abonnement et le registre des
+factures. Si la fonction n'est pas joignable, l'application efface ce qu'elle
+peut elle-même (photos, historique, atelier) et **le dit** à l'utilisatrice
+au lieu de lui faire croire que tout est parti.
 
 ---
 
@@ -402,3 +425,36 @@ python3 -m http.server 8000
 Les tests sont dans `tests/` et se lancent avec `node tests/lancer.js`
 (Playwright, avec un faux client Supabase : aucun projet réel n'est touché).
 Le détail est dans `tests/README.md`.
+
+## Carte du code (`app.js`)
+
+Un seul fichier, ES5, sans construction, découpé en sections marquées
+`/* ═════ … ═════ */` (cherche le titre dans l'éditeur). Dans l'ordre :
+
+| Section | Ce qu'on y trouve |
+|---|---|
+| 1. CATALOGUE MÉTIER | les familles de matières (`CATS`), les modèles, les canaux de vente |
+| 2. ÉTAT | `state` (tout l'atelier), `etatInitial()`, `migrer()` (reprise des anciens formats), `sauverTout()` |
+| PONT DE SYNCHRONISATION | `window.CrochomptePont` : ce que `sync.js` lit et écrit |
+| 3. MOTEUR DE CALCUL | `calculer(création)` : matières, temps, frais, cotisations, prix conseillé |
+| 4. STOCK, COULEURS, FOURNISSEURS, PERTES | mouvements de stock, variantes de couleur, prix comparés |
+| 5. FORMATS | `eur`, `nb`, `qte`, `pluriel`, `dateCourte` / `dateLongue` / `dateISO` : **tout affichage passe par là** |
+| BOÎTE DE CONFIRMATION, HISTORIQUE | `confirmer`, `dialogueChamps`, `avecAnnulation`, bouton « Précédent » |
+| 6. NAVIGATION, PROFILS, EN-TÊTE, RECHERCHE, ABONNEMENT, CONNEXION | `aller()`, `render()`, profils amateur / pro, menu, recherche globale, offres et codes, portail |
+| 7. ACCUEIL | la bande verte, les trois chiffres, les relances, les premiers pas |
+| NOUVEAUTÉS | `VERSION_APP`, `NOUVEAUTES` (texte vu par les utilisatrices) |
+| 8. CATALOGUE, 9. MES CRÉATIONS, VENDRE, MES VENTES, 10. FICHE CRÉATION | les écrans de création et de vente |
+| 11. STOCK, 12. MES MATIÈRES, 13. RÉGLAGES | les matières de l'atelier, les réglages par rubrique |
+| 15. PIÈCES, ESTIMÉ ET RÉEL, COÛT D'UNE PIÈCE | le suivi pièce par pièce, `coutPiece`, `figerVente` / `reprixVente` / `refigerTemps` |
+| 16-19. SÉRIES, GRAPHIQUES, INDICATEURS, REGISTRES | « Mes chiffres », livre des recettes, registre des achats, seuils |
+| 20-27. ILLUSTRATIONS, PHOTOS, PDF, CATALOGUE DE MATIÈRES (référentiel), SÉLECTEUR | ce qui sert à plusieurs écrans |
+| 29-30. CHRONOMÈTRE | le compteur de temps, dans la fiche et en mains libres (39) |
+| 32-37. PATRONS D'ORIGINE, MISE EN ROUTE, STATUTS, SEUILS, PRIX MARCHÉ, PLANCHE, MODÈLES D'ÉPOQUE | données de référence |
+| 38. MES PATRONS, COMMANDES (liste, détail), FACTURES ET AVOIRS, BIBLIOTHÈQUE PARTAGÉE | commandes clientes, factures, patrons personnels et partagés |
+| 40. DÉMARRAGE | lecture de l'atelier, inscription du service worker, message de repli du compte |
+
+Règles de maison : une chose = un mot (modèle du catalogue, création = ta
+fiche, pièce = un exemplaire suivi, commande, règlement) ; tout texte passe
+par `esc()` avant d'entrer dans du HTML ; tout montant par `cts()` ; toute
+date par les trois formateurs de la section 5 ; aucune donnée d'exemple
+n'est fournie par l'application.

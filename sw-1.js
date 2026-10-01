@@ -3,22 +3,20 @@
    Sur un marché, dans une salle sans réseau, l'application doit s'ouvrir quand
    même : ce petit programme garde une copie des fichiers de l'application sur
    l'appareil.
-   Deux règles. L'application elle-même (index.html, boot.js, app.js, sync.js)
-   est servie d'un bloc depuis la copie de CETTE version : jamais une page
-   neuve avec un app.js ancien. Une nouvelle version = un nouveau sw.js, donc
-   une nouvelle copie complète, prise au prochain chargement. Tout le reste
-   (polices, pages annexes, icônes) : le réseau d'abord, la copie sans réseau.
+   Règle unique : le réseau d'abord. Tant qu'il y a une connexion, c'est
+   toujours la dernière version publiée qui s'affiche, et la copie est mise à
+   jour au passage. Sans connexion, on sert la copie.
    Les données de l'atelier ne passent jamais par ici : elles restent entre
    l'application et le serveur (Supabase), qui n'est jamais mis en cache.
    ═══════════════════════════════════════════════════════════════════════════ */
-var CACHE = "crochompte-app-v56";
+var CACHE = "crochompte-app-v551";
 var ESSENTIELS = [
-  "./", "index.html", "boot.js?v=56", "app.js?v=56", "sync.js?v=56", "config.js", "confidentialite.html", "cgv.html", "manifest.webmanifest",
+  "./", "index.html", "boot.js?v=551", "app.js?v=551", "sync.js?v=551", "config.js", "confidentialite.html", "cgv.html", "manifest.webmanifest",
   "polices/public-sans-latin-400-normal.woff2", "polices/public-sans-latin-500-normal.woff2",
   "polices/public-sans-latin-600-normal.woff2", "polices/bricolage-grotesque-latin-600-normal.woff2",
   "polices/bricolage-grotesque-latin-700-normal.woff2", "polices/bricolage-grotesque-latin-800-normal.woff2",
   "polices/ibm-plex-mono-latin-400-normal.woff2", "polices/ibm-plex-mono-latin-500-normal.woff2",
-  "icones/icone-192.png", "icones/icone-512.png", "icones/apple-touch-icon.png", "icones/favicon-48.png",
+  "icones/icone-192.png", "icones/favicon-48.png",
   "vendor/supabase/supabase.min.mjs"
 ];
 
@@ -60,43 +58,38 @@ self.addEventListener("fetch", function(e){
      (vendor/supabase) : plus aucun code n'est chargé d'un autre site. */
   if (!memeSite) return;   /* serveur, photos d'illustration : jamais en cache ici */
   var page = req.mode === "navigate";
-  /* Le trio index.html / boot.js / app.js / sync.js est servi d'un bloc,
-     depuis la copie de CETTE version : plus jamais une page neuve avec un
-     app.js ancien, ou l'inverse. La copie n'est écrite qu'à l'installation
-     (une réponse réseau écrite au passage mélangeait deux versions, V56),
-     et la version demandée (?v=) doit être celle de la copie. */
+  /* Le trio index.html / app.js / sync.js est servi d'un bloc, depuis la
+     copie de CETTE version (V55) : plus jamais une page neuve avec un
+     app.js ancien, ou l'inverse. Une nouvelle version = un nouveau sw.js,
+     donc une nouvelle copie complète. */
   var chemin = url.pathname.replace(/^.*\//, "");
   var trio = page || chemin === "index.html" || chemin === "boot.js" || chemin === "app.js" || chemin === "sync.js" || chemin === "";
 
   function depuisCopie(){
-    return caches.match(req, {ignoreSearch: !trio}).then(function(r){
+    return caches.match(req, {ignoreSearch: true}).then(function(r){
       if (r) return r;
       if (page) return caches.match("index.html");
       return undefined;
     });
   }
-  /* config.js est « no-store » côté serveur : il n'est pas réécrit au passage
-     (la copie d'installation suffit sans réseau). */
-  var figer = trio || chemin === "config.js";
 
   /* « no-cache » : le navigateur redemande toujours au serveur si le
      fichier a changé (une petite requête quand rien n'a bougé). Sans ça,
      une nouvelle version pouvait mettre dix minutes à apparaître, avec un
      index.html neuf et un sync.js ancien. */
-  if (trio){
-    /* Copie d'abord ; sans copie (première visite, fichier absent de la
-       liste), le réseau, sans rien écrire. */
-    e.respondWith(depuisCopie().then(function(r){ return r || fetch(new Request(req, {cache: "no-cache"})); }));
-    return;
-  }
-  var reseau = fetch(new Request(req, {cache: "no-cache"})).then(function(rep){
-    if (!figer && rep && rep.status === 200 && (rep.type === "basic" || rep.type === "cors")){
+  var reseau = fetch(memeSite ? new Request(req, {cache: "no-cache"}) : req).then(function(rep){
+    if (rep && rep.status === 200 && (rep.type === "basic" || rep.type === "cors")){
       var copie = rep.clone();
       caches.open(CACHE).then(function(c){ return c.put(req, copie); }).catch(function(){});
     }
     return rep;
   });
   e.waitUntil(reseau.catch(function(){}));
+
+  if (trio){
+    e.respondWith(depuisCopie().then(function(r){ return r || reseau; }));
+    return;
+  }
   e.respondWith(
     avecDelai(reseau, page ? 4000 : 8000).then(function(rep){
       /* Serveur en panne ou page introuvable : la copie vaut mieux qu'une

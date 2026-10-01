@@ -3,10 +3,9 @@
 Ce document décrit ce que l'application calcule et comment elle se comporte.
 Il sert de référence : **toute modification du code qui change une de ces
 règles doit d'abord changer ce document**, et les tests correspondants
-(`tests/test-v37.js`, `tests/test-v37-lot10.js`, `tests/test-v37-lot11.js`,
-`tests/test-v38.js`, `tests/test-v39.js`, `tests/sql/`).
+(`tests/test-v37.js` à `tests/test-v56.js`, `tests/sql/`).
 
-Dernière mise à jour : V55 (1er octobre 2026). Journal des versions : `CHANGELOG.md`.
+Dernière mise à jour : V56 (1er octobre 2026). Journal des versions : `CHANGELOG.md`.
 
 ---
 
@@ -221,6 +220,76 @@ Dernière mise à jour : V55 (1er octobre 2026). Journal des versions : `CHANGEL
   projet ; suppression de compte avec mot de passe, fonction serveur d'abord
   (cascade) ; adresse IP = dernier élément de `x-forwarded-for` ; service
   worker : le trio index / boot / app / sync servi d'un bloc par version.
+
+## 0.8 Solidité (V56)
+
+- **Vente reliée à une commande** (dialogue « Vendre ») : le « prix payé »
+  est noté comme **règlement de la commande** (`noterVenteSurCommande` :
+  montant, moyen, date de la vente, `pieceId`), seulement s'il lui reste
+  quelque chose à recevoir (le dialogue propose ce reste comme prix) ; la
+  pièce elle-même n'entre dans aucun total. Annuler la vente retire ce
+  règlement (`retirerVenteDeCommande`). Un simple changement de statut
+  (Mes créations › Vendue) relie la pièce sans rien noter : l'argent d'une
+  commande se saisit dans ses règlements.
+- **Commande annulée** : ses pièces vendues sont détachées (comme à la
+  suppression) et redeviennent des ventes à part.
+- **Article sans création** (réparation, pièce libre) : la commande livrée a
+  un bilan minimal (`sansMatieres` : prix − frais du canal − cotisations,
+  matières inconnues = 0) pour compter dans « Gagné ce mois ».
+- **Bilan figé** d'une commande livrée sans facture : recalculé à chaque
+  correction de prix convenu, livraison facturée, quantité, heures (et
+  toujours création et canal). C'était écrit en V55, mais inatteignable.
+- **Vente figée** : `fige.heures`, `fige.minutes` et `fige.tauxHoraire` sont
+  lus par `coutPiece` : changer le temps de la fiche, « heures hors crochet »
+  ou le taux n'affecte plus une vente passée. « Saisir le temps » sur une
+  vente ne refige que le temps (`refigerTemps`), jamais les matières.
+- **Périodes** (`periodeVentes`) : bornes construites par calendrier (jamais
+  en ajoutant 86 400 000 ms) ; la fin est la fin de la journée courante : une
+  vente datée demain n'entre dans aucun total.
+- **Registre des achats** : les achats d'une matière supprimée
+  (`achatsArchives`) y restent. **Livre des recettes** : pas de vente à 0 € ;
+  un règlement négatif a pour moyen « — ».
+- **Dates** : `dateCourte`, `dateLongue`, `dateISO` (section 5) sont les seuls
+  formateurs ; une date absente ou invalide s'affiche « — ».
+- **Pluriels** : `pluriel()` et `plurielNb()` (nombre à virgule) partout.
+- **Tuile « Tes pièces »** : « 3 vendues (dont 1 pour une commande) · 40 €
+  hors commandes ».
+- **Accès (serveur)** : `acces_actif()` — même verdict que `mon_abonnement`
+  sans rien écrire — est exigé pour écrire (`ateliers`, `ateliers_versions`,
+  `patrons_publics`, photos, `emettre_facture`, `enregistrer_atelier`) ; la
+  lecture reste ouverte (atelier consultable et exportable). Côté
+  application : refus `abonnement_requis` → les modifications restent sur
+  l'appareil (`aEnvoyer`), l'écran d'offres s'affiche, plus d'essai
+  automatique tant que l'accès n'est pas rouvert ; un code ou un paiement
+  rouvre l'accès et l'envoi repart. `lireAbonnement` ne donne l'accès
+  « par défaut » que si la fonction n'existe pas (jamais sur une panne).
+- **Envoi** : plus de téléchargement de l'atelier avant chaque envoi ; le
+  serveur vérifie lui-même qu'un atelier vide (`atelier_vierge`) ne remplace
+  pas un atelier rempli (`erreur: vierge`).
+- **Base connue fiable** (`versionConnue.v = 2`) : un appareil qui a déjà
+  reçu ou envoyé la version en ligne est à jour même si l'atelier est vide ;
+  plus de re-téléchargement à chaque ouverture ni d'écran « Récupération… »
+  qui revient.
+- **Stripe** : un événement n'est traité qu'une fois (`stripe_evenements`) ;
+  `past_due` / `unpaid` / `incomplete` ne prolongent jamais `fin` ; un accès
+  offert illimité n'est pas écrasé par un paiement ; `client_reference_id`
+  doit être un UUID. La suppression du compte résilie l'abonnement Stripe.
+- **Fonctions serveur** : adresse IP = `cf-connecting-ip`, puis `x-real-ip`,
+  puis dernier élément de `x-forwarded-for` ; `connexion` ne compte que les
+  échecs (`oublier_tentatives` au succès) ; `mot-de-passe-oublie` répond
+  après un délai constant (700 ms) ; `supprimer-compte` vérifie le mot de
+  passe côté serveur (5 essais par quart d'heure).
+- **Service worker** : le trio est servi uniquement depuis la copie
+  d'installation (plus de réécriture au passage) ; `?v=` compte.
+- **Textes** : « modèle » (catalogue), « création » (ta fiche) ; articles
+  d'une commande : « Désignation » / « Précisions » ; étape « Facturée » en
+  profil pro seulement ; la confirmation « ce sont bien mes chiffres » est
+  visible dans Mon activité et Mes charges.
+- **Version** : la première ligne de `CHANGELOG.md` fait foi ;
+  `node outils/version.js` la recopie ; `tests/lancer.js` refuse de tourner
+  si elle diverge.
+- **Schéma des données** : `state.schema` (56) est posé par `migrer()`, pour
+  pouvoir un jour retirer les reprises d'anciens formats.
 
 ## 1. Vocabulaire
 
