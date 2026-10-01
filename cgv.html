@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Conditions générales — Crochompte</title>
+<meta name="robots" content="index, follow">
+<style>
+  :root{
+    --ground:#f4f3f0; --surface:#ffffff; --ink:#15181a; --muted:#5b6560;
+    --rule:#e2e0db; --primary:#0f5132; --warn-soft:#fdf3e0; --warn:#b07d1a;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ground:#121513; --surface:#1b1f1d; --ink:#eceeec; --muted:#9aa5a0;
+      --rule:#2c3330; --primary:#6fb98d; --warn-soft:#2a2313; --warn:#d9a441;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#121513; --surface:#1b1f1d; --ink:#eceeec; --muted:#9aa5a0;
+    --rule:#2c3330; --primary:#6fb98d; --warn-soft:#2a2313; --warn:#d9a441;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--ink);
+    font:400 16px/1.65 "Public Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+    padding:32px 16px 64px;}
+  main{max-width:72ch;margin:0 auto;background:var(--surface);
+    border:1px solid var(--rule);border-radius:16px;padding:28px 26px 34px;}
+  h1{font-size:28px;line-height:1.25;margin:0 0 6px;}
+  h2{font-size:19px;margin:32px 0 10px;}
+  p,li{margin:0 0 12px;}
+  ul{padding-left:20px;}
+  a{color:var(--primary);}
+  .date{color:var(--muted);font-size:14px;margin-bottom:24px;}
+  .todo{background:var(--warn-soft);border:1px solid var(--warn);border-radius:12px;
+    padding:14px 16px;margin:20px 0;}
+  .todo b{color:var(--warn);}
+  table{width:100%;border-collapse:collapse;margin:12px 0 20px;font-size:15px;table-layout:fixed;}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--rule);vertical-align:top;
+    overflow-wrap:anywhere;}
+  th{color:var(--muted);font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:.04em;}
+  /* Sur téléphone, un tableau à trois colonnes est illisible : chaque ligne
+     devient un bloc, avec son intitulé repris devant la valeur. */
+  @media (max-width: 620px){
+    table, tbody, tr, td, th{display:block;width:100%;}
+    thead{display:none;}
+    tr{border:1px solid var(--rule);border-radius:10px;padding:6px 4px;margin-bottom:12px;}
+    td{border:none;padding:6px 10px;}
+    td::before{content:attr(data-l);display:block;font-size:12px;color:var(--muted);
+      text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px;}
+  }
+  .retour{display:inline-block;margin-bottom:20px;font-size:14px;}
+</style>
+</head>
+<body>
+<main>
+
+<a class="retour" href="index.html">← Retour à l'application</a>
+
+
+<h1>Conditions générales de vente et d'utilisation</h1>
+<p class="date">Version du 1er octobre 2026. <b>Projet de conditions, à faire relire par un juriste avant l'ouverture des paiements</b> : les passages entre crochets sont à compléter.</p>
+
+<h2>1. Qui propose le service</h2>
+<p>
+  Crochompte est édité par <b>Abdelkarim FARHANI</b>, entrepreneur individuel,
+  <b>[adresse]</b>, immatriculé sous le numéro SIREN <b>[numéro]</b>, TVA non applicable
+  (article 293 B du CGI) tant que la franchise s'applique. Contact :
+  <a href="mailto:bonjour@crochompte.com">bonjour@crochompte.com</a>.
+</p>
+
+<h2>2. Ce que tu achètes</h2>
+<p>
+  Un accès en ligne à l'application Crochompte (coût de revient, prix conseillé,
+  stock, commandes, factures, ventes, chiffres), utilisable sur tous tes
+  appareils avec ton compte. Le service est fourni « tel quel » et s'améliore
+  régulièrement ; les calculs sont des aides à la décision et ne remplacent ni
+  un comptable ni un conseil juridique.
+</p>
+
+<h2>3. Essai gratuit</h2>
+<p>
+  Chaque nouveau compte dispose de <b>14 jours d'essai gratuit</b>, sans carte
+  bancaire. À la fin de l'essai, l'accès à l'atelier se ferme, mais tes données
+  sont conservées et restent exportables ; rien n'est facturé sans que tu
+  choisisses une offre.
+</p>
+
+<h2>4. Prix et offres</h2>
+<table>
+  <tr><th>Offre</th><th>Prix TTC</th><th>Renouvellement</th></tr>
+  <tr><td data-l="Offre">Mensuel</td><td data-l="Prix">7,90 €</td><td data-l="Renouvellement">tous les mois</td></tr>
+  <tr><td data-l="Offre">6 mois</td><td data-l="Prix">42 €</td><td data-l="Renouvellement">tous les 6 mois</td></tr>
+  <tr><td data-l="Offre">Annuel</td><td data-l="Prix">75 €</td><td data-l="Renouvellement">tous les ans</td></tr>
+</table>
+<p>
+  Les prix sont en euros, toutes taxes comprises. Un changement de prix est
+  annoncé par e-mail au moins un mois avant et ne s'applique qu'au
+  renouvellement suivant ; tu peux résilier avant.
+</p>
+
+<h2>5. Paiement</h2>
+<p>
+  Le paiement se fait par carte bancaire via <b>Stripe</b>, prestataire de
+  paiement agréé ; Crochompte ne voit ni ne conserve ton numéro de carte. Le
+  prélèvement a lieu à la souscription puis à chaque renouvellement. En cas
+  d'échec de paiement, l'accès est suspendu après notification par e-mail et
+  reprend dès régularisation.
+</p>
+
+<h2>6. Durée, renouvellement, résiliation</h2>
+<p>
+  L'abonnement est <b>reconduit tacitement</b> pour la même durée. Conformément
+  à l'article L215-1 du code de la consommation, tu es prévenue par e-mail
+  entre trois mois et un mois avant chaque échéance d'un abonnement de six mois
+  ou d'un an. Tu peux <b>résilier à tout moment, en trois clics</b>, depuis
+  Réglages › Mon abonnement › « Gérer mon abonnement » : l'accès reste ouvert
+  jusqu'à la fin de la période déjà payée, et rien n'est prélevé ensuite.
+</p>
+
+<h2>7. Droit de rétractation</h2>
+<p>
+  Tu disposes de 14 jours à compter de la souscription pour te rétracter, sans
+  motif (articles L221-18 et suivants du code de la consommation), en écrivant
+  à <a href="mailto:bonjour@crochompte.com">bonjour@crochompte.com</a> ou avec
+  le formulaire ci-dessous. En souscrivant, tu demandes expressément que
+  l'accès commence immédiatement ; si tu te rétractes, les jours déjà
+  utilisés sont dus au prorata (article L221-25) et le reste est remboursé
+  sous 14 jours. L'essai gratuit te permet de décider avant de payer.
+</p>
+<p class="hint">
+  Formulaire de rétractation : « À l'attention de Crochompte, [adresse] — Je
+  vous notifie par la présente ma rétractation du contrat d'abonnement
+  souscrit le [date] — Nom, adresse e-mail du compte, date, signature. »
+</p>
+
+<h2>8. Tes données</h2>
+<p>
+  Elles restent les tiennes : tu peux les exporter à tout moment (Réglages ›
+  Mes données) et supprimer ton compte. Le détail est dans la
+  <a href="confidentialite.html">politique de confidentialité</a>. Un compte
+  sans connexion pendant deux ans est supprimé après un e-mail d'avertissement.
+</p>
+
+<h2>9. Disponibilité et responsabilité</h2>
+<p>
+  Nous faisons le nécessaire pour que le service soit disponible en
+  permanence ; des interruptions pour maintenance peuvent survenir, annoncées
+  quand c'est possible. L'application fonctionne aussi hors connexion et
+  synchronise ensuite. La responsabilité de l'éditeur est limitée au montant
+  de l'abonnement en cours ; elle ne couvre pas les décisions de prix ou de
+  déclaration fiscale prises à partir des calculs de l'outil.
+</p>
+
+<h2>10. Utilisation</h2>
+<p>
+  Un compte est personnel. Il est interdit d'en revendre l'accès, de tenter
+  de contourner la protection des données d'autres comptes ou de publier dans
+  la bibliothèque partagée des contenus dont tu ne détiens pas les droits.
+  Un compte qui enfreint ces règles peut être suspendu après avertissement.
+</p>
+
+<h2>11. Médiation et litiges</h2>
+<p>
+  En cas de désaccord, écris-nous d'abord : la plupart des questions se
+  règlent dans la journée. Si aucune solution n'est trouvée, tu peux saisir
+  gratuitement le médiateur de la consommation <b>[nom et coordonnées du
+  médiateur — adhésion à faire avant l'ouverture des paiements]</b>, ou la
+  plateforme européenne de règlement en ligne des litiges. Le droit français
+  s'applique.
+</p>
+
+</main>
+</body>
+</html>

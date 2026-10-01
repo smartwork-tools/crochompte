@@ -225,6 +225,69 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
     }).catch(function(){});
   }
 
+  /* ───────── abonnement (V55) ─────────
+     L'état vient toujours du serveur (mon_abonnement) : jamais calculé ici.
+     Tant que le serveur n'a pas répondu, rien n'est bloqué. */
+  etat.abonnement = null;
+  var abonnementLuLe = 0;
+  function lireAbonnement(force){
+    if (!etat.session) return Promise.resolve(null);
+    if (!force && Date.now() - abonnementLuLe < 10 * 60000) return Promise.resolve(etat.abonnement);
+    return sb.rpc("mon_abonnement").then(function(r){
+      if (r.error){
+        /* Fonction absente (schema-abonnement.sql pas encore exécuté) : on
+           ne bloque personne, l'application fonctionne comme avant. */
+        etat.abonnement = {indisponible: true, acces: true};
+      } else {
+        etat.abonnement = r.data || null;
+        abonnementLuLe = Date.now();
+      }
+      if (pont.definirAbonnement) { try { pont.definirAbonnement(etat.abonnement); } catch (e) {} }
+      return etat.abonnement;
+    }, function(){ return etat.abonnement; });
+  }
+  function utiliserCode(code){
+    if (!etat.session) return Promise.resolve({ok:false, erreur:"non_connectee"});
+    return sb.rpc("utiliser_code", {p_code: String(code || "")}).then(function(r){
+      if (r.error) return {ok:false, erreur: traduire(r.error.message)};
+      var d = r.data || {};
+      if (d.ok && d.abonnement){ etat.abonnement = d.abonnement; abonnementLuLe = Date.now();
+        if (pont.definirAbonnement) { try { pont.definirAbonnement(etat.abonnement); } catch (e) {} } }
+      return d;
+    }, function(){ return {ok:false, erreur:"Pas de connexion internet : réessaie dès qu'elle revient."}; });
+  }
+  function rpcAdmin(nom, args){
+    return sb.rpc(nom, args || {}).then(function(r){
+      if (r.error) throw new Error(traduire(r.error.message));
+      return r.data;
+    });
+  }
+  var admin = {
+    stats: function(){ return rpcAdmin("admin_stats"); },
+    comptes: function(q){ return rpcAdmin("admin_comptes", {p_recherche: String(q || "")}); },
+    codes: function(){ return rpcAdmin("admin_codes"); },
+    creerCode: function(jours, max, note){ return rpcAdmin("admin_creer_code", {p_duree_jours: jours === null ? null : Number(jours), p_max: Number(max) || 1, p_note: String(note || "")}); },
+    desactiverCode: function(code, actif){ return rpcAdmin("admin_desactiver_code", {p_code: code, p_actif: !!actif}); },
+    offrir: function(email, jours){ return rpcAdmin("admin_offrir", {p_email: String(email || ""), p_jours: jours === null ? null : Number(jours)}); },
+    retirer: function(email){ return rpcAdmin("admin_retirer", {p_email: String(email || "")}); }
+  };
+  /* Lien de paiement Stripe pour une offre, avec le compte et l'adresse
+     préremplis : c'est ainsi que le paiement est rattaché au compte. */
+  function lienPaiement(offre){
+    var a = cfg.abonnement || {}, liens = a.liens || {};
+    var base = liens[offre];
+    if (!base || !etat.session) return "";
+    var sep = base.indexOf("?") === -1 ? "?" : "&";
+    return base + sep + "client_reference_id=" + encodeURIComponent(etat.session.user.id) +
+           "&prefilled_email=" + encodeURIComponent(etat.session.user.email || "");
+  }
+  function lienPortail(){
+    var a = cfg.abonnement || {};
+    if (!a.portail || !etat.session) return "";
+    var sep = a.portail.indexOf("?") === -1 ? "?" : "&";
+    return a.portail + sep + "prefilled_email=" + encodeURIComponent(etat.session.user.email || "");
+  }
+
   /* ───────── synchronisation de l'état ─────────
      Règles, dans l'ordre où elles protègent le travail :
        1. On ne remplace JAMAIS la version en ligne sans l'archiver, dès
@@ -246,6 +309,13 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
   function lireBase(uid){
     try{ var m = JSON.parse(localStorage.getItem(CLE_BASE) || "null"); return (m && m.uid === uid) ? m.maj : null; }
     catch(e){ return null; }
+  }
+  /* À la déconnexion, la base connue part avec l'atelier : sinon, à la
+     reconnexion, l'appareil se croirait à jour avec un atelier vide et ne
+     récupérerait jamais la version en ligne (défaut corrigé en V55). */
+  function oublierBase(){
+    etat.vuLe = null;
+    try{ localStorage.removeItem(CLE_BASE); }catch(e){}
   }
   function noterBase(maj){
     etat.vuLe = maj || null;
@@ -276,6 +346,30 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
     return true;
   }
 
+  /* Ce qui a été réglé sur cet appareil avant que l'atelier en ligne arrive
+     (profil amateur ou pro, taux horaire, identité…) n'est pas jeté : on le
+     reporte dans la version reçue quand elle ne le contient pas. */
+  var CHAMPS_PROFIL = ["profilType", "profil", "mode", "statut", "cotisations"];
+  function fusionnerReglages(recu, local){
+    if (!recu || !local || !local.reglages) return false;
+    if (!recu.reglages) recu.reglages = {};
+    var rr = recu.reglages, lr = local.reglages, change = false;
+    if (lr.profilType && !rr.profilType){
+      CHAMPS_PROFIL.forEach(function(k){ if (lr[k] !== undefined){ rr[k] = lr[k]; change = true; } });
+    }
+    Object.keys(lr).forEach(function(k){
+      if (CHAMPS_PROFIL.indexOf(k) !== -1) return;
+      var v = lr[k];
+      if (v === undefined || v === null || v === "" || v === false) return;
+      if (typeof v === "object" && !Object.keys(v).length) return;
+      var e = rr[k];
+      if (e === undefined || e === null || e === "" || (typeof e === "object" && !Array.isArray(e) && !Object.keys(e).length) || (Array.isArray(e) && !e.length)){
+        rr[k] = v; change = true;
+      }
+    });
+    return change;
+  }
+
   /* Un nom d'appareil lisible, pour que l'historique dise « ton téléphone »
      plutôt qu'une suite de chiffres. Rien d'identifiant n'est envoyé. */
   function nomAppareil(){
@@ -304,6 +398,14 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
     etat.minuteur = setTimeout(function(){ etat.minuteur = null; envoyer(); }, delai || 2500);
   }
 
+  var rpcEnregistrerDisponible = null;
+  function envoiClassique(r, uid, corps){
+    var ecrase = !!(r.data && r.data.maj !== etat.vuLe);
+    return (ecrase ? archiver(r.data.donnees, r.data.maj, "remplacee") : Promise.resolve()).then(function(){
+      return sb.from(TABLE).upsert({user_id: uid, donnees: corps, maj: new Date().toISOString()},
+                                   {onConflict: "user_id"}).select("maj").single();
+    });
+  }
   /* ENVOYER — la version d'ici devient la version en ligne. */
   function envoyer(){
     if (!etat.session || etat.recuperation || etat.suppression) return Promise.resolve(false);
@@ -319,10 +421,26 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
         if (r.data && estViergeDonnees(corps) && !estViergeDonnees(r.data.donnees)) throw new Error("vierge");
         var ecrase = !!(r.data && r.data.maj !== etat.vuLe);
         if (ecrase) archive = r.data.maj;
-        return (ecrase ? archiver(r.data.donnees, r.data.maj, "remplacee") : Promise.resolve()).then(function(){
-          return sb.from(TABLE).upsert({user_id: uid, donnees: corps, maj: new Date().toISOString()},
-                                       {onConflict: "user_id"}).select("maj").single();
-        });
+        /* Depuis la V55, archive et remplacement se font en UNE transaction
+           côté serveur (enregistrer_atelier) : deux appareils ne peuvent plus
+           s'écraser sans trace. Si la fonction n'existe pas encore, on fait
+           comme avant (archive, puis remplacement). */
+        if (rpcEnregistrerDisponible !== false){
+          return sb.rpc("enregistrer_atelier", {p_donnees: corps, p_maj_connue: etat.vuLe || null, p_appareil: nomAppareil()}).then(function(rr){
+            if (rr.error){
+              if (/enregistrer_atelier|schema cache|42883|404/i.test(String(rr.error.message || "") + String(rr.error.code || ""))){
+                rpcEnregistrerDisponible = false;
+                return envoiClassique(r, uid, corps);
+              }
+              throw new Error(rr.error.message);
+            }
+            rpcEnregistrerDisponible = true;
+            var d = rr.data || {};
+            if (d.archive) archive = d.archive; else archive = null;
+            return sb.rpc("purger_versions").then(function(){}, function(){}).then(function(){ return {data: {maj: d.maj}}; });
+          });
+        }
+        return envoiClassique(r, uid, corps);
       })
       .then(function(res){
         if (res.error) throw new Error(res.error.message);
@@ -370,16 +488,43 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
       if (etat.generation !== gen || etat.sale) return "modifie";
       var local = pont.lire();
       var identique = JSON.stringify(local) === JSON.stringify(r.data.donnees);
-      var avant = (!identique && !estViergeDonnees(local))
+      var localVierge = estViergeDonnees(local);
+      var avant = (!identique && !localVierge)
         ? archiver(local, etat.vuLe || new Date().toISOString(), "avant_recuperation")
         : Promise.resolve();
+      var baseAvant = etat.vuLe;
       return avant.then(function(){
         if (etat.generation !== gen || etat.sale) return "modifie";
-        if (!identique) pont.ecrire(r.data.donnees);
+        var aRenvoyer = false;
+        if (!identique){
+          var recu = r.data.donnees;
+          if (localVierge && fusionnerReglages(recu, local)) aRenvoyer = true;
+          pont.ecrire(recu);
+        }
         noterBase(r.data.maj);
+        if (aRenvoyer){ etat.pret = true; etat.sale = true; marquerAEnvoyer(true); programmerEnvoi(1500); }
+        if (!identique){
+          /* Photos faites ailleurs, et avertissement si la version que cet
+             appareil connaissait a été remplacée par un autre appareil. */
+          setTimeout(function(){ recevoirPhotos().then(function(n){ if (n) pont.redessiner(); }, function(){}); }, 0);
+          if (baseAvant && !localVierge) signalerRemplacement(baseAvant);
+        }
         return identique ? "identique" : "recu";
       });
     });
+  }
+
+  /* Le perdant d'un conflit est prévenu aussi : si la version que cet
+     appareil connaissait a été archivée « remplacée » par un autre appareil,
+     on le dit, avec le chemin vers l'historique. */
+  function signalerRemplacement(majConnue){
+    if (!etat.session || !pont.conflit) return;
+    sb.from("ateliers_versions").select("maj, appareil").eq("user_id", etat.session.user.id)
+      .eq("maj", majConnue).eq("raison", "remplacee").limit(1).then(function(r){
+        if (r && !r.error && r.data && r.data.length){
+          try{ pont.conflit(r.data[0].maj, {perdant: true, appareil: r.data[0].appareil || ""}); }catch(e){}
+        }
+      }, function(){});
   }
 
   /* SYNCHRONISER — à l'ouverture, à la connexion, au retour sur l'onglet et
@@ -399,7 +544,9 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
           etat.pret = true;
           return (etat.sale || !estViergeDonnees(pont.lire())) ? "envoyer" : true;
         }
-        if (r.data.maj === etat.vuLe){ etat.pret = true; return etat.sale ? "envoyer" : true; }
+        /* Un atelier local vide ne peut pas être « à jour » face à un atelier
+           en ligne : on le récupère même si la base connue correspond. */
+        if (r.data.maj === etat.vuLe && !(estViergeDonnees(pont.lire()) && !etat.sale)){ etat.pret = true; return etat.sale ? "envoyer" : true; }
         /* La version en ligne n'est pas celle qu'on connaît. */
         if (etat.sale){ etat.pret = true; return "envoyer"; }   /* elle sera archivée par envoyer() */
         return recevoir().then(function(res){
@@ -442,10 +589,17 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
   window.addEventListener("pagehide", envoiDeSortie);
   document.addEventListener("visibilitychange", function(){
     if (document.visibilityState === "hidden") envoiDeSortie();
-    else synchroniser();   /* de retour sur l'onglet : on se remet à jour */
+    else { synchroniser(); lireAbonnement(false); }   /* de retour sur l'onglet : on se remet à jour */
   });
   /* Retour du réseau : ce qui attendait part, et on se remet à jour. */
-  window.addEventListener("online", function(){ synchroniser(); });
+  window.addEventListener("online", function(){
+    if (etat.session){ synchroniser(); return; }
+    /* Session jamais lue (réseau absent au démarrage) : on la relit. */
+    sb.auth.getSession().then(function(r){
+      var session = r && r.data && r.data.session;
+      if (session){ demarrerSession(session, false); }
+    }, function(){});
+  });
   /* Filet : si une mise à jour ou un envoi a échoué, on réessaie chaque minute. */
   setInterval(function(){
     if (etat.session && !etat.recuperation && (!etat.pret || etat.sale) && !etat.envoiEnCours && !syncEnCours &&
@@ -604,8 +758,19 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
     if (etat.minuteur){ clearTimeout(etat.minuteur); etat.minuteur = null; }
     if (minuteurPhotos){ clearTimeout(minuteurPhotos); minuteurPhotos = null; }
 
+    /* Le compte d'abord (V55) : la fonction serveur efface l'identité, et la
+       base efface en cascade atelier, versions, factures, pseudo, patrons ;
+       elle vide aussi le dossier de photos. Si elle n'est pas joignable, on
+       fait ce que l'application peut faire elle-même, comme avant. */
+    var identiteEffacee = false;
     return Promise.all([etat.envoiEnCours, photosEnCours].filter(Boolean)).catch(function(){})
       .then(function(){
+        if (journal) journal("Suppression du compte…");
+        return sb.functions.invoke("supprimer-compte")
+          .then(function(f){ identiteEffacee = !f.error && !!(f.data && f.data.efface); }, function(){ identiteEffacee = false; });
+      })
+      .then(function(){
+        if (identiteEffacee) return [];
         if (journal) journal("Suppression des photos…");
         return listerTout(uid);
       })
@@ -620,24 +785,24 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
         }, Promise.resolve());
       })
       .then(function(){
+        if (identiteEffacee) return null;
         if (journal) journal("Suppression de l'historique…");
         return sb.from("ateliers_versions").delete().eq("user_id", uid);
       })
       .then(function(res){
+        if (identiteEffacee) return null;
         if (res && res.error) throw new Error(res.error.message);
         if (journal) journal("Suppression de l'atelier…");
         return sb.from(TABLE).delete().eq("user_id", uid);
       })
       .then(function(res){
-        if (res && res.error) throw new Error(res.error.message);
-        if (journal) journal("Suppression du compte…");
-        return sb.functions.invoke("supprimer-compte")
-          .then(function(f){ return {ok:true, identite: !f.error}; })
-          .catch(function(){ return {ok:true, identite:false}; });
+        if (!identiteEffacee && res && res.error) throw new Error(res.error.message);
+        return {ok:true, identite: identiteEffacee};
       })
       .then(function(bilan){
         return sb.auth.signOut({scope: "local"}).catch(function(){}).then(function(){
           finDeSession();
+          oublierBase();
           etat.suppression = false;
           etat.session = null; etat.pseudo = null;
           etat.brouillonProfil = brouillonProfilVide();
@@ -703,6 +868,7 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
       /* Rien de l'atelier ne reste dans ce navigateur après la déconnexion :
          sur un ordinateur partagé, la personne suivante ne doit ni le voir,
          ni le récupérer dans son propre compte. Tout est déjà en ligne. */
+      oublierBase();
       if (pont.oublierAtelier) pont.oublierAtelier();
       pont.toast("Session fermée.");
       peindre();
@@ -1285,6 +1451,11 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
       q("#sy-del").addEventListener("click", function(){
         var b = this;
         var pseudo = etat.pseudo || "";
+        /* Le mot de passe est demandé (V55) : un appareil laissé ouvert ne
+           suffit plus à effacer un compte. */
+        var zoneMdp = document.createElement("label");
+        zoneMdp.className = "f";
+        zoneMdp.innerHTML = '<span>Ton mot de passe actuel</span><input type="password" id="sy-del-mdp" autocomplete="current-password">';
         pont.confirmer({
           titre: "Supprimer définitivement ton compte ?",
           texte: "Cette action est irréversible. Seront supprimés, sur le serveur et sur cet appareil :",
@@ -1292,11 +1463,18 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
                     "ton atelier : créations, pièces, commandes, patrons, matières et réglages",
                     "tes photos et l'historique des versions",
                     "tes factures et avoirs : si tu en as émis, télécharge d'abord ton registre des factures (Commandes) et ta sauvegarde, car tu dois les conserver 10 ans"],
+          contenu: zoneMdp,
           saisie: pseudo || "SUPPRIMER",
           bouton: "Supprimer mon compte", danger: true
         }, function(){
-          occupe(b, "Suppression…");
-          effacerToutLeCompte(function(etape){ b.textContent = etape; }).then(function(r){
+          var mdp = (zoneMdp.querySelector("input") || {}).value || "";
+          var courriel = etat.session && etat.session.user && etat.session.user.email;
+          if (!mdp){ pont.toast("Indique ton mot de passe actuel pour supprimer le compte."); return; }
+          occupe(b, "Vérification…");
+          (courriel ? sb.auth.signInWithPassword({email: courriel, password: mdp}) : Promise.resolve({error:{message:"session"}})).then(function(v){
+            if (v.error){ b.disabled = false; b.textContent = "Supprimer mon compte"; pont.toast("Le mot de passe actuel n'est pas le bon."); return; }
+            occupe(b, "Suppression…");
+            return effacerToutLeCompte(function(etape){ b.textContent = etape; }).then(function(r){
             if (!r.ok){ b.disabled = false; b.textContent = "Supprimer mon compte";
               peindre({erreur: "La suppression n'a pas abouti. " + traduire(r.message)}); return; }
             if (pont.oublierAtelier) pont.oublierAtelier();
@@ -1305,7 +1483,8 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
               ? "Ton compte et toutes tes données ont été supprimés."
               : "Ton atelier et tes photos ont été supprimés. Pour finaliser la suppression de ton compte, écris-nous à bonjour@crochompte.com.");
             peindre();
-          });
+            });
+          }, function(){ b.disabled = false; b.textContent = "Supprimer mon compte"; pont.toast("Pas de connexion internet : réessaie dès qu'elle revient."); });
         });
       });
 
@@ -1378,7 +1557,17 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
                            /* Pour l'Accueil : un enregistrement qui échoue doit se voir. */
                            etatEnvoi: function(){ return {connecte: !!etat.session, enAttente: !!etat.sale,
                                                            erreur: etat.derniereErreur || null, dernier: etat.vuLe || null}; },
-                           reessayer: function(){ etat.derniereErreur = null; return synchroniser(); }};
+                           reessayer: function(){ etat.derniereErreur = null; return synchroniser(); },
+                           pret: function(){ return !!etat.pret; },
+                           /* Abonnement (V55) */
+                           abonnement: function(){ return etat.abonnement; },
+                           relireAbonnement: function(){ return lireAbonnement(true); },
+                           utiliserCode: utiliserCode,
+                           lienPaiement: lienPaiement, lienPortail: lienPortail,
+                           paiementConfigure: function(){ var l = (cfg.abonnement || {}).liens || {}; return !!(l.mensuel || l.semestriel || l.annuel); },
+                           admin: admin,
+                           /* Ouvrir l'écran de connexion ou d'inscription (essai sans compte) */
+                           montrerConnexion: function(mode){ etat.mode = mode || "connexion"; peindre(); }};
 
   /* À l'ouverture et à la connexion : ramener les photos faites sur un autre
      appareil, puis envoyer celles d'ici qui ne sont pas encore en ligne. */
@@ -1404,12 +1593,14 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
     if (etat.sale) marquerAEnvoyer(true);   /* on y inscrit le compte */
     recupererProfil().then(function(){
       peindre();
+      lireAbonnement(true);
       return synchroniser();
     }).then(function(ok){
       /* Quand tout va bien, on ne dit rien : l'écran ouvert suffit. Un message
          n'apparaît que si la mise à jour de l'atelier a échoué. */
       if (annoncer && !ok) pont.toast("La mise à jour de ton atelier n'a pas abouti : nouvel essai automatique dans un instant.");
       peindre({garderFocus:true});
+      if (pont.redessiner) pont.redessiner();
       traiterSuppressions();
       photosAuDemarrage();
     });

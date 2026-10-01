@@ -35,7 +35,7 @@ const auj = () => { const d = new Date(); return d.getFullYear()+'-'+String(d.ge
   try {
     let p = await page(b);
     await graine(p);
-    await ecrire(p, function(){ s.reglages.mode = "complet"; s.reglages.raisonSociale = "Marie Dupont"; s.reglages.adresse = "1 rue des Lilas, Lyon"; s.reglages.statut = "non_declare"; });
+    await ecrire(p, function(){ s.reglages.mode = "complet"; s.reglages.raisonSociale = "Marie Dupont"; s.reglages.adresse = "1 rue des Lilas, Lyon"; s.reglages.statut = "marchandises"; s.reglages.siret = "12345678900012"; });
 
     /* 1. Virgule décimale : 45,50 reste 45,50 */
     await onglet(p, 'Mes créations');
@@ -179,7 +179,7 @@ const auj = () => { const d = new Date(); return d.getFullYear()+'-'+String(d.ge
     /* 8 bis. Corrections issues de la vérification indépendante */
     p = await page(b);
     await graine(p);
-    await ecrire(p, function(){ s.reglages.mode = "complet"; s.reglages.raisonSociale = "Marie Dupont"; s.reglages.adresse = "1 rue des Lilas, Lyon"; s.reglages.statut = "non_declare";
+    await ecrire(p, function(){ s.reglages.mode = "complet"; s.reglages.raisonSociale = "Marie Dupont"; s.reglages.adresse = "1 rue des Lilas, Lyon"; s.reglages.statut = "marchandises"; s.reglages.siret = "12345678900012";
       s.commandes = [{id:'w1', client:{nom:'Wanda'}, cid:'c2', prixConvenu:1.07, fraisLivraison:0, statut:'livree',
         versement:{montant:0.47, date:arg, type:'acompte'}, paiements:[{montant:0.6, date:arg}], dateCommande:new Date().toISOString(),
         canal:'direct', note:'', variantes:'', libelle:'', datePromise:arg}]; }, auj());

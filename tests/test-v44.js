@@ -53,6 +53,9 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     await p.getByRole('button', {name:'Changer de profil'}).click(); await p.waitForTimeout(200);
     R.dialogue_deux_cartes = (await p.locator('.dlg .profil-carte').count()) === 2;
     await p.click('.dlg .profil-carte[data-p="pro"]'); await p.click('.dlg [data-oui]'); await p.waitForTimeout(400);
+    /* V55 : le choix « pro » enchaîne sur la situation (taux de cotisations) */
+    R.situation_demandee = /quel taux de cotisations/.test(await p.textContent('.dlg'));
+    await p.click('.dlg [data-non]'); await p.waitForTimeout(300);
     R.pro_applique = await dans(p, function(){ return state.reglages.profilType === 'pro' && state.reglages.statut === '' ; });
     await dans(p, function(){ state.reglages.statut = 'marchandises'; view.regSection = null; aller('reglages'); }); await p.waitForTimeout(300);
     R.pro_facturation = /Facturation/.test(await p.textContent('#main')) && await dans(p, function(){ return estPro(); });

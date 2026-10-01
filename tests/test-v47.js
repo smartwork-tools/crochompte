@@ -73,7 +73,7 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     await p.setViewportSize({width:390, height:844}); await p.waitForTimeout(300);
     R.tel_sans_debordement = await p.evaluate(()=> document.documentElement.scrollWidth <= window.innerWidth + 1);
     const hTel = await p.evaluate(() => document.documentElement.scrollHeight);
-    R.tel_lignes_compactes = hTel < 2200;
+    R.tel_lignes_compactes = hTel < 2400;   /* V55 : + le bandeau d'essai (≈ 150 px) */
     await p.close();
   } catch (e) { R._echec = String(e && e.stack || e); }
   console.log(JSON.stringify(R, null, 1));

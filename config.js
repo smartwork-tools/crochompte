@@ -9,5 +9,13 @@
 
 window.CROCHOMPTE_CONFIG = {
   supabaseUrl:     "https://jsmmajntopdozkmzrniy.supabase.co",
-  supabaseAnonKey: "sb_publishable_N3ZuPMwQ1zKOijfHkFenWA_jpyHAICC"
+  supabaseAnonKey: "sb_publishable_N3ZuPMwQ1zKOijfHkFenWA_jpyHAICC",
+  /* Abonnement (V55). Liens de paiement Stripe (Produits → Liens de paiement)
+     et lien du portail client (Paramètres → Portail client). Tant qu'ils
+     sont vides, l'application propose les offres sans bouton de paiement
+     et invite à demander un code. */
+  abonnement: {
+    liens: { mensuel: "", semestriel: "", annuel: "" },
+    portail: ""
+  }
 };

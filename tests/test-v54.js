@@ -98,9 +98,9 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     await dans(p, function(){ aller('accueil'); });
     await p.waitForTimeout(300);
     R.pastille_nouveau = await p.locator('#lien-nouveautes .nouv-pastille').count() === 1;
-    R.signaler_un_probleme = /mailto:bonjour@crochompte\.com\?subject=.*V54/.test(await p.locator('a', {hasText:'Signaler un problème'}).getAttribute('href'));
+    R.signaler_un_probleme = /mailto:bonjour@crochompte\.com\?subject=.*V5[0-9]/.test(await p.locator('a', {hasText:'Signaler un problème'}).getAttribute('href'));
     await p.click('#lien-nouveautes'); await p.waitForTimeout(250);
-    R.nouveautes = /Ce qui a changé/.test(await p.locator('.dlg').textContent()) && await dans(p, function(){ return state.reglages.nouveautesVues === 'V54'; });
+    R.nouveautes = /Ce qui a changé/.test(await p.locator('.dlg').textContent()) && await dans(p, function(){ return /^V5[0-9]$/.test(state.reglages.nouveautesVues); });
     await p.click('.dlg [data-oui]'); await p.waitForTimeout(250);
     await dans(p, function(){ window.CrochomptePont.conflit(Date.now() - 3600000); });
     await p.waitForTimeout(200);

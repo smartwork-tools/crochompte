@@ -99,6 +99,47 @@ export function createClient(url, key){
     }; } },
     rpc: function(name, params){
       if (name === "mon_pseudo") return Promise.resolve({data:"LaineTest", error:null});
+      /* V55 : envoi atomique (schema-abonnement.sql). window.__fauxSansRpcEnvoi = true
+         simule une base où la fonction n'existe pas encore (repli). */
+      if (name === "enregistrer_atelier"){
+        if (window.__fauxSansRpcEnvoi) return Promise.resolve({data:null, error:{message:"Could not find the function public.enregistrer_atelier in the schema cache", code:"PGRST202"}});
+        if (window.__fauxEchecEnvoi) return Promise.resolve({data:null, error:{message:"réseau (test)"}});
+        window.__fauxEnvois = window.__fauxEnvois || [];
+        window.__fauxEnvois.push({donnees: params.p_donnees});
+        var srvA = lireServeur(), archiveA = null;
+        if (srvA.atelier && srvA.atelier.maj !== (params.p_maj_connue || null)){
+          srvA.versions.push({donnees: srvA.atelier.donnees, maj: srvA.atelier.maj, raison:"remplacee", appareil: params.p_appareil || ""});
+          archiveA = srvA.atelier.maj;
+        }
+        var tA = Math.max(Date.now(), srvA.atelier ? Date.parse(srvA.atelier.maj) + 1 : 0);
+        srvA.atelier = {user_id: session ? session.user.id : "u", donnees: params.p_donnees, maj: new Date(tA).toISOString()};
+        garderServeur();
+        return Promise.resolve({data:{maj: srvA.atelier.maj, archive: archiveA}, error:null});
+      }
+      /* V55 : abonnement. window.__fauxAbonnement remplace la réponse ;
+         window.__fauxSansAbonnement = true simule une base sans la fonction. */
+      if (name === "mon_abonnement"){
+        if (window.__fauxSansAbonnement) return Promise.resolve({data:null, error:{message:"Could not find the function", code:"PGRST202"}});
+        var fin = new Date(Date.now() + 14 * 864e5).toISOString();
+        var fa = window.__fauxAbonnement; try{ if (!fa) fa = JSON.parse(localStorage.getItem("__fauxAbonnement") || "null"); }catch(e){}
+        return Promise.resolve({data: fa || {statut:"essai", acces:true, admin:false, essai_fin:fin, fin:null, offre:null, jours_restants:14, illimite:false, annulation_prevue:false, stripe:false, code_utilise:null}, error:null});
+      }
+      if (name === "utiliser_code"){
+        var codeN = String(params.p_code || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+        window.__dernierCode = codeN;
+        if (codeN === "CROCHETTESTOK12"){
+          window.__fauxAbonnement = {statut:"offert", acces:true, admin:false, essai_fin:null, fin:new Date(Date.now() + 44 * 864e5).toISOString(), offre:"cadeau", jours_restants:44, illimite:false, annulation_prevue:false, stripe:false, code_utilise:"CROCHET-TEST-OK12"};
+          return Promise.resolve({data:{ok:true, duree_jours:30, abonnement: window.__fauxAbonnement}, error:null});
+        }
+        return Promise.resolve({data:{ok:false, erreur: codeN === "CROCHETTESTUSED" ? "code_deja_utilise" : "code_inconnu"}, error:null});
+      }
+      if (name === "admin_stats") return Promise.resolve((window.__fauxAbonnement || JSON.parse(localStorage.getItem("__fauxAbonnement") || "null") || {}).admin ? {data:{comptes:12, essai:5, actifs:3, offerts:2, expires:2, inscrits_30j:4, codes_actifs:1}, error:null} : {data:null, error:{message:"réservé aux administrateurs"}});
+      if (name === "admin_comptes") return Promise.resolve({data:[{user_id:"u1", email:"bea@x.fr", pseudo:"Bea", cree:new Date().toISOString(), derniere_connexion:null, statut:"essai", essai_fin:new Date(Date.now()+5*864e5).toISOString(), fin:null, offre:null, code_utilise:null, admin:false}], error:null});
+      if (name === "admin_codes") return Promise.resolve({data: window.__fauxCodes || [], error:null});
+      if (name === "admin_creer_code"){ window.__fauxCodes = window.__fauxCodes || []; var cc = {code:"CROCHET-AB12-CD34", duree_jours: params.p_duree_jours, utilisations_max: params.p_max, utilisations:0, actif:true, note: params.p_note, cree:new Date().toISOString()}; window.__fauxCodes.unshift(cc); return Promise.resolve({data: cc.code, error:null}); }
+      if (name === "admin_desactiver_code"){ (window.__fauxCodes || []).forEach(function(c){ if (c.code === params.p_code) c.actif = !!params.p_actif; }); return Promise.resolve({data:null, error:null}); }
+      if (name === "admin_offrir"){ window.__dernierOffert = params; return Promise.resolve({data:{ok: params.p_email !== "inconnue@x.fr", erreur: params.p_email === "inconnue@x.fr" ? "compte_inconnu" : null}, error:null}); }
+      if (name === "admin_retirer") return Promise.resolve({data:{ok:true}, error:null});
       /* Comme schema-factures.sql : un code par compte, un compteur par année. */
       if (name === "emettre_facture"){
         if (window.__fauxEchecFacture) return Promise.resolve({data:null, error:{message:"réseau (test)"}});

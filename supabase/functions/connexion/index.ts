@@ -60,7 +60,9 @@ Deno.serve(async (req: Request) => {
   // 15 minutes. Sans elle, on pourrait essayer des mots de passe à l'infini
   // sur un pseudo connu. (Nécessite schema-fiabilite.sql ; sans lui, la
   // connexion fonctionne comme avant.)
-  const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "inconnue";
+  // L'adresse IP : le DERNIER élément de x-forwarded-for est celui qu'ajoute
+  // la passerelle Supabase ; le premier peut être fourni par le client lui-même.
+  const ip = (req.headers.get("x-forwarded-for") ?? "").split(",").map((x) => x.trim()).filter(Boolean).pop() || "inconnue";
   try {
     // Trois compteurs : identifiant + adresse IP (10), adresse IP (50), et
     // identifiant toutes adresses confondues (100). Une personne mal

@@ -30,6 +30,10 @@ appareil à l'autre.
 | `supabase/functions/connexion/` | fonction serveur : connexion avec pseudo **ou** adresse e-mail + mot de passe |
 | `supabase/functions/mot-de-passe-oublie/` | fonction serveur : envoi du lien de réinitialisation à partir du pseudo ou de l'adresse e-mail |
 | `supabase/functions/supprimer-compte/` | fonction serveur pour l'effacement complet du compte |
+| `supabase/functions/stripe-webhook/` | fonction serveur : réception des paiements Stripe (abonnement) — voir « Abonnement » plus bas |
+| `schema-abonnement.sql` | abonnement (essai de 14 jours, offres, codes cadeaux, administration), envoi atomique de l'atelier, plafond des versions — à coller en dernier |
+| `boot.js` | ce qui démarre avant tout (anti-cadre, thème) : sorti de la page pour une politique de sécurité sans script inline |
+| `cgv.html` | conditions générales de vente et d'utilisation de l'abonnement (à compléter : identité, SIREN, médiateur) |
 | `schema-signalements.sql` | un signalement par personne et par patron partagé, à coller dans Supabase |
 | `sw.js` | garde une copie de l'application sur l'appareil, pour l'ouvrir sans réseau |
 | `manifest.webmanifest`, `icones/` | nom et icônes pour « Ajouter à l'écran d'accueil » sur téléphone |
@@ -135,9 +139,32 @@ supabase functions deploy mot-de-passe-oublie
 > **Important** : l'outil `supabase` exige que chaque fonction se trouve dans
 > `supabase/functions/<nom>/index.ts`, exactement à cet endroit — c'est pour
 > ça que ce dossier contient un sous-dossier `supabase/functions/`. Le dossier
-> `edge/` en est une **copie identique**, pratique pour copier-coller dans
-> l'éditeur du tableau de bord : si tu modifies une fonction, modifie les deux
-> (ou supprime `edge/` et colle depuis `supabase/functions/`).
+> `edge/` (ancienne copie) ne sert plus : supprime-le.
+
+## Abonnement (V55)
+
+1. Colle `schema-abonnement.sql` dans le SQL Editor (après tous les autres).
+   Il crée les tables, met chaque compte existant en essai de 14 jours, et
+   fait de `karimfarhani01@gmail.com` un administrateur (Réglages ›
+   Administration : vue d'ensemble, codes cadeaux, accès offerts, comptes).
+2. Sans rien d'autre, tout fonctionne déjà : essai, codes cadeaux, écran
+   « essai terminé ». Les boutons de paiement affichent « Bientôt disponible ».
+3. Pour encaisser : dans Stripe, crée un produit « Crochompte » avec trois
+   prix récurrents (7,90 € / mois, 42 € / 6 mois, 75 € / an ; donne à chaque
+   prix la clé de recherche `mensuel`, `semestriel`, `annuel`), puis un **lien
+   de paiement** par prix, et active le **portail client**. Colle les trois
+   liens et le lien du portail dans `config.js › abonnement`.
+4. Déploie la fonction qui reçoit les paiements, avec ses deux secrets :
+   ```bash
+   supabase secrets set STRIPE_SECRET_KEY=sk_live_... STRIPE_WEBHOOK_SECRET=whsec_...
+   supabase functions deploy stripe-webhook --no-verify-jwt
+   ```
+   Dans Stripe → Développeurs → Webhooks, ajoute l'adresse
+   `https://<projet>.supabase.co/functions/v1/stripe-webhook` avec les
+   événements `checkout.session.completed`, `invoice.paid`,
+   `customer.subscription.updated`, `customer.subscription.deleted`.
+5. Complète `cgv.html` (identité, SIREN, adresse, médiateur) avant d'ouvrir
+   les paiements.
 
 **Sans ces quatre fonctions déployées, personne ne peut créer de compte ni se
 connecter.** Fais-le avant d'annoncer le site à qui que ce soit.

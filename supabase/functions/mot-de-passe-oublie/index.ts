@@ -72,7 +72,9 @@ Deno.serve(async (req: Request) => {
   // Au plus 3 demandes par identifiant et 20 par adresse IP en 15 minutes :
   // personne ne peut inonder une boîte mail ni épuiser le quota d'envoi.
   // La réponse reste la même, pour ne rien révéler.
-  const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "inconnue";
+  // L'adresse IP : le DERNIER élément de x-forwarded-for est celui qu'ajoute
+  // la passerelle Supabase ; le premier peut être fourni par le client lui-même.
+  const ip = (req.headers.get("x-forwarded-for") ?? "").split(",").map((x) => x.trim()).filter(Boolean).pop() || "inconnue";
   try {
     const { data: n1 } = await admin.rpc("compter_tentative", { p_cle: "mdp:" + identifiant.toLowerCase() + "|" + ip });
     const { data: n2 } = await admin.rpc("compter_tentative", { p_cle: "mdp-ip:" + ip });

@@ -48,9 +48,9 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
 
     /* 2. L'onglet de la fiche porte le nom de la création */
     await dans(p, function(){ ouvrirFiche('c1'); }); await p.waitForTimeout(200);
-    R.onglet_fiche_nomme = (await p.textContent('#nav [aria-current="true"]')).trim() === 'Fiche : Lapin Céleste' && /Fiche de coût : « Lapin Céleste »/.test(await p.textContent('#main h1'));
+    R.onglet_fiche_nomme = (await p.textContent('#nav [aria-current="true"]')).trim() === 'Fiche : Lapin Céleste' && /Création : « Lapin Céleste »/.test(await p.textContent('#main h1'));
     await dans(p, function(){ nouvelleFiche('vide'); }); await p.waitForTimeout(200);
-    R.onglet_nouvelle_fiche = (await p.textContent('#nav [aria-current="true"]')).trim() === 'Nouvelle fiche';
+    R.onglet_nouvelle_fiche = (await p.textContent('#nav [aria-current="true"]')).trim() === 'Nouvelle création';
     await dans(p, function(){ view.draft = null; oublierBrouillon(); });
 
     /* 3. Mes créations : une carte par création, ses pièces dessous, avec le coût réel */

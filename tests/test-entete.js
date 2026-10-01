@@ -22,7 +22,7 @@ async function connecter(p){
   await p.click('nav >> text=Matières'); await p.waitForTimeout(300);
   R.ordi_deconnexion_partout = await p.isVisible('#entete-deconnexion');
   await p.screenshot({path:require('path').join(__dirname,'captures','entete-ordi.png'), clip:{x:0,y:0,width:1280,height:200}});
-  await p.click('#entete-deconnexion'); await p.waitForTimeout(900);
+  await p.click('#entete-deconnexion'); await p.waitForTimeout(300); await p.click('.dlg [data-oui]'); await p.waitForTimeout(900);
   R.ordi_retour_portail = await p.isVisible('#sy-c-identifiant');
   R.ordi_entete_vide = !(await p.isVisible('#entete-deconnexion'));
   await p.close();
@@ -45,7 +45,7 @@ async function connecter(p){
   await p.keyboard.press('Escape'); await p.waitForTimeout(200);
   R.tel_echap_ferme = !(await p.isVisible('#menu-mobile .mm-panneau'));
   await p.click('#menu-btn'); await p.waitForTimeout(200);
-  await p.click('#menu-deconnexion'); await p.waitForTimeout(900);
+  await p.click('#menu-deconnexion'); await p.waitForTimeout(300); await p.click('.dlg [data-oui]'); await p.waitForTimeout(900);
   R.tel_retour_portail = await p.isVisible('#sy-c-identifiant');
   R.tel_menu_masque_au_portail = !(await p.isVisible('#menu-btn'));
   R.erreurs = errs;

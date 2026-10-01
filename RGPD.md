@@ -18,7 +18,8 @@ Ce n'est pas un avis juridique : c'est une liste de contrôle honnête.
 | **Droit de rectification** (art. 16) | Tout est modifiable dans l'application |
 | **Droit à l'effacement** (art. 17) | Bouton « Effacer mon compte » : photos, atelier, puis identité de connexion. Double confirmation, irréversible |
 | **Sécurité** (art. 32) | Séparation par compte au niveau du serveur (RLS), stockage privé cloisonné, HTTPS, mot de passe chiffré (jamais en clair), pseudo jamais exposé au navigateur ni à d'autres utilisatrices |
-| **Effacement en cascade** | `on delete cascade` : supprimer le compte supprime l'atelier |
+| **Effacement en cascade** | `on delete cascade` : supprimer le compte supprime l'atelier, l'historique des versions (`ateliers_versions`), le pseudo (`pseudos`), les factures (`factures`), les patrons partagés et leurs signalements, l'abonnement et les codes utilisés (`abonnements`, `codes_utilisations`). Les photos sont vidées par la fonction serveur. Les factures émises sont détruites avec le compte : l'application prévient qu'il faut télécharger le registre avant (conservation de 10 ans à la charge de l'utilisatrice) |
+| **Abonnement** (V55) | `abonnements` ne garde que l'état de l'accès (essai, actif, offert, dates) et, après paiement, les identifiants client et abonnement Stripe. Aucune donnée bancaire n'est stockée : Stripe est le sous-traitant du paiement (à mentionner dans la politique de confidentialité et les CGV). Suppression du compte : exiger le mot de passe (fait) ; la fonction serveur efface d'abord l'identité, la cascade fait le reste |
 
 ### Un point à ne pas manquer
 Le bouton d'effacement supprime **l'atelier et les photos** par lui-même. Pour

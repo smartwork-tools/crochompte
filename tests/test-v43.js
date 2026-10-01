@@ -66,7 +66,8 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     R.formulaire_neutre = /Commandé par/.test(det) && /Achat professionnel/.test(det) && /Déjà reçu/.test(det) && !/cliente/i.test(det);
 
     /* 4. Un seul message de stock, même pour plusieurs sorties */
-    await dans(p, function(){ allerOnglet('creations'); prevenirManques(['Coton DK']); prevenirManques(['Ouate', 'Fil noir']); prevenirManques(['Coton DK']); });
+    await dans(p, function(){ allerOnglet('creations'); state.matieres[0].mouv = [{d: Date.now(), t:'entree', q:100, p:5, pu:0.05, sa:100}];   /* V55 : stock suivi */
+      prevenirManques(['Coton DK']); prevenirManques(['Ouate', 'Fil noir']); prevenirManques(['Coton DK']); });
     await p.waitForTimeout(200);
     const toasts = await p.locator('.toast').allTextContents();
     R.un_seul_message_stock = toasts.filter(t => /stock négatif/.test(t)).length === 1 && /3 matières/.test(toasts.join(' '));

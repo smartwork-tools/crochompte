@@ -5,21 +5,13 @@
 <!-- Politique de sécurité : GitHub Pages ne permet pas d'envoyer d'en-têtes,
      on la déclare donc ici. Seul le site lui-même peut fournir du code ; les
      seules connexions permises sont celles vers le serveur Supabase. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://upload.wikimedia.org https://www.gutenberg.org; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://upload.wikimedia.org https://www.gutenberg.org; connect-src 'self' https://jsmmajntopdozkmzrniy.supabase.co wss://jsmmajntopdozkmzrniy.supabase.co; font-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<script>
-/* Crochompte ne s'affiche jamais à l'intérieur d'un autre site (on ferait
-   cliquer une utilisatrice sur un bouton qu'elle ne voit pas). */
-if (window.top !== window.self){
-  document.documentElement.style.display = "none";
-  try{ window.top.location = window.self.location.href; }catch(e){}
-}
-</script>
+<script src="boot.js?v=55"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0f5f57">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" href="icones/favicon-48.png">
-<script>try{var t=localStorage.getItem("crochompte-theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}</script>
 <link rel="apple-touch-icon" href="icones/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-title" content="Crochompte">
 <title>Crochompte</title>
@@ -1098,6 +1090,52 @@ if (window.top !== window.self){
     .lien-mini{padding:10px 4px;margin:-10px -4px;}
     .aide-q{width:26px;height:26px;}
   }
+  /* ═══ V55 — lisibilité, mobile, abonnement ═══ */
+  .crea-card{min-width:0;}
+  .crea-card .tablewrap{min-width:0;max-width:100%;}
+  .tps-saisir{display:inline-block;margin-top:2px;}
+  .frise{position:relative;}
+  @media (max-width:720px){
+    /* la ligne de matière de la fiche : le nom sur toute la largeur, les
+       champs dessous, pour lire « Coton DK » et pas « Co… » */
+    .matrow{grid-template-columns:minmax(0,1fr) 84px 34px !important;grid-template-areas:"nom nom del" "qte cout del";}
+    .matrow .matpick{grid-area:nom;white-space:normal;text-align:left;line-height:1.3;}
+    .matrow .qte-u{grid-area:qte;}
+    .matrow [data-role="cost"]{grid-area:cout;text-align:left !important;}
+    .matrow [data-role="del"]{grid-area:del;align-self:center;}
+    .t-pieces td[data-l="Temps passé"] .tps-saisir{display:inline-block;min-height:32px;}
+    /* la frise des étapes défile : on le montre par un dégradé de bord */
+    .frise-card .body{position:relative;}
+    .frise::after{content:"";position:sticky;right:0;top:0;flex:0 0 28px;margin-left:-28px;background:linear-gradient(90deg,transparent,var(--card));pointer-events:none;}
+    /* le tableau « ce que tu dois acheter » devient des cartes */
+    .achats-resp thead{display:none;}
+    .achats-resp tbody tr{display:grid;grid-template-columns:1fr 1fr;gap:2px 10px;padding:10px 12px;border-bottom:1px solid var(--rule);}
+    .achats-resp td{display:block;padding:2px 0;border:none;}
+    .achats-resp td:first-child{grid-column:1/-1;font-weight:600;}
+    .achats-resp td::before{content:attr(data-l) " : ";color:var(--muted);font-size:12px;}
+    .achats-resp td:first-child::before{content:none;}
+    /* cibles : « J'ai acheté », « Couleurs », « × » */
+    .stk-liens .lien-mini, .lien-mini.stk{padding:10px 6px;margin:-8px -2px;}
+  }
+  .matrow .matpick{overflow:hidden;text-overflow:ellipsis;}
+  /* Matières : bouton d'ajout en tête d'onglet */
+  .stk-ajout-haut{margin:0 0 14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+  /* Abonnement */
+  .abo-bandeau{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:10px 14px;margin:0 0 14px;border-radius:12px;background:var(--primary-soft);border:1px solid var(--primary);font-size:14px;}
+  .abo-bandeau.warn{background:var(--warn-soft);border-color:var(--warn);}
+  .abo-bandeau p{margin:0;}
+  .offres{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:12px 0;}
+  .offre{border:1.5px solid var(--rule);border-radius:12px;padding:14px;background:var(--card);display:flex;flex-direction:column;gap:6px;}
+  .offre.reco{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-soft);}
+  .offre .prix{font-size:24px;font-weight:700;}
+  .offre .prix small{font-size:13px;font-weight:400;color:var(--muted);}
+  .offre .eco{font-size:12.5px;color:var(--good);font-weight:600;}
+  .offre .btn{margin-top:auto;}
+  .abo-plein{max-width:720px;margin:0 auto;}
+  body.acces-bloque #nav, body.acces-bloque #rech-g-w{display:none !important;}
+  .portail-essai .lien-mini{font-size:14px;}
+  .adm-table td, .adm-table th{font-size:13px;}
+  .code-cadeau{font-family:ui-monospace,Menlo,Consolas,monospace;letter-spacing:1px;font-weight:700;}
 </style>
 </head>
 <body>
@@ -1137,8 +1175,8 @@ if (window.top !== window.self){
      écran de connexion est nécessaire avant de montrer quoi que ce soit.
      Sans ce fichier (ou s'il ne se charge pas), rien ne change : l'objet
      global reste absent et l'application démarre hors ligne, comme avant. -->
-<script src="config.js" onerror="console.info('Crochompte : pas de config.js, mode hors ligne')"></script>
-<script src="app.js?v=48"></script>
+<script src="config.js"></script>
+<script src="app.js?v=55"></script>
 
 <!-- ═══ Comptes et synchronisation — facultatifs quand config.js est absent ═══
      Sans config.js, l'application fonctionne hors ligne, exactement comme la
@@ -1147,35 +1185,9 @@ if (window.top !== window.self){
      dans le script principal) : ce petit script ne sert plus alors qu'en
      repli, si sync.js ne parvient pas à se charger avant même d'atteindre
      l'écran de connexion. -->
-<script>
-/* Message par défaut de la zone « compte ». Il est ici, et non dans sync.js,
-   pour s'afficher même si sync.js ne se charge pas (réseau coupé, bibliothèque
-   injoignable). sync.js le remplace dès qu'il démarre. */
-(function(){
-  var pont = window.CrochomptePont;
-  if (!pont || !pont.surZoneCompte) return;
-  pont.surZoneCompte(function(zone){
-    if (zone.getAttribute("data-sync") === "on") return;
-    var cfg = window.CROCHOMPTE_CONFIG || {};
-    zone.innerHTML =
-      '<div class="card"><header><h2>Compte et synchronisation</h2></header><div class="body">'+
-      '<p style="margin:0">La synchronisation est <b>indisponible pour le moment</b> : tes données '+
-      'sont conservées sur cet appareil en attendant.</p>'+
-      '<p class="hint">' + (cfg.supabaseUrl
-        ? 'Le module de synchronisation n\'a pas pu se charger. Vérifie ta connexion : '+
-          'tes données sont intactes et seront synchronisées dès que la connexion reviendra.'
-        : 'Pour retrouver ton atelier sur ton téléphone et sur ton ordinateur, il faut '+
-          'un compte Crochompte.') +
-      '</p><p class="hint">Pense à exporter une sauvegarde de temps en temps.</p>'+
-      (cfg.supabaseUrl ? '<p class="hint"><a href="confidentialite.html" target="_blank" '+
-        'rel="noopener">Politique de confidentialité</a></p>' : '')+
-      '</div></div>';
-  });
-})();
-</script>
 <!-- Si le module ne peut pas se charger (pas de réseau pour sa bibliothèque),
      on n'attend pas les 7 secondes de sécurité : l'atelier s'ouvre tout de
      suite en mode hors ligne, ou le message d'erreur s'affiche. -->
-<script type="module" src="sync.js" onerror="window.CrochomptePont && window.CrochomptePont.moduleIndisponible && window.CrochomptePont.moduleIndisponible()"></script>
+<script type="module" src="sync.js?v=55" id="script-sync"></script>
 </body>
 </html>

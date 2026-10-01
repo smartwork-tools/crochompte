@@ -134,7 +134,7 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
       c2.client = {nom:'Boutique Lina', contact:'', note:'', adresse:'3 rue X, Lyon'}; c2.clientePro = true; c2.refClient = 'BC-12';
       c2.cid = 'c2'; c2.qte = 3; c2.prixConvenu = 28; c2.fraisLivraison = 6; c2.statut = 'acceptee'; c2.brouillon = false;
       c2.articles = [{id:'a1', cid:'c3', d:'', s:'anses cuir', q:1, pu:35}];
-      state.reglages.raisonSociale = 'Marie Dupont'; state.reglages.adresse = '1 rue des Lilas'; state.reglages.statut = 'non_declare';
+      state.reglages.raisonSociale = 'Marie Dupont'; state.reglages.adresse = '1 rue des Lilas'; state.reglages.statut = 'marchandises'; state.reglages.siret = '12345678900012';
       sauverTout(); view.cmdVue = c2.id; aller('commandes');
       var F = instantaneFacture(c2);
       return {suite: +c2.num.slice(-4) === +c1.num.slice(-4) + 1, format: /^C-\d{4}-\d{4}$/.test(c2.num), total: totalDu(c2), id: c2.id, num: c2.num,
@@ -150,7 +150,8 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     await p.click('#cmd-art-add'); await p.waitForTimeout(300);
     R.ajout_article_ecran = (await lire(p)).commandes.find(c=>c.id===r9.id).articles.length === 2;
     /* émettre la facture : le registre montre la commande */
-    await dans(p, function(){ var c = commande(state.commandes.find(function(x){ return x.refClient === 'BC-12'; }).id); c.articles = c.articles.slice(0, 1); sauverTout(); render(); });
+    /* V55 : la facture s'établit une fois la commande livrée */
+    await dans(p, function(){ var c = commande(state.commandes.find(function(x){ return x.refClient === 'BC-12'; }).id); c.articles = c.articles.slice(0, 1); c.statut = 'livree'; c.livreeLe = aujourdhuiISO(); sauverTout(); render(); });
     await p.getByRole('button', {name:'Établir la facture'}).click(); await p.waitForTimeout(200);
     await p.click('.dlg [data-oui]'); await p.waitForTimeout(900);
     const st9 = await lire(p);

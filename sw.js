@@ -9,9 +9,9 @@
    Les données de l'atelier ne passent jamais par ici : elles restent entre
    l'application et le serveur (Supabase), qui n'est jamais mis en cache.
    ═══════════════════════════════════════════════════════════════════════════ */
-var CACHE = "crochompte-app-v48";
+var CACHE = "crochompte-app-v55";
 var ESSENTIELS = [
-  "./", "index.html", "app.js?v=48", "sync.js", "config.js", "confidentialite.html", "manifest.webmanifest",
+  "./", "index.html", "boot.js?v=55", "app.js?v=55", "sync.js?v=55", "config.js", "confidentialite.html", "cgv.html", "manifest.webmanifest",
   "polices/public-sans-latin-400-normal.woff2", "polices/public-sans-latin-500-normal.woff2",
   "polices/public-sans-latin-600-normal.woff2", "polices/bricolage-grotesque-latin-600-normal.woff2",
   "polices/bricolage-grotesque-latin-700-normal.woff2", "polices/bricolage-grotesque-latin-800-normal.woff2",
@@ -58,6 +58,12 @@ self.addEventListener("fetch", function(e){
      (vendor/supabase) : plus aucun code n'est chargé d'un autre site. */
   if (!memeSite) return;   /* serveur, photos d'illustration : jamais en cache ici */
   var page = req.mode === "navigate";
+  /* Le trio index.html / app.js / sync.js est servi d'un bloc, depuis la
+     copie de CETTE version (V55) : plus jamais une page neuve avec un
+     app.js ancien, ou l'inverse. Une nouvelle version = un nouveau sw.js,
+     donc une nouvelle copie complète. */
+  var chemin = url.pathname.replace(/^.*\//, "");
+  var trio = page || chemin === "index.html" || chemin === "boot.js" || chemin === "app.js" || chemin === "sync.js" || chemin === "";
 
   function depuisCopie(){
     return caches.match(req, {ignoreSearch: true}).then(function(r){
@@ -80,6 +86,10 @@ self.addEventListener("fetch", function(e){
   });
   e.waitUntil(reseau.catch(function(){}));
 
+  if (trio){
+    e.respondWith(depuisCopie().then(function(r){ return r || reseau; }));
+    return;
+  }
   e.respondWith(
     avecDelai(reseau, page ? 4000 : 8000).then(function(rep){
       /* Serveur en panne ou page introuvable : la copie vaut mieux qu'une

@@ -176,7 +176,9 @@ Deno.serve(async (req: Request) => {
     .from("pseudos").select("user_id").eq("courriel", email).limit(5);
   if (eLect) return json({ erreur: "Inscription impossible pour l'instant. Réessaie dans un moment." }, 500);
   // Au plus 20 inscriptions par adresse IP en 15 minutes (anti-robots).
-  const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "inconnue";
+  // L'adresse IP : le DERNIER élément de x-forwarded-for est celui qu'ajoute
+  // la passerelle Supabase ; le premier peut être fourni par le client lui-même.
+  const ip = (req.headers.get("x-forwarded-for") ?? "").split(",").map((x) => x.trim()).filter(Boolean).pop() || "inconnue";
   try {
     const { data: n } = await admin.rpc("compter_tentative", { p_cle: "insc-ip:" + ip });
     if ((Number(n) || 0) > 20) return json({ erreur: "Trop d'inscriptions depuis ce réseau. Patiente 15 minutes, puis réessaie." }, 429);

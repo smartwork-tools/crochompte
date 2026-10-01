@@ -6,7 +6,7 @@ règles doit d'abord changer ce document**, et les tests correspondants
 (`tests/test-v37.js`, `tests/test-v37-lot10.js`, `tests/test-v37-lot11.js`,
 `tests/test-v38.js`, `tests/test-v39.js`, `tests/sql/`).
 
-Dernière mise à jour : V54 (30 septembre 2026). Journal des versions : `CHANGELOG.md`.
+Dernière mise à jour : V55 (1er octobre 2026). Journal des versions : `CHANGELOG.md`.
 
 ---
 
@@ -163,6 +163,64 @@ Dernière mise à jour : V54 (30 septembre 2026). Journal des versions : `CHANGE
   crochet, prix de référence des matières) ; rubrique « Affichage ».
 - **Nouveautés** (`NOUVEAUTES`, `VERSION_APP`) et **Signaler un problème**
   (courriel prérempli : version, écran, navigateur ; rien de personnel).
+
+## 0.7 Abonnement, comptes, cohérence des ventes (V55)
+
+- **Accès** (décidé par le serveur, `mon_abonnement`, `schema-abonnement.sql`) :
+  14 jours d'essai à l'inscription (`abonnements.essai_fin`), puis abonnement
+  payé (`actif`, jusqu'à `fin`), accès offert (`offert`, `fin` nulle =
+  illimité), résilié (`resilie` : accès jusqu'à `fin`), terminé (`expire`).
+  Les **administrateurs** (`admins`) ont toujours accès. Tant que le serveur
+  n'a pas répondu ou que la fonction n'est pas installée, rien n'est bloqué.
+- **Accès terminé** : l'atelier n'est ni effacé ni modifiable ; l'écran
+  propose les trois offres (7,90 € / mois, 42 € / 6 mois, 75 € / an), un
+  code cadeau, la sauvegarde, Mon compte et la déconnexion.
+- **Codes cadeaux** (`codes_cadeaux`, `utiliser_code`) : une durée (ou
+  l'illimité), un nombre d'utilisations, une seule fois par compte ; les
+  jours offerts **s'ajoutent** à ce qui reste (essai ou abonnement). Normalisés
+  en majuscules sans tirets ni espaces à la saisie.
+- **Paiement** : liens de paiement Stripe (`config.js › abonnement.liens`)
+  ouverts avec `client_reference_id` = identifiant du compte ; la fonction
+  serveur `stripe-webhook` met `abonnements` à jour (actif jusqu'à la fin de
+  période, résiliation = accès jusqu'à la fin payée). Sans liens configurés :
+  offres affichées, bouton « Bientôt disponible », code cadeau possible.
+- **Essai sans compte** : 14 jours sur l'appareil (`crochompte-v1.sansCompte`),
+  bandeau permanent, puis écran « crée un compte » ; l'atelier local est
+  envoyé au compte à la première connexion (règle existante).
+- **Profil** : la question amateur / pro n'est posée qu'une fois l'atelier en
+  ligne reçu (« Récupération de ton atelier… » jusque-là, 8 s au plus). Un
+  réglage fait sur un appareil vierge avant la réception (profil, taux,
+  identité…) est reporté dans la version reçue quand elle ne l'a pas, puis
+  renvoyé. Choisir « pro » enchaîne sur la situation (taux de cotisations).
+- **Synchronisation** : la base connue (`versionConnue`) est effacée à la
+  déconnexion ; un atelier local vierge est toujours récupéré du serveur ;
+  l'envoi passe par `enregistrer_atelier` (archive + remplacement en une
+  transaction) ; le perdant d'un conflit est prévenu lui aussi.
+- **Vendre** : si une pièce est en fabrication, le dialogue propose de la
+  vendre (elle passe en Terminée + Vendue, avec son temps) ou d'en créer une
+  nouvelle ; si une commande attend cette création, il propose de relier la
+  vente (l'argent n'est compté qu'une fois, dans la commande). L'action
+  groupée « Marquer vendues » prévient quand des pièces sont attendues.
+- **Gain figé** : à la vente, `piece.fige.matieresReelles` (pesée et
+  retouches comprises) et `emballage` sont figés ; `coutPiece` les lit. Le
+  gain d'une vente ne bouge plus avec le prix d'une pelote. Mes chiffres
+  (« Ce qui te rapporte le plus ») utilise `coutPiece` et `doutePiece`.
+- **Facture** : exige un statut déclaré **et** un SIRET, quel que soit le
+  profil, et une commande **livrée** (la date de vente est la livraison).
+- **Pièce jetée** : les matières sortent du stock si ce n'était pas fait ;
+  perte figée = matières réelles − emballage.
+- **Commande livrée sans facture** : le bilan figé suit les corrections de
+  prix, livraison, quantité, création, canal. **Supprimer une commande**
+  détache ses pièces (qui restent vendues à part), et la confirmation le dit.
+- **Stock négatif** : signalé seulement si le stock est suivi (un achat, un
+  inventaire ou une quantité saisie) ; sinon une seule invitation.
+- **Messages** : deux au plus ; ceux sans action disparaissent au changement
+  d'onglet. Unités au pluriel (« 2 pièces », « 50 g »).
+- **Vocabulaire** : *modèle* (du catalogue) et *création* (ta fiche).
+- **Sécurité** : CSP sans script inline (`boot.js`), `connect-src` limité au
+  projet ; suppression de compte avec mot de passe, fonction serveur d'abord
+  (cascade) ; adresse IP = dernier élément de `x-forwarded-for` ; service
+  worker : le trio index / boot / app / sync servi d'un bloc par version.
 
 ## 1. Vocabulaire
 
@@ -322,7 +380,7 @@ de `calculer` (matières, frais, cotisations **et** main-d'œuvre au taux visé)
 
 | Événement | Ce qui est figé | Où |
 |---|---|---|
-| Une pièce passe en **Vendue** | prix, matières, frais, cotisations, reste, temps (mesuré au chronomètre si disponible, poste par poste, sinon estimé), gain de l'heure, taux horaire du moment | `piece.fige` |
+| Une pièce passe en **Vendue** | prix, matières de la fiche **et matières réelles de la pièce** (pesée, retouches ; V55), emballage, frais, cotisations, reste, temps (mesuré au chronomètre si disponible, poste par poste, sinon estimé), gain de l'heure, taux horaire du moment | `piece.fige` |
 | Une commande passe en **Livrée** | bilan complet (coût, heures, gain de l'heure, taux horaire du moment) | `commande.bilanFige` |
 | Une **facture** ou un **avoir** est émis | le document entier (vendeur, cliente, lignes, paiements, mentions) | `commande.facture`, registre local et serveur |
 
@@ -403,11 +461,12 @@ figées une fois, avec les chiffres connus (marquées « estimé »).
   fiche de coût, l'estimation) avec, dessous, chaque **pièce** fabriquée
   (la réalité). Il n'y a plus d'onglet « Mes pièces » ; l'onglet de la fiche
   ouverte porte le nom de la création (« Fiche : Lapin »).
-- **Coût d'une pièce** (`coutPiece`) = matières (pesées si on l'a fait, sinon
-  celles de la fiche, + matières des retouches) + main-d'œuvre (temps
-  chronométré, complété par la fiche pour les postes non mesurés, au taux
-  visé) + part des frais fixes + transport (expédition) + frais de vente +
-  cotisations. **Le total est toujours la somme exacte des lignes
+- **Coût de revient d'une pièce** (`coutPiece`) = matières (figées à la
+  vente ; sinon pesées si on l'a fait, sinon celles de la fiche, + matières
+  des retouches) + part des frais fixes + transport (expédition) + frais de
+  vente + cotisations — **sans le temps** (§0.4). Le « coût complet » ajoute
+  la main-d'œuvre (temps chronométré, complété par la fiche pour les postes
+  non mesurés, au taux visé) ; il ne sert qu'à l'information. **Le total est toujours la somme exacte des lignes
   affichées** (le transport y est compté ; conditionnement = emballage,
   inclus dans les matières). Commission et cotisations se calculent sur le
   prix de la pièce, pas sur celui de la fiche.
@@ -432,8 +491,8 @@ figées une fois, avec les chiffres connus (marquées « estimé »).
 - **Retouche** : passer une pièce « À retoucher » ouvre une note (motif,
   matières ajoutées en €). Le temps chronométré pendant la retouche et ces
   matières s'ajoutent au coût de la pièce (« dont retouches »).
-- **Pièce ratée** : son coût affiché = matières jetées (perte figée) + temps
-  passé ; gain = − ce coût. Les Indicateurs, eux, ne comptent en « pertes »
+- **Pièce ratée** : son coût affiché = matières jetées (perte figée = matières
+  réelles sans l'emballage, sorties du stock) ; gain = − ce coût. Les Indicateurs, eux, ne comptent en « pertes »
   que les matières (voir §4).
 - **Accueil** : la phrase du mois dit l'encaissé et le nombre de pièces
   terminées (ou le temps chronométré) ; le panneau « Reprendre » montre, dans

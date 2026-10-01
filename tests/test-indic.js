@@ -33,7 +33,7 @@ async function connecter(p){
     const s = window.CrochomptePont.lire();
     s.reglages.statut = "marchandises"; s.reglages.cotisations = 12.3; s.reglages.mode = "simple";
     const d = new Date(), iso = x => x.toISOString().slice(0,10);
-    const ceMois = new Date(d.getFullYear(), d.getMonth(), 2);
+    const ceMois = new Date(d.getFullYear(), d.getMonth(), 1);   /* le 1er : toujours dans « ce mois », même le 1er du mois */
     const cid = s.creations[0].id;
     s.commandes = [
       {id:"k1", num:null, client:{nom:"Alice",contact:"",note:""}, cid:cid, libelle:"", variantes:"", personnalisee:true, clientePro:false,

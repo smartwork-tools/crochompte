@@ -17,7 +17,7 @@ createdb crochompte_test
 psql -d crochompte_test -f 01-socle-imitation-supabase.sql -f 02-droits-par-defaut-supabase.sql
 cd ../..   # racine du projet
 for f in schema.sql schema-pseudo.sql schema-versions.sql schema-patrons-publics.sql \
-         schema-signalements.sql schema-fiabilite.sql schema-factures.sql schema-securite-moderation.sql; do
+         schema-signalements.sql schema-fiabilite.sql schema-factures.sql schema-securite-moderation.sql schema-abonnement.sql; do
   psql -d crochompte_test -f $f
 done
 cd tests/sql
@@ -26,6 +26,7 @@ psql -d crochompte_test -f 20-moderation.sql             # scénario de modérat
 psql -d crochompte_test -f 30-contournements-et-factures.sql
 psql -d crochompte_test -f 31-registre-factures.sql
 psql -d crochompte_test -f 32-limites.sql
+psql -d crochompte_test -f 40-abonnement.sql             # abonnement, codes cadeaux, administration, envoi atomique (V55)
 ```
 
 ## Résultats attendus (V37)
@@ -51,4 +52,5 @@ psql -d crochompte_test -f 32-limites.sql
 - `31-…` : numéros à la suite, avoir compris, registre ni modifiable ni
   supprimable, invisible des autres comptes.
 - `32-limites.sql` : un atelier de plus de 25 Mo est refusé
+- `40-abonnement.sql` (V55) : essai de 14 jours, accès fermé à l'expiration, codes cadeaux (format, usage unique, cumul des jours, désactivation), fonctions d'administration refusées aux autres et à `anon`, administrateur toujours admis, envoi atomique de l'atelier (archive seulement quand la base connue est périmée), plafond de 30 versions
   (`atelier_trop_gros`), le 301e patron d'un compte aussi (`trop_de_patrons`).

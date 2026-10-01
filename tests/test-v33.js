@@ -110,7 +110,7 @@ async function connecter(p){
 
     // 7. Déconnexion : l'atelier quitte le navigateur
     await graine(p);
-    await p.click('#entete-deconnexion'); await p.waitForTimeout(700);
+    await p.click('#entete-deconnexion'); await p.waitForTimeout(300); await p.click('.dlg [data-oui]'); await p.waitForTimeout(700);
     R.deconnexion_vide_local = await p.evaluate(()=> { const s = localStorage.getItem("crochompte-v1"); return !s || JSON.parse(s).creations.length === 0; });
     await p.close();
 

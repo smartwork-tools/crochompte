@@ -140,7 +140,7 @@ async function modeComplet(p){
     /* 5. Numéros de facture : code propre au compte, à la suite, sans trou */
     await p.evaluate(()=>{
       const s = window.CrochomptePont.lire();
-      Object.assign(s.reglages, {raisonSociale:"Marie Dupont", adresse:"1 rue des Lilas, 69000 Lyon", statut:"non_declare", mode:"complet"});
+      Object.assign(s.reglages, {raisonSociale:"Marie Dupont", adresse:"1 rue des Lilas, 69000 Lyon", statut:"marchandises", siret:"12345678900012", mode:"complet"});   /* V55 : la facture exige un statut déclaré et un SIRET */
       const an = new Date().getFullYear(), iso = new Date().toISOString().slice(0,10);
       const cmd = (id, nom, num) => ({id, client:{nom}, cid:null, prixConvenu:40, fraisLivraison:0, statut:"livree",
         versement:{montant:0, date:null, type:"acompte"}, paiements:[], dateCommande:new Date().toISOString(),
