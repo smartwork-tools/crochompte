@@ -188,6 +188,8 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     R.migration_numeros = r11[0] === 'C-2025-0001' && r11[1] === 'C-2025-0002';
 
     /* 12. Patron de la bibliothèque partagée relié à une création */
+    /* (depuis V57, l'émission d'une facture laisse sa fenêtre PDF ouverte : on la ferme) */
+    for (let i = 0; i < 3 && await p.locator('.dlg').count(); i++){ await dans(p, function(){ try { fermerCouche(); } catch(e){} }); await p.waitForTimeout(250); }
     await p.evaluate(()=>{ window.__biblio = [{id:'pubX', titre:'Bonnet côtes faciles', auteur_affiche:'Anne', licence:'CC BY 4.0',
       texte:'Rang 1 : 60 ms en rond. Rang 2 : 1 ms dans chaque m. Continuer jusqu\'à 20 cm, puis diminuer.', user_id:'autre', cree:Date.now(), retire:false}]; });
     await dans(p, function(){ ouvrirFiche('c2'); });

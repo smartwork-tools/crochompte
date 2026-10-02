@@ -3,7 +3,7 @@
    Sur un marché, dans une salle sans réseau, l'application doit s'ouvrir quand
    même : ce petit programme garde une copie des fichiers de l'application sur
    l'appareil.
-   Deux règles. L'application elle-même (index.html, boot.js, app.js, sync.js)
+   Deux règles. L'application elle-même (index.html, boot.js, pdf.js, app.js, sync.js)
    est servie d'un bloc depuis la copie de CETTE version : jamais une page
    neuve avec un app.js ancien. Une nouvelle version = un nouveau sw.js, donc
    une nouvelle copie complète, prise au prochain chargement. Tout le reste
@@ -11,9 +11,9 @@
    Les données de l'atelier ne passent jamais par ici : elles restent entre
    l'application et le serveur (Supabase), qui n'est jamais mis en cache.
    ═══════════════════════════════════════════════════════════════════════════ */
-var CACHE = "crochompte-app-v561";
+var CACHE = "crochompte-app-v57";
 var ESSENTIELS = [
-  "./", "index.html", "boot.js?v=561", "app.js?v=561", "sync.js?v=561", "config.js", "confidentialite.html", "cgv.html", "manifest.webmanifest",
+  "./", "index.html", "boot.js?v=57", "pdf.js?v=57", "app.js?v=57", "sync.js?v=57", "config.js", "confidentialite.html", "cgv.html", "manifest.webmanifest",
   "polices/public-sans-latin-400-normal.woff2", "polices/public-sans-latin-500-normal.woff2",
   "polices/public-sans-latin-600-normal.woff2", "polices/bricolage-grotesque-latin-600-normal.woff2",
   "polices/bricolage-grotesque-latin-700-normal.woff2", "polices/bricolage-grotesque-latin-800-normal.woff2",
@@ -60,13 +60,13 @@ self.addEventListener("fetch", function(e){
      (vendor/supabase) : plus aucun code n'est chargé d'un autre site. */
   if (!memeSite) return;   /* serveur, photos d'illustration : jamais en cache ici */
   var page = req.mode === "navigate";
-  /* Le trio index.html / boot.js / app.js / sync.js est servi d'un bloc,
+  /* Le groupe index.html / boot.js / pdf.js / app.js / sync.js est servi d'un bloc,
      depuis la copie de CETTE version : plus jamais une page neuve avec un
      app.js ancien, ou l'inverse. La copie n'est écrite qu'à l'installation
      (une réponse réseau écrite au passage mélangeait deux versions, V56),
      et la version demandée (?v=) doit être celle de la copie. */
   var chemin = url.pathname.replace(/^.*\//, "");
-  var trio = page || chemin === "index.html" || chemin === "boot.js" || chemin === "app.js" || chemin === "sync.js" || chemin === "";
+  var trio = page || chemin === "index.html" || chemin === "boot.js" || chemin === "app.js" || chemin === "pdf.js" || chemin === "sync.js" || chemin === "";
 
   function depuisCopie(){
     return caches.match(req, {ignoreSearch: !trio}).then(function(r){

@@ -99,7 +99,7 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     if (await ouvre.count()) { await ouvre.click(); await p.waitForTimeout(200); }
     if (await p.locator('#nm-nom').count()){
       await p.fill('#nm-prix', '-3');
-      await p.getByRole('button', {name:'Ajouter cette matière'}).click(); await p.waitForTimeout(200);
+      await p.click('.dlg [data-oui]'); await p.waitForTimeout(250);
       R.matiere_refusee = (await dans(p, function(){ return state.matieres.length; })) === nbAvant && /nom|nécessaire|minimum/i.test(await p.locator('#nm-nom').evaluate(i => (i.closest('label').querySelector('.champ-err')||{}).textContent || ''));
     } else R.matiere_refusee = 'formulaire introuvable';
 

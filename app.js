@@ -1004,6 +1004,18 @@ function creerVariante(m, coloris, bain){
   return v;
 }
 /* « 10 pelotes (500 g) » pour un fil vendu en pelotes, sinon « 500 g ». */
+/* « la pelote », « le sac », « le lot », « l'unité » : le prix saisi dans la colonne
+   « Prix du lot » est celui d'UNE pelote, pas celui du stock. */
+function libLotCourt(m){
+  if (m.cat === "outil") return "l'outil";
+  if (!((Number(m.contenance) || 0) > 1)) return "l'unité";
+  return (m.cat === "fil" ? "la pelote" : m.cat === "garn" ? "le sac" : "le lot") + " de " + qte(m.contenance, m.unite);
+}
+function libLotArticle(m){
+  if (m.cat === "outil") return "un outil";
+  if (!((Number(m.contenance) || 0) > 1)) return "une unité de " + m.nom;
+  return (m.cat === "fil" ? "une pelote" : m.cat === "garn" ? "un sac" : "un lot") + " de " + m.nom;
+}
 function nomLot(m, n){
   var u = m.cat === "fil" ? "pelote" : m.cat === "garn" ? "sac" : "lot";
   return n > 1 || n === 0 ? u + "s" : u;
@@ -1016,10 +1028,6 @@ function texteLots(m, q){
     return nb(n) + " " + nomLot(m, n) + " (" + qte(q, m.unite) + ")";
   }
   return qte(q, m.unite);
-}
-function resumeVariantes(m){
-  var l = variantes(m).filter(function(v){ return (Number(v.stock) || 0) !== 0; });
-  return l.map(function(v){ return libelleVariante(v) + " : " + texteLots(m, v.stock); }).join(" · ");
 }
 /* Les types d'outils, pour que le formulaire demande ce qui compte : un
    crochet a un diamètre, des ciseaux n'en ont pas. */
@@ -3450,8 +3458,16 @@ function renderAccueil(main){
 
 
 /* ═════ NOUVEAUTÉS ET SIGNALEMENT ═════ */
-var VERSION_APP = "V56.1";
+var VERSION_APP = "V57";
 var NOUVEAUTES = [
+  {v:"V57", d:"Octobre 2026", l:[
+    "Ajouter une matière se fait dans une seule fenêtre : nom, prix de la pelote, contenance, couleurs et stock de départ, tout est là, avec le prix au gramme qui se calcule en direct.",
+    "À l'achat, tu saisis le prix d'une pelote ou le total payé : l'autre se calcule tout seul.",
+    "Les couleurs en stock s'affichent en pastilles compactes, même avec dix couleurs ; un clic ouvre le détail.",
+    "Nouveau bouton « Dupliquer » sur chaque matière : même fil en autre contenance, ou pour un autre crochet, avec son prix, son stock et ses couleurs à elle.",
+    "Les factures sont de vrais documents PDF, soignés et structurés : tu peux les télécharger, les imprimer ou les partager.",
+    "Avant de lancer une fabrication, l'outil vérifie ton stock de matière : s'il en manque, il te le dit et te propose de noter un achat, ou de lancer quand même."
+  ]},
   {v:"V56.1", d:"Octobre 2026", l:[
     "Une pièce en cours dont tu as saisi seulement quelques minutes n'affiche plus un gain de l'heure absurde : tant qu'elle n'est pas terminée, le temps compté est au moins celui de la fiche.",
     "Le prix conseillé de la pièce suit la même règle."
@@ -4356,6 +4372,11 @@ function brancherPieces(tb){
       sauverTout(); render();
       toast(role === "prod" ? "Fabrication : " + libProd(p.prod) : "Destination : " + libCom(p.com));
     }
+    /* Lancer la fabrication : la matière est-elle là ? */
+    if (role === "prod" && e.target.value === "encours" && p.prod !== "encours" && p.prod !== "retouche"){
+      var crL = creation(p.cid);
+      if (crL){ avantFabrication([{cr: crL, n: 1}], appliquer, function(){ render(); }); return; }
+    }
     if (role === "prod" && e.target.value === "retouche" && p.prod !== "retouche"){
       majProd(p, "retouche"); sauverTout();
       dialogueRetouche(p, function(){ sauverTout(); render(); toast("Retouche notée"); });
@@ -4468,13 +4489,40 @@ function champCouleur(m, idp, opts){
     appliquer: function(r){ if (r.vid === null && r.coloris) return creerVariante(m, r.coloris, r.bain).id; return r.vid || undefined; }
   };
 }
+/* Prix d'un achat : on connaît souvent le prix d'UNE pelote (l'étiquette), parfois
+   seulement le total du ticket. Les deux champs se suivent : en changer un
+   met l'autre à jour d'après le nombre de lots. */
+function lierPrixAchat(nLots, iUnit, iTotal, apres){
+  var dernier = "unit";
+  function arrondi(x){ return String(Math.round(x * 100) / 100); }
+  function majDepuisN(){
+    var n = nLots(); if (!(n > 0)) return;
+    var u = Number(lireNombre(iUnit.value)) || 0, t = Number(lireNombre(iTotal.value)) || 0;
+    if (dernier === "total" && t > 0) iUnit.value = arrondi(t / n);
+    else if (u > 0) iTotal.value = arrondi(u * n);
+    if (apres) apres();
+  }
+  iUnit.addEventListener("input", function(){
+    dernier = "unit"; var n = nLots(), u = Number(lireNombre(iUnit.value)) || 0;
+    if (n > 0) iTotal.value = u > 0 ? arrondi(u * n) : "";
+    if (apres) apres();
+  });
+  iTotal.addEventListener("input", function(){
+    dernier = "total"; var n = nLots(), t = Number(lireNombre(iTotal.value)) || 0;
+    if (n > 0) iUnit.value = t > 0 ? arrondi(t / n) : "";
+    if (apres) apres();
+  });
+  return {majDepuisN: majDepuisN, definir: function(unit){ dernier = "unit"; iUnit.value = unit > 0 ? arrondi(unit) : ""; majDepuisN(); }};
+}
 function dialogueAchatMatiere(m){
   var lotLib = m.contenance > 1 ? nomLot(m, 2) + " de " + qte(m.contenance, m.unite) : m.unite;
-  var box = el('<div><div class="grid2">'+
+  var unLot = m.contenance > 1 ? (m.cat === "fil" ? "d'une pelote" : m.cat === "garn" ? "d'un sac" : "d'un lot") : "d'une unité";
+  var box = el('<div><div class="grid3">'+
     '<label class="f"><span>Combien de '+esc(lotLib)+'</span><input id="am-n" type="number" min="0.01" step="1" inputmode="decimal" value="1"></label>'+
-    '<label class="f"><span>Prix payé au total (€)</span><input id="am-p" type="number" min="0" step="0.01" inputmode="decimal" value="'+esc(Number(m.prix) || "")+'"></label>'+
+    '<label class="f"><span>Prix '+esc(unLot)+' (€)</span><input id="am-pu" type="number" min="0" step="0.01" inputmode="decimal" value="'+esc(Number(m.prix) || "")+'"></label>'+
+    '<label class="f"><span>Total payé (€)</span><input id="am-p" type="number" min="0" step="0.01" inputmode="decimal" value="'+esc(Number(m.prix) || "")+'"></label>'+
     '</div><div class="am-coul"></div><p class="hint" id="am-aide" style="margin:8px 0 0"></p></div>');
-  var iN = box.querySelector("#am-n"), iP = box.querySelector("#am-p"), aide = box.querySelector("#am-aide");
+  var iN = box.querySelector("#am-n"), iP = box.querySelector("#am-p"), iU = box.querySelector("#am-pu"), aide = box.querySelector("#am-aide");
   var coul = m.cat === "outil" ? null : champCouleur(m, "am");
   if (coul) box.querySelector(".am-coul").appendChild(coul.el);
   function maj(){
@@ -4482,8 +4530,9 @@ function dialogueAchatMatiere(m){
     var q = n * (Number(m.contenance) || 1);
     aide.textContent = n > 0 ? "+ " + qte(q, m.unite) + " en stock" + (p > 0 ? " · " + eurU(p / q, m.unite) : " · au prix de la fiche, faute de prix") + " · stock après : " + qte((Number(m.stock)||0) + q, m.unite) : "";
   }
-  iN.addEventListener("input", function(){ var n = Number(lireNombre(iN.value)) || 0; if (n > 0 && Number(m.prix) > 0) iP.value = Math.round(n * m.prix * 100) / 100; maj(); });
-  iP.addEventListener("input", maj); maj();
+  var lien = lierPrixAchat(function(){ return Number(lireNombre(iN.value)) || 0; }, iU, iP, maj);
+  iN.addEventListener("input", function(){ lien.majDepuisN(); maj(); });
+  maj();
   dialogueChamps({titre:"J'ai acheté « " + m.nom + " »", contenu: box, champs:[], bouton:"Noter l'achat",
     verifier:function(){
       if (!(Number(lireNombre(iN.value)) > 0)) return "Indique combien tu as acheté.";
@@ -4858,8 +4907,13 @@ function dialogueAjoutPieces(cid){
   dialogueChamps({titre:"Ajouter des pièces au suivi", contenu: box, champs: [], bouton:"Ajouter", annuler:"Annuler"}, function(v, boite){
     var n = Math.max(1, Number(box.querySelector("#ap-n").value)||1);
     var cl = box.querySelector("#ap-client");
-    ajouterPieces(selC.value, n, selP.value, selCom ? selCom.value : "atelier", cl ? cl.value : "");
-    sauverTout(); render(); toast(n + " pièce" + (n>1?"s ajoutées":" ajoutée") + " au suivi");
+    var crA = creation(selC.value), prodA = selP.value;
+    function ajouter(){
+      ajouterPieces(selC.value, n, prodA, selCom ? selCom.value : "atelier", cl ? cl.value : "");
+      sauverTout(); render(); toast(n + " pièce" + (n>1?"s ajoutées":" ajoutée") + " au suivi");
+    }
+    if (crA && (prodA === "encours" || prodA === "termine")) avantFabrication([{cr: crA, n: n}], ajouter);
+    else ajouter();
   });
 }
 
@@ -6099,6 +6153,7 @@ function renderStockMatieres(main){
       '<label class="f" id="mv-mw" hidden><span>Motif de la perte</span><select id="mv-motif"></select></label>'+
       '<label class="f"><span>Quantité</span><input id="mv-q" type="number" min="0" step="1" value="0"></label>'+
       '<label class="f" id="mv-lw"><span id="mv-ll">Ou en nombre de lots</span><input id="mv-lots" type="number" inputmode="decimal" min="0" step="1" value=""></label>'+
+      '<label class="f" id="mv-puw"><span id="mv-pul">Prix d\'une pelote (€)</span><input id="mv-pu" type="number" min="0" step="0.01" inputmode="decimal" value=""></label>'+
       '<label class="f" id="mv-pw"><span>Prix payé au total (€)</span><input id="mv-p" type="number" min="0" step="0.05" value="0"></label>'+
       '<label class="f"><span>Note (facultatif)</span><input id="mv-n" type="text" placeholder="Commande du 3 mars"></label>'+
     '</div><div id="mv-cw" style="margin-top:10px;max-width:640px"></div><p class="hint" id="mv-aide"></p></div></div>');
@@ -6135,18 +6190,31 @@ function renderStockMatieres(main){
     selMid.appendChild(g);
   });
   var selType = cM.querySelector("#mv-type");
-  var inQ = cM.querySelector("#mv-q"), inP = cM.querySelector("#mv-p");
-  var pw = cM.querySelector("#mv-pw"), aide = cM.querySelector("#mv-aide");
+  var inQ = cM.querySelector("#mv-q"), inP = cM.querySelector("#mv-p"), inPU = cM.querySelector("#mv-pu");
+  var pw = cM.querySelector("#mv-pw"), puw = cM.querySelector("#mv-puw"), aide = cM.querySelector("#mv-aide");
   var lw = cM.querySelector("#mv-lw"), ll = cM.querySelector("#mv-ll"), inL = cM.querySelector("#mv-lots");
+  /* Le prix d'UNE pelote et le total payé se suivent, d'après le nombre de lots. */
+  var lienPrix = lierPrixAchat(function(){
+    var m = matiere(selMid.value), l = Number(inL.value) || 0;
+    if (!l && m) l = (Number(inQ.value) || 0) / (Number(m.contenance) || 1);
+    return l;
+  }, inPU, inP, null);
+  inQ.addEventListener("input", function(){ lienPrix.majDepuisN(); });
   /* On achète des pelotes, pas des grammes : le nombre de lots remplit la
      quantité (lots × contenance). */
   inL.addEventListener("input", function(){
     var m = matiere(selMid.value), n = Number(inL.value)||0;
     if (m && n > 0) inQ.value = String(Math.round(n * (Number(m.contenance)||1) * 1000) / 1000);
+    lienPrix.majDepuisN();
   });
   function majAide(){
     var m = matiere(selMid.value);
     pw.hidden = selType.value !== "entree";
+    puw.hidden = selType.value !== "entree" || !m || m.cat === "outil";
+    if (m){
+      cM.querySelector("#mv-pul").textContent = (m.contenance > 1 ? (m.cat === "fil" ? "Prix d'une pelote" : m.cat === "garn" ? "Prix d'un sac" : "Prix d'un lot") : "Prix à l'unité") + " (€)";
+      inPU.placeholder = (Number(m.prix) || 0).toFixed(2);
+    }
     cM.querySelector("#mv-fw").hidden = selType.value !== "entree";
     /* La couleur (et son bain) : pour savoir quelle quantité de quelle
        couleur il reste. Une perte ou une sortie ne crée pas de couleur. */
@@ -6536,10 +6604,10 @@ function renderMesMatieres(main){
   }
 
   var wrap = el('<div class="tablewrap resp"></div>');
-  var t = el('<table><thead><tr><th style="min-width:170px">Matière</th><th style="width:105px">Prix payé</th>'+
-    '<th style="width:95px">Contenance</th><th style="width:95px">Unité</th>'+
-    '<th style="width:125px">Crochet</th>'+
-    '<th class="n" style="width:150px">Coût unitaire</th><th style="width:150px">En stock</th><th style="width:44px"><span class="sr-only">Actions</span></th></tr></thead><tbody></tbody></table>');
+  var t = el('<table class="t-mat"><thead><tr><th style="min-width:150px">Matière</th><th style="width:100px">Prix du lot</th>'+
+    '<th style="width:82px">Contenance</th><th style="width:70px">Unité</th>'+
+    '<th style="width:105px">Crochet</th>'+
+    '<th class="n" style="width:120px">Coût unitaire</th><th style="width:150px">En stock</th><th style="width:92px"><span class="sr-only">Actions</span></th></tr></thead><tbody></tbody></table>');
   var tb = t.querySelector("tbody");
   var nVisibles = 0;
   CATS.forEach(function(cat){
@@ -6569,13 +6637,14 @@ function renderMesMatieres(main){
           : '<span class="hint">—</span>';
       var infos = [m.cat === "outil" && m.typeOutil ? libTypeOutil(m.typeOutil) : "", m.marque, m.taille, m.materiau,
                    m.composition ? m.composition + (m.metrage ? " · " + nb(m.metrage) + " m" : "") : "", m.en71 ? "norme EN 71" : ""].filter(Boolean);
-      var resV = m.cat !== "outil" ? resumeVariantes(m) : "";
+      var resV = m.cat !== "outil" ? pastillesCouleurs(m) : "";
       tb.appendChild(el(
         '<tr data-mid="'+esc(m.id)+'"'+(mentionTaille(m)?' style="color:var(--muted)"':'')+'>'+
           '<td><input type="text" data-role="nom" aria-label="Nom de la matière" value="'+esc(m.nom)+'">'+
             (mentionTaille(m) ? '<div class="hint" style="margin:2px 0 0;font-size:11px">'+esc(mentionTaille(m))+'</div>' : '')+
             (infos.length ? '<div class="hint" style="margin:2px 0 0;font-size:11px">'+esc(infos.join(" · "))+'</div>' : '')+'</td>'+
-          '<td data-l="Prix payé"><input type="number" inputmode="decimal" data-role="prix" aria-label="Prix payé" min="0" step="0.05" value="'+m.prix+'"></td>'+
+          '<td data-l="Prix du lot"><input type="number" inputmode="decimal" data-role="prix" aria-label="Prix payé pour '+esc(libLotArticle(m))+'" min="0" step="0.05" value="'+m.prix+'">'+
+            '<div class="hint" style="margin:2px 0 0;font-size:11px">'+esc(libLotCourt(m))+'</div></td>'+
           '<td data-l="Contenance"><input type="number" inputmode="decimal" data-role="contenance" aria-label="Contenance" min="0.01" step="1" value="'+m.contenance+'"></td>'+
           '<td data-l="Unité"><input type="text" data-role="unite" aria-label="Unité" value="'+esc(m.unite)+'"></td>'+
           '<td data-l="Crochet">'+cellCrochet+'</td>'+
@@ -6584,11 +6653,12 @@ function renderMesMatieres(main){
             (m.prixSource
                ? '<div style="margin-top:3px"><span class="chip">prix '+esc(m.prixSource.src)+' · '+esc(m.prixSource.date)+'</span></div>'
                : m.prixIndicatif ? '<div style="margin-top:3px"><span class="hypo">INDICATIF</span></div>' : '')+'</td>'+
-          '<td data-l="En stock"><div class="cel"><span class="num'+((Number(m.stock)||0) < 0 ? ' bad' : '')+'">'+esc(m.cat === "outil" ? pluriel(Number(m.stock)||0, "outil") : texteLots(m, Number(m.stock)||0))+'</span>'+
+          '<td data-l="En stock"><div class="cel"><span class="num stk-qte'+((Number(m.stock)||0) < 0 ? ' bad' : '')+'">'+stockDeuxLignes(m)+'</span>'+
             '<button type="button" class="lien-mini stk" data-role="achat">J\'ai acheté</button>'+
-            (m.cat !== "outil" ? '<span class="hint" aria-hidden="true"> · </span><button type="button" class="lien-mini stk" data-role="couleurs">'+(variantes(m).length ? 'Couleurs ('+variantes(m).length+')' : 'Couleurs')+'</button>' : '')+'</div>'+
-            (resV ? '<div class="hint var-resume" style="margin:3px 0 0;font-size:11px">'+esc(resV)+'</div>' : '')+'</td>'+
-          '<td><button type="button" class="btn ghost" data-role="del" aria-label="Supprimer la matière '+esc(m.nom)+'">✕</button></td>'+
+            (m.cat !== "outil" && !resV ? '<span class="hint" aria-hidden="true"> · </span><button type="button" class="lien-mini stk" data-role="couleurs">'+(variantes(m).length ? 'Couleurs ('+variantes(m).length+')' : 'Couleurs')+'</button>' : '')+'</div>'+
+            resV+'</td>'+
+          '<td><div class="act-col"><button type="button" class="btn sm ghost" data-role="dup" title="Même matière, autre contenance ou autre crochet" aria-label="Dupliquer la matière '+esc(m.nom)+' : autre contenance ou autre crochet">Dupliquer</button>'+
+            '<button type="button" class="btn ghost" data-role="del" aria-label="Supprimer la matière '+esc(m.nom)+'">✕</button></div></td>'+
         '</tr>'
       ));
     });
@@ -6596,7 +6666,7 @@ function renderMesMatieres(main){
   if (!nVisibles){
     tb.appendChild(el('<tr><td colspan="8" style="padding:18px 10px"><span class="hint">'+
       'Aucune matière ne correspond'+(view.mfCro ? ' à un crochet '+nb(view.mfCro)+' mm' : '')+
-      '. Élargis la recherche, ou ajoute-la plus bas.</span></td></tr>'));
+      '. Élargis la recherche, ou ajoute-la avec « + Ajouter une matière ».</span></td></tr>'));
   }
   tb.addEventListener("change", function(e){
     if (e.target.getAttribute("data-role") === "contenance"){
@@ -6699,6 +6769,11 @@ function renderMesMatieres(main){
       if (mCo) dialogueCouleursMatiere(mCo);
       return;
     }
+    if (e.target.getAttribute("data-role") === "dup"){
+      var mDu = matiere(e.target.closest("tr[data-mid]").getAttribute("data-mid"));
+      if (mDu) dialogueAutreVersion(mDu);
+      return;
+    }
     if (e.target.getAttribute("data-role") !== "del") return;
     var bouton2 = e.target;
     var mid = bouton2.closest("tr[data-mid]").getAttribute("data-mid");
@@ -6733,19 +6808,13 @@ function renderMesMatieres(main){
     });
   });
   wrap.appendChild(t);
-  /* Le bouton d'ajout en tête de liste : le formulaire est en bas, après
-     toutes les lignes (V55). */
+  /* Le bouton d'ajout en tête de liste ouvre le dialogue d'ajout (V57). */
   var hautAjout = el('<div class="stk-ajout-haut"></div>');
-  hautAjout.appendChild(bouton("+ Ajouter une matière", function(){
-    var f = card.querySelector(".nm-form"); if (!f) return;
-    f.scrollIntoView({behavior:"smooth", block:"start"});
-    var premier = f.querySelector("select, input"); if (premier) setTimeout(function(){ premier.focus(); }, 350);
-  }, true));
+  hautAjout.appendChild(bouton("+ Ajouter une matière", function(){ dialogueNouvelleMatiere(); }, true));
   hautAjout.appendChild(el('<span class="hint">Fil, rembourrage, accessoire, emballage ou outil.</span>'));
   body.appendChild(hautAjout);
   body.appendChild(wrap);
 
-  body.appendChild(formAjoutMatiere());
   main.appendChild(card);
 
   main.appendChild(el('<p class="hint" style="margin-top:16px;max-width:78ch">C\'est ici que se joue l\'erreur la plus fréquente : '+
@@ -6768,7 +6837,7 @@ function dialogueCouleursMatiere(m){
   var tb = box.querySelector("tbody");
   function ligne(v){
     var tr = el('<tr data-vid="'+esc(v ? v.id : "")+'">'+
-      '<td><input type="text" data-k="coloris" maxlength="40" aria-label="Couleur" placeholder="'+(v ? '' : 'Nouvelle couleur')+'" value="'+esc(v ? v.coloris : "")+'"></td>'+
+      '<td><span class="coul-cell"><span class="pastille-ph">'+(v ? pastilleHtml(v) : '')+'</span><input type="text" data-k="coloris" maxlength="40" aria-label="Couleur" placeholder="'+(v ? '' : 'Nouvelle couleur')+'" value="'+esc(v ? v.coloris : "")+'"></span></td>'+
       (m.cat === "fil" ? '<td><input type="text" data-k="bain" maxlength="30" aria-label="N° de bain" value="'+esc(v ? v.bain : "")+'"></td>' : '')+
       '<td class="n"><input type="number" data-k="n" min="0" step="1" inputmode="decimal" aria-label="En stock" style="width:90px;text-align:right" value="'+(v ? enAff(Number(v.stock)||0) : "")+'"></td>'+
       '<td>'+(v && !(Number(v.stock) > 0) ? '<label class="case"><input type="checkbox" data-k="suppr"> retirer</label>' : '')+'</td></tr>');
@@ -6776,6 +6845,12 @@ function dialogueCouleursMatiere(m){
   }
   variantes(m).forEach(ligne);
   ligne(null);
+  /* la pastille suit le nom pendant qu'on le tape */
+  tb.addEventListener("input", function(e){
+    if (e.target.getAttribute("data-k") !== "coloris") return;
+    var ph = e.target.parentNode.querySelector(".pastille-ph");
+    if (ph) ph.innerHTML = e.target.value.trim() ? pastilleHtml({coloris: e.target.value}) : "";
+  });
   var lib = stockLibre(m);
   var pLib = box.querySelector(".coul-libre");
   if (variantes(m).length && Math.abs(lib) > 1e-9){
@@ -6844,11 +6919,10 @@ function dialogueCouleursMatiere(m){
   });
 }
 
-/* ═════ AJOUTER UNE MATIÈRE ═════
-   Le formulaire suit la catégorie choisie : une pelote se décrit par son
-   poids, son métrage et son crochet ; des yeux de sécurité par leur taille et
-   la norme jouets ; un crochet par son diamètre. Seuls le nom, le prix et la
-   contenance servent au calcul ; le reste sert à s'y retrouver. */
+/* ═════ CE QUE DEMANDE CHAQUE CATÉGORIE DE MATIÈRE ═════
+   Une pelote se décrit par son poids, son métrage et son crochet ; des yeux de
+   sécurité par leur taille et la norme jouets ; un crochet par son diamètre.
+   Le formulaire d'ajout (dialogueNouvelleMatiere) s'en sert. */
 var FORM_MAT = {
   fil:  {nom:"Coton bio écru 50 g", prix:"Prix d'une pelote (€)", cont:"Poids d'une pelote", unites:["g","m"], contDef:50,
          lots:"Nombre de pelotes", couleur:true, bain:true,
@@ -6871,24 +6945,21 @@ var FORM_MAT = {
          champs:["typeOutil","diametre","materiau","marque"],
          aide:"Un outil ne s'use pas dans une pièce : il n'entre pas dans son coût. Son achat se compte dans tes frais fixes (Réglages, Mes charges)."}
 };
-function formAjoutMatiere(){
-  var cat = FORM_MAT[view.nmCat] ? view.nmCat : "fil";
-  var add = el('<div class="nm-form" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--rule)">'+
-    '<p style="margin:0 0 4px"><b>Ajouter une matière</b></p>'+
-    '<p class="hint" style="margin:0 0 12px">Choisis d\'abord ce que c\'est : les champs s\'adaptent. '+
-    'Seuls le nom, le prix et la contenance sont nécessaires au calcul.</p>'+
+/* ═════ AJOUTER UNE MATIÈRE : UN SEUL DIALOGUE (V57) ═════
+   Tout se renseigne dans une seule boîte : ce que c'est, son nom, le prix
+   d'UNE pelote (ou d'un lot) et sa contenance, les détails utiles, puis ce
+   qu'on a déjà en stock, couleur par couleur. Pas de seconde page à valider.
+   Le formulaire suit la catégorie choisie ; seuls le nom, le prix et la
+   contenance servent au calcul, le reste sert à s'y retrouver. */
+function dialogueNouvelleMatiere(catInit){
+  var cat = FORM_MAT[catInit] ? catInit : (FORM_MAT[view.nmCat] ? view.nmCat : "fil");
+  var box = el('<div class="nm-form">'+
     '<label class="f" style="max-width:360px"><span>C\'est…</span><select id="nm-cat"></select></label>'+
-    '<div id="nm-champs" style="margin-top:12px"></div></div>');
-  var selCat = add.querySelector("#nm-cat");
+    '<div id="nm-champs" style="margin-top:12px"></div>'+
+    '<p class="hint" style="margin:14px 0 0">Tu préfères partir d\'une fiche toute prête ? <button type="button" class="lien-mini" id="nm-catalogue">Prendre une matière du catalogue</button></p></div>');
+  var selCat = box.querySelector("#nm-cat");
   CATS.forEach(function(c){ selCat.appendChild(el('<option value="'+c.id+'"'+(c.id === cat ? ' selected' : '')+'>'+esc(c.nom)+'</option>')); });
-  var zone = add.querySelector("#nm-champs");
-  var bar = el('<div class="savebar" style="margin-top:14px"></div>');
-  var bAdd = el('<button type="button" class="btn primary" id="nm-ajouter">Ajouter cette matière</button>');
-  var bCat = el('<button type="button" class="btn">Prendre une matière du catalogue</button>');
-  bCat.addEventListener("click", function(){ view.sub = "catalogue"; render(); });
-  bar.appendChild(bAdd); bar.appendChild(bCat);
-  add.appendChild(bar);
-
+  var zone = box.querySelector("#nm-champs");
   function optCrochets(sel){ return '<option value="">—</option>' + CROCHETS.map(function(c){ return '<option value="'+c+'"'+(Number(sel) === c ? ' selected' : '')+'>'+nb(c)+' mm</option>'; }).join(""); }
   var CH = {
     marque:      function(){ return '<label class="f"><span>Marque (facultatif)</span><input id="nm-marque" type="text" maxlength="40" placeholder="Phildar, Drops, Katia…"></label>'; },
@@ -6904,13 +6975,23 @@ function formAjoutMatiere(){
     typeOutil:   function(){ return '<label class="f"><span>Type d\'outil</span><select id="nm-type">'+TYPES_OUTIL.map(function(t){ return '<option value="'+t.id+'">'+esc(t.nom)+'</option>'; }).join("")+'</select></label>'; },
     diametre:    function(){ return '<label class="f" id="nm-diam-w"><span>Diamètre (mm)</span><select id="nm-diam">'+optCrochets()+'</select></label>'; }
   };
+  var verif = null, nbLignes = 1;
+  function val(id){ var x = zone.querySelector("#" + id); return x ? String(x.value).trim() : ""; }
+  function ligneHtml(F, i){
+    var s = i === 0 ? "" : "-" + (i + 1);
+    return '<div class="nm-ligne">'+
+      (F.couleur ? '<label class="f"><span>Couleur</span><input id="nm-coul'+s+'" data-k="coul" type="text" maxlength="40" placeholder="jaune, écru, noir…"></label>' : '')+
+      (F.bain ? '<label class="f"><span>N° de bain</span><input id="nm-bain'+s+'" data-k="bain" type="text" maxlength="30" placeholder="4821"></label>' : '')+
+      '<label class="f"><span>'+esc(F.lots)+'</span><input id="nm-lots'+s+'" data-k="lots" type="number" min="0" step="1" inputmode="decimal" placeholder="0"></label>'+
+      (i > 0 ? '<button type="button" class="btn ghost nm-retire" aria-label="Retirer cette couleur">✕</button>' : '')+
+    '</div>';
+  }
   function construire(){
     var F = FORM_MAT[cat];
-    /* Un conteneur neuf à chaque catégorie : les vérifications de l'ancienne
-       ne restent pas accrochées. */
     zone.innerHTML = "";
     var inner = el('<div></div>');
     zone.appendChild(inner);
+    nbLignes = 1;
     inner.innerHTML =
       '<div class="grid3" style="align-items:end">'+
         '<label class="f"><span>Nom</span><input id="nm-nom" type="text" maxlength="80" placeholder="'+esc(F.nom)+'"></label>'+
@@ -6920,19 +7001,19 @@ function formAjoutMatiere(){
                                 : '<span class="u">'+esc(F.unites[0])+'</span>')+'</span></label>' : '')+
         F.champs.map(function(k){ return CH[k](); }).join("")+
       '</div>'+
-      '<fieldset class="nm-depart"><legend>Ce que tu as déjà (facultatif)</legend><div class="grid3" style="align-items:end">'+
-        (F.couleur ? '<label class="f"><span>Couleur</span><input id="nm-coul" type="text" maxlength="40" placeholder="jaune, écru, noir…"></label>' : '')+
-        (F.bain ? '<label class="f"><span>N° de bain</span><input id="nm-bain" type="text" maxlength="30" placeholder="4821"></label>' : '')+
-        '<label class="f"><span>'+esc(F.lots)+'</span><input id="nm-lots" type="number" min="0" step="1" inputmode="decimal" placeholder="0"></label>'+
-      '</div><p class="hint" style="margin:6px 0 0">'+(F.couleur ? 'Une couleur par ligne de stock : tu en ajouteras d\'autres ensuite avec « J\'ai acheté » ou un inventaire.' : 'Ce nombre devient ton stock de départ.')+'</p></fieldset>'+
+      '<p class="hint nm-pu" id="nm-pu" aria-live="polite" style="margin:8px 0 0"></p>'+
+      '<p class="hint nm-doublon" id="nm-doublon" role="status" style="margin:4px 0 0;color:var(--warn)"></p>'+
+      '<fieldset class="nm-depart"><legend>Ce que tu as déjà en stock (facultatif)</legend>'+
+        '<div id="nm-lignes">'+ligneHtml(F, 0)+'</div>'+
+        (F.couleur ? '<button type="button" class="btn sm" id="nm-plus">+ Ajouter une autre couleur</button>' : '')+
+        '<p class="hint" id="nm-depart-total" style="margin:8px 0 0"></p>'+
+      '</fieldset>'+
       '<p class="hint" style="margin:10px 0 0">'+F.aide+'</p>';
-    /* Les erreurs s'affichent sous le champ, comme partout ailleurs. */
     verif = attacherVerif(inner, [
       {sel:"#nm-nom", type:"texte", requis: cat !== "outil", min:2, max:80, msgRequis:"Indique le nom de la matière."},
       {sel:"#nm-prix", type:"prix", requis:true, max:100000},
       {sel:"#nm-cont", type:"nombre", requis:true, strict:true, max:1000000},
       {sel:"#nm-met", type:"nombre", min:0, max:100000},
-      {sel:"#nm-lots", type:"nombre", min:0, max:100000},
       {sel:"#nm-comp", type:"texte", max:120}
     ].filter(function(r){ return zone.querySelector(r.sel); }));
     var tp = zone.querySelector("#nm-type");
@@ -6940,40 +7021,77 @@ function formAjoutMatiere(){
       var majDiam = function(){ zone.querySelector("#nm-diam-w").hidden = !TYPES_OUTIL.some(function(t){ return t.id === tp.value && t.diam; }); };
       tp.addEventListener("change", majDiam); majDiam();
     }
+    var plus = zone.querySelector("#nm-plus");
+    if (plus) plus.addEventListener("click", function(){
+      var d = el(ligneHtml(F, nbLignes++));
+      zone.querySelector("#nm-lignes").appendChild(d);
+      var p1 = d.querySelector("input"); if (p1) p1.focus();
+      majResume();
+    });
+    zone.querySelector("#nm-lignes").addEventListener("click", function(e){
+      var b = e.target.closest(".nm-retire"); if (!b) return;
+      b.closest(".nm-ligne").remove(); majResume();
+    });
+    inner.addEventListener("input", majResume);
+    majResume();
   }
-  var verif = null;
+  /* Ce que l'artisane voit pendant qu'elle remplit : le prix au gramme, un
+     doublon éventuel, le stock de départ en pelotes. */
+  function majResume(){
+    var F = FORM_MAT[cat];
+    var prix = Number(lireNombre(val("nm-prix"))) || 0, cont = F.cont ? Number(lireNombre(val("nm-cont"))) || 0 : 1;
+    var unite = F.cont ? (val("nm-unite") || F.unites[0]) : "pièce";
+    var pu = zone.querySelector("#nm-pu");
+    if (pu) pu.textContent = prix > 0 && cont > 0 && cat !== "outil"
+      ? "Soit " + eurU(prix / cont, unite) + (cont > 1 ? " — " + (cat === "fil" ? "une pelote" : cat === "garn" ? "un sac" : "un lot") + " de " + qte(cont, unite) + " à " + eur(prix) : "") + "."
+      : "";
+    var dbl = zone.querySelector("#nm-doublon"), nom = val("nm-nom");
+    var d = nom.length > 1 ? state.matieres.filter(function(x){ return plier(x.nom) === plier(nom); })[0] : null;
+    if (dbl) dbl.textContent = d ? "« " + d.nom + " » existe déjà dans tes matières. Pour une autre contenance ou un autre crochet, utilise plutôt « Dupliquer » sur sa ligne." : "";
+    var tot = 0;
+    [].forEach.call(zone.querySelectorAll(".nm-ligne [data-k=lots]"), function(i){ tot += Number(lireNombre(i.value)) || 0; });
+    var t = zone.querySelector("#nm-depart-total");
+    if (t) t.textContent = tot > 0 && cat !== "outil"
+      ? "Stock de départ : " + texteLots({cat: cat, contenance: cont, unite: unite}, tot * cont) + (prix > 0 ? ", d'une valeur de " + eur(tot * prix) : "") + "."
+      : (F.couleur ? "Une ligne par couleur : tu pourras en ajouter d'autres ensuite avec « J'ai acheté » ou « Couleurs »." : "Ce nombre devient ton stock de départ.");
+  }
   construire();
   /* Changer de catégorie garde ce qui vaut pour toutes : le nom et le prix. */
   selCat.addEventListener("change", function(){
     var nom = zone.querySelector("#nm-nom").value, prix = zone.querySelector("#nm-prix").value;
     cat = selCat.value; view.nmCat = cat; construire();
-    zone.querySelector("#nm-nom").value = nom; zone.querySelector("#nm-prix").value = prix;
+    zone.querySelector("#nm-nom").value = nom; zone.querySelector("#nm-prix").value = prix; majResume();
   });
-  function val(id){ var x = zone.querySelector("#" + id); return x ? String(x.value).trim() : ""; }
-  bAdd.addEventListener("click", function(){
+  /* Lit le formulaire ; renvoie {erreur, champ} ou la matière prête, avec ses lignes de stock. */
+  function lire(){
     var F = FORM_MAT[cat];
     var errsV = verif ? verif.valider() : [];
-    if (errsV.length){ toast(errsV[0].lib + " : " + errsV[0].msg); try{ errsV[0].champ.focus(); }catch(e){} return; }
+    if (errsV.length) return {erreur: errsV[0].lib + " : " + errsV[0].msg, champ: errsV[0].champ};
     var nom = val("nm-nom");
     var typeO = val("nm-type"), diam = Number(val("nm-diam")) || null;
     if (cat === "outil" && !TYPES_OUTIL.some(function(t){ return t.id === typeO && t.diam; })) diam = null;
     if (!nom && cat === "outil") nom = libTypeOutil(typeO) + (diam ? " " + nb(diam) + " mm" : "");
-    var err = null, champErr = null;
-    if (nom.length < 2){ err = "Indique le nom de la matière."; champErr = "nm-nom"; }
+    function ko(msg, id){ return {erreur: msg, champ: zone.querySelector("#" + id)}; }
+    if (nom.length < 2) return ko("Indique le nom de la matière.", "nm-nom");
     var prixS = val("nm-prix"), prix = Number(lireNombre(prixS));
-    if (!err && (prixS === "" || !isFinite(prix) || prix < 0)){ err = "Indique le prix payé (0 si tu ne le connais pas)."; champErr = "nm-prix"; }
-    if (!err && prix > 100000){ err = "Ce prix paraît trop élevé : vérifie la virgule."; champErr = "nm-prix"; }
+    if (prixS === "" || !isFinite(prix) || prix < 0) return ko("Indique le prix payé (0 si tu ne le connais pas).", "nm-prix");
+    if (prix > 100000) return ko("Ce prix paraît trop élevé : vérifie la virgule.", "nm-prix");
     var cont = F.cont ? Number(lireNombre(val("nm-cont"))) : 1;
-    if (!err && !(cont > 0)){ err = "Indique la contenance (plus que 0)."; champErr = "nm-cont"; }
-    var lots = Number(lireNombre(val("nm-lots"))) || 0;
-    if (!err && lots < 0){ err = "Le nombre ne peut pas être négatif."; champErr = "nm-lots"; }
-    var coul = val("nm-coul"), bain = val("nm-bain");
-    if (!err && bain && !coul){ err = "Indique aussi la couleur de ce bain."; champErr = "nm-coul"; }
-    if (err){
-      toast(err);
-      var ce = zone.querySelector("#" + champErr); if (ce){ ce.setAttribute("aria-invalid", "true"); try{ ce.focus(); }catch(e){} }
-      return;
-    }
+    if (!(cont > 0)) return ko("Indique la contenance (plus que 0).", "nm-cont");
+    var lignes = [], vus = {}, rep = null;
+    [].forEach.call(zone.querySelectorAll(".nm-ligne"), function(r){
+      if (rep) return;
+      var c = r.querySelector("[data-k=coul]"), b = r.querySelector("[data-k=bain]"), l = r.querySelector("[data-k=lots]");
+      var coul = c ? c.value.trim() : "", bain = b ? b.value.trim() : "", lots = Number(lireNombre(l.value)) || 0;
+      if (lots < 0) { rep = {erreur: "Le nombre ne peut pas être négatif.", champ: l}; return; }
+      if (bain && !coul){ rep = {erreur: "Indique aussi la couleur de ce bain.", champ: c}; return; }
+      if (!lots && !coul) return;
+      var cle = plier(coul) + "|" + plier(bain);
+      if (vus[cle]){ rep = {erreur: coul ? "La couleur « " + coul + " » est déjà dans la liste : regroupe-les sur une seule ligne." : "Une seule ligne peut rester sans couleur.", champ: c || l}; return; }
+      vus[cle] = true;
+      if (lots > 0 || coul) lignes.push({coul: coul, bain: bain, lots: lots});
+    });
+    if (rep) return rep;
     var unite = F.cont ? (val("nm-unite") || F.unites[0]) : "pièce";
     var cro = Number(val("nm-cro")) || null;
     var m = {id:uid(), nom:nom, cat:cat, prix:prix, contenance:cont, unite:unite, stock:0, seuil:0, pmp:prix/cont, mouv:[],
@@ -6982,34 +7100,125 @@ function formAjoutMatiere(){
       prixIndicatif:false, perso:true, maj:Date.now(), variantes:[]};
     if (cat === "outil"){ m.typeOutil = typeO; m.diametre = diam; }
     var e71 = zone.querySelector("#nm-en71"); if (e71) m.en71 = !!e71.checked;
-    /* Récapitulatif : ce qui va être ajouté, et un doublon éventuel. */
-    var d = ["Nom : " + nom, "Catégorie : " + (CATS.filter(function(c){ return c.id === cat; })[0] || {}).nom];
-    d.push(cat === "outil" ? "Prix : " + eur(prix) + " l'outil"
-      : "Prix : " + eur(prix) + " " + (cat === "fil" ? "la pelote" : cat === "garn" ? "le sac" : "le lot") + " de " + qte(cont, unite) + " (" + eurU(prix / cont, unite) + ")");
-    if (m.marque) d.push("Marque : " + m.marque);
-    if (m.composition) d.push("Composition : " + m.composition);
-    if (m.metrage) d.push("Métrage : " + nb(m.metrage) + " m");
-    if (m.grosseur) d.push("Grosseur : " + m.grosseur);
-    if (cro) d.push("Crochet conseillé : " + nb(cro) + " mm");
-    if (m.taille) d.push("Taille : " + m.taille);
-    if (m.materiau) d.push("Matériau : " + m.materiau);
-    if (cat === "outil") d.push("Type : " + libTypeOutil(typeO) + (diam ? ", " + nb(diam) + " mm" : ""));
-    if (m.en71) d.push("Conforme à la norme jouets EN 71");
-    if (lots > 0) d.push("Stock de départ : " + (cat === "outil" ? pluriel(lots, "outil") : texteLots(m, lots * cont)) + (coul ? ", couleur " + coul + (bain ? " · bain " + bain : "") : ""));
-    var doublon = state.matieres.filter(function(x){ return plier(x.nom) === plier(nom); })[0];
-    confirmer({titre: "Ajouter cette matière ?",
-      texte: doublon ? "Attention : « " + doublon.nom + " » existe déjà dans tes matières. Vérifie que ce n'est pas la même avant d'ajouter." : "Voici ce qui va être ajouté :",
-      details: d, bouton: "Confirmer l'ajout", annuler: "Corriger"}, function(){
-      state.matieres.push(m);
-      if (lots > 0){
-        var vid = coul ? creerVariante(m, coul, bain).id : undefined;
-        mouvementMatiere(m, "inventaire", lots * cont, null, "Stock de départ", {vid: vid});
+    return {m: m, lignes: lignes, cont: cont};
+  }
+  var lecture = null;
+  box.querySelector("#nm-catalogue").addEventListener("click", function(){ fermerCouche(function(){ view.sub = "catalogue"; render(); }); });
+  dialogueChamps({titre:"Ajouter une matière", large:true, contenu: box, champs:[], bouton:"Ajouter la matière", annuler:"Annuler",
+    verifier: function(){
+      lecture = lire();
+      if (lecture.erreur){
+        if (lecture.champ){ lecture.champ.setAttribute("aria-invalid", "true"); try{ lecture.champ.focus(); }catch(e){} }
+        return lecture.erreur;
       }
-      sauverTout(); render();
-      toast("« " + m.nom + " » ajoutée à tes matières");
+      return "";
+    }}, function(){
+    if (!lecture || lecture.erreur) return;
+    var m = lecture.m;
+    state.matieres.push(m);
+    lecture.lignes.forEach(function(l){
+      if (!(l.lots > 0)) { if (l.coul) creerVariante(m, l.coul, l.bain); return; }
+      var vid = l.coul ? creerVariante(m, l.coul, l.bain).id : undefined;
+      mouvementMatiere(m, "inventaire", l.lots * lecture.cont, null, "Stock de départ", {vid: vid});
     });
+    sauverTout(); render();
+    toast("« " + m.nom + " » ajoutée à tes matières");
   });
-  return add;
+}
+
+/* ═════ UNE AUTRE VERSION D'UNE MATIÈRE ═════
+   Le même fil en 100 g au lieu de 50 g, ou pour un autre crochet : une
+   nouvelle ligne, avec son prix, sa contenance, son stock et ses couleurs à
+   elle. On part de la matière existante, on ne ressaisit que ce qui change. */
+function dialogueAutreVersion(m0){
+  var parLot = m0.cat === "fil" ? "d'une pelote" : m0.cat === "garn" ? "d'un sac" : "d'un lot";
+  var base = String(m0.nom).replace(/\s*\([^)]*\)\s*$/, "");
+  var box = el('<div class="nm-form"><p class="hint" style="margin:0 0 12px">Même matière, autre contenance'+(m0.cat === "fil" ? ' ou autre crochet' : '')+' : une nouvelle ligne, avec son propre stock et ses propres couleurs. Rien ne change sur « '+esc(m0.nom)+' ».</p>'+
+    '<div class="grid3" style="align-items:end">'+
+      '<label class="f"><span>Nom</span><input id="av-nom" type="text" maxlength="80"></label>'+
+      '<label class="f"><span>Prix '+esc(parLot)+' (€)</span><input id="av-prix" type="number" min="0" step="0.05" inputmode="decimal" value="'+esc(Number(m0.prix) || "")+'"></label>'+
+      '<label class="f"><span>Contenance ('+esc(m0.unite)+')</span><input id="av-cont" type="number" min="0.01" step="1" inputmode="decimal" value="'+esc(Number(m0.contenance) || "")+'"></label>'+
+      (m0.cat === "fil" ? '<label class="f"><span>Crochet conseillé (mm)</span><select id="av-cro"><option value="">—</option>'+CROCHETS.map(function(c){ return '<option value="'+c+'"'+(Number(m0.crochetMin) === c ? ' selected' : '')+'>'+nb(c)+' mm</option>'; }).join("")+'</select></label>' : '')+
+      (outilADiametre(m0) ? '<label class="f"><span>Diamètre (mm)</span><select id="av-diam"><option value="">—</option>'+CROCHETS.map(function(c){ return '<option value="'+c+'"'+(Number(m0.diametre) === c ? ' selected' : '')+'>'+nb(c)+' mm</option>'; }).join("")+'</select></label>' : '')+
+    '</div><p class="hint" id="av-pu" style="margin:8px 0 0"></p></div>');
+  var iNom = box.querySelector("#av-nom"), iPrix = box.querySelector("#av-prix"), iCont = box.querySelector("#av-cont"), pu = box.querySelector("#av-pu");
+  var nomTouche = false;
+  function suggestion(){
+    var c = Number(lireNombre(iCont.value)) || 0, cro = box.querySelector("#av-cro"), d = box.querySelector("#av-diam");
+    var bout = [c > 0 && m0.cat !== "outil" ? qte(c, m0.unite) : "", cro && cro.value ? nb(Number(cro.value)) + " mm" : "", d && d.value ? nb(Number(d.value)) + " mm" : ""].filter(Boolean);
+    return base + (bout.length ? " (" + bout.join(", ") + ")" : "");
+  }
+  function maj(){
+    if (!nomTouche) iNom.value = suggestion();
+    var p = Number(lireNombre(iPrix.value)) || 0, c = Number(lireNombre(iCont.value)) || 0;
+    pu.textContent = p > 0 && c > 0 && m0.cat !== "outil" ? "Soit " + eurU(p / c, m0.unite) + "." : "";
+  }
+  iNom.addEventListener("input", function(){ nomTouche = true; });
+  box.addEventListener("input", maj); box.addEventListener("change", maj);
+  maj();
+  dialogueChamps({titre:"Une autre version de « " + m0.nom + " »", large:true, contenu: box, champs:[], bouton:"Créer cette version",
+    verifier: function(){
+      var nom = iNom.value.trim(), p = Number(lireNombre(iPrix.value)), c = Number(lireNombre(iCont.value));
+      if (nom.length < 2) return "Indique le nom de cette version.";
+      if (state.matieres.some(function(x){ return plier(x.nom) === plier(nom); })) return "« " + nom + " » existe déjà : précise le nom (par exemple avec la contenance).";
+      if (!isFinite(p) || p < 0 || iPrix.value === "") return "Indique le prix (0 si tu ne le connais pas).";
+      if (!(c > 0)) return "Indique la contenance (plus que 0).";
+      return "";
+    }}, function(){
+    var nom = iNom.value.trim(), p = Number(lireNombre(iPrix.value)) || 0, c = Number(lireNombre(iCont.value)) || 1;
+    var m = JSON.parse(JSON.stringify(m0));
+    m.id = uid(); m.nom = nom; m.prix = p; m.contenance = c; m.stock = 0; m.pmp = p / c; m.mouv = []; m.variantes = [];
+    m.seuil = 0; m.perso = true; m.prixIndicatif = false; m.prixSource = null; m.refCat = null; m.maj = Date.now();
+    var cro = box.querySelector("#av-cro"); if (cro){ var cv = Number(cro.value) || null; m.crochetMin = cv; m.crochetMax = cv; }
+    var d = box.querySelector("#av-diam"); if (d) m.diametre = Number(d.value) || null;
+    state.matieres.push(m);
+    sauverTout(); render();
+    toast("« " + nom + " » créée. Ajoute son stock avec « J'ai acheté ».");
+  });
+}
+
+/* ═════ LES COULEURS EN UN COUP D'ŒIL ═════
+   Dix couleurs en toutes lettres, c'était une ligne de texte interminable
+   dans la case du stock. Une pastille par couleur, de la teinte quand on la
+   reconnaît ; le détail (nom et quantité) s'ouvre en touchant. */
+var TEINTES = [
+  [/rose poudre|vieux rose|rose pale|dragee/, "#e9b9c1"], [/fuchsia/, "#cc2a86"], [/framboise/, "#b0214f"], [/magenta/, "#c2287a"], [/rose/, "#ee9bb5"],
+  [/bordeaux|lie de vin/, "#6f1d2b"], [/prune|aubergine/, "#5f2a4f"], [/rouge|cerise|carmin/, "#cc2b2b"], [/corail/, "#f2735e"], [/saumon/, "#f4a58a"],
+  [/peche|abricot/, "#f6c09a"], [/terracotta|brique|rouille/, "#b5533c"], [/orange|mandarine|potiron/, "#ee8a2a"], [/moutarde|ocre/, "#cf9f26"],
+  [/jaune|citron|soleil|poussin/, "#f2d338"], [/dore|\bor\b/, "#cda434"], [/camel|caramel|cannelle/, "#b98a56"],
+  [/marron|chocolat|cafe|noisette|brun|chataigne/, "#6e4a35"], [/taupe/, "#8b7d70"], [/sable|beige|lin\b|naturel/, "#d9c5a3"],
+  [/ecru|creme|ivoire|lait|coquille|blanc casse|casse/, "#efe6d0"], [/blanc/, "#fbfbf8"], [/noir|charbon/, "#1f1f1f"], [/anthracite/, "#3b3f42"],
+  [/argent|perle/, "#c6cacd"], [/gris/, "#9aa0a3"],
+  [/lavande|lilas|mauve|glycine/, "#b7a3d6"], [/violet|pourpre/, "#7a4aa3"], [/indigo/, "#3b3f8f"], [/marine|bleu nuit|nuit/, "#1f2f5a"],
+  [/ciel|bebe|pastel bleu/, "#9ccbe8"], [/canard|petrole/, "#1d7a85"], [/turquoise|lagon|lagune/, "#2bb5b0"], [/jean|denim/, "#4a6a94"], [/bleu|azur|\broi\b/, "#2f64b5"],
+  [/menthe|vert d eau|\beau\b/, "#a8dcc8"], [/pomme|anis|pistache/, "#a9cf5a"], [/sapin|foret|bouteille/, "#1f5a3a"], [/kaki|olive/, "#7d7f3c"],
+  [/sauge|celadon/, "#9db39a"], [/emeraude/, "#1f8a5a"], [/vert/, "#3f9b4f"]
+];
+function teinteCouleur(nom){
+  var n = " " + plier(nom) + " ";
+  for (var i = 0; i < TEINTES.length; i++) if (TEINTES[i][0].test(n.trim())) return TEINTES[i][1];
+  return null;
+}
+/* « 21,8 pelotes » en gras, « 545 g » en dessous : une case étroite ne coupe plus le texte. */
+function stockDeuxLignes(m){
+  var t = m.cat === "outil" ? pluriel(Number(m.stock)||0, "outil") : texteLots(m, Number(m.stock)||0);
+  var r = /^(.*?)\s*\(([^()]*)\)$/.exec(t);
+  return r ? esc(r[1]) + '<span class="hint stk-sous">' + esc(r[2]) + '</span>' : esc(t);
+}
+function pastilleHtml(v){
+  var t = teinteCouleur(v.coloris);
+  return '<span class="pastille'+(t ? '' : ' inconnue')+'"'+(t ? ' style="background:'+t+'"' : '')+'></span>';
+}
+/* Le bouton des couleurs en stock : jusqu'à huit pastilles, puis « +N », et le nombre en clair. */
+function pastillesCouleurs(m){
+  var l = variantes(m).filter(function(v){ return (Number(v.stock) || 0) > 0; }).sort(function(a, b){ return (Number(b.stock) || 0) - (Number(a.stock) || 0); });
+  if (!l.length) return "";
+  var MAX = 8, nom = l.length + " couleur" + (l.length > 1 ? "s" : "");
+  var detail = l.map(function(v){ return libelleVariante(v) + " : " + texteLots(m, v.stock); }).join(" ; ");
+  return '<button type="button" class="pastilles" data-role="couleurs" title="'+esc(detail)+'" aria-label="'+esc(nom + " en stock : " + detail + ". Ouvrir le détail")+'">'+
+    l.slice(0, MAX).map(pastilleHtml).join("")+
+    (l.length > MAX ? '<span class="plus">+' + (l.length - MAX) + '</span>' : '')+
+    '<span class="nbc">'+esc(nom)+'</span></button>';
 }
 
 /* ═════ AIDES « ? » ═════
@@ -7760,6 +7969,60 @@ function prevenirManques(manques){
     : n + " matières passent en stock négatif (" + manquesEnAttente.slice(0, 2).join(", ") + (n > 2 ? "…" : "") + ") : note tes achats dans Matières.",
     {important:true, libelle:"Voir le stock", fn:function(){ manquesEnAttente = []; view.sub = "stock"; aller("stock"); }});
   if (t) t.__manques = true;
+}
+/* ═════ AVANT DE LANCER UNE FABRICATION : LA MATIÈRE EST-ELLE LÀ ? (V57) ═════
+   Lancer trois pièces avec un stock à zéro, c'est découvrir le manque au
+   dernier moment. Avant de lancer, on compare ce que la création demande à ce
+   qui reste en stock, déduction faite de ce qui est déjà réservé par les
+   pièces en cours. S'il manque quelque chose, on le dit, avec le choix de
+   noter un achat ou de lancer quand même. Seules les matières dont le stock
+   est suivi (un achat, un inventaire ou un stock noté) sont concernées : une
+   matière jamais stockée ne déclenche rien. */
+function matiereSuivie(m){
+  return (m.mouv && m.mouv.length > 0) || (Number(m.stock) || 0) > 1e-9 || (m.variantes || []).length > 0;
+}
+/* lots : [{cr, n}] ; renvoie [{m, besoin, dispo, manque}] */
+function manquesPourFabriquer(lots){
+  var besoins = {}, engage = {};
+  lots.forEach(function(l){
+    var q = consommationPrevue(l.cr);
+    for (var mid in q) besoins[mid] = (besoins[mid] || 0) + q[mid] * (l.n || 1);
+  });
+  state.pieces.forEach(function(p){
+    if (p.prod !== "encours" || p.sortie || p.com === "vendu" || p.com === "jete") return;
+    var c2 = creation(p.cid); if (!c2) return;
+    var q = consommationPrevue(c2);
+    for (var mid in q) engage[mid] = (engage[mid] || 0) + q[mid];
+  });
+  var res = [];
+  Object.keys(besoins).forEach(function(mid){
+    var m = matiere(mid); if (!m || m.cat === "outil" || !matiereSuivie(m)) return;
+    var dispo = Math.max(0, (Number(m.stock) || 0) - (engage[mid] || 0));
+    var besoin = Math.round(besoins[mid] * 1000) / 1000;
+    if (besoin > 0 && dispo < besoin - 1e-6) res.push({m: m, besoin: besoin, dispo: Math.round(dispo * 1000) / 1000, manque: Math.round((besoin - dispo) * 1000) / 1000});
+  });
+  return res;
+}
+/* Appelle « suite » si tout est là (ou si on choisit de lancer quand même), « refus » sinon. */
+function avantFabrication(lots, suite, refus){
+  var manques = manquesPourFabriquer(lots);
+  if (!manques.length){ suite(); return; }
+  var noms = lots.map(function(l){ return "« " + l.cr.nom + " »" + (l.n > 1 ? " × " + l.n : ""); }).join(", ");
+  var box = el('<div class="manque-stock"></div>');
+  var ul = el('<ul class="manque-liste"></ul>');
+  manques.forEach(function(x){
+    var li = el('<li><span><b>'+esc(x.m.nom)+'</b> : il te faut '+esc(texteLots(x.m, x.besoin))+', tu en as '+esc(texteLots(x.m, x.dispo))+
+      ' <span class="manque-reste">(il en manque '+esc(texteLots(x.m, x.manque))+')</span></span></li>');
+    var b = el('<button type="button" class="lien-mini">J\'ai acheté</button>');
+    b.addEventListener("click", function(){ fermerCouche(function(){ if (refus) refus(); dialogueAchatMatiere(x.m); }); });
+    li.appendChild(b);
+    ul.appendChild(li);
+  });
+  box.appendChild(ul);
+  box.appendChild(el('<p class="hint" style="margin:8px 0 0">Si tu as déjà la matière mais que ton stock n\'est pas à jour, note un achat ou un inventaire dans Matières : l\'outil ne te le redemandera plus.</p>'));
+  confirmer({titre: "Il te manque de la matière", texte: "Pour " + noms + " :", contenu: box,
+    bouton: "Lancer quand même", annuler: "Pas maintenant",
+    siNon: function(){ if (refus) refus(); }, siAnnule: function(){ if (refus) refus(); }}, suite);
 }
 function majProd(p, k){
   var cr = creation(p.cid);
@@ -10779,11 +11042,13 @@ function carteChrono(cr, rafraichir){
   /* commencer une autre pièce, sans mélanger son temps avec celui-ci */
   if (!actif && p && (p.prod === "termine" || cumul > 0)){
     act.appendChild(bouton("+ Nouvelle pièce", function(){
-      ajouterPieces(cr.id, 1, "encours", "atelier", "");
-      var np = piecesDe(cr.id).slice().sort(function(a, b){ return numeroPiece(b) - numeroPiece(a); })[0];
-      if (np) view.pieceChrono = np.id;
-      sauverTout(); toast("Pièce N° " + (np ? numeroPiece(np) : "") + " créée : son temps commence à zéro.");
-      if (rafraichir) rafraichir();
+      avantFabrication([{cr: cr, n: 1}], function(){
+        ajouterPieces(cr.id, 1, "encours", "atelier", "");
+        var np = piecesDe(cr.id).slice().sort(function(a, b){ return numeroPiece(b) - numeroPiece(a); })[0];
+        if (np) view.pieceChrono = np.id;
+        sauverTout(); toast("Pièce N° " + (np ? numeroPiece(np) : "") + " créée : son temps commence à zéro.");
+        if (rafraichir) rafraichir();
+      });
     }));
   }
 
@@ -12957,16 +13222,14 @@ function lancerAvoir(c, bAv){
                  lignes: F0.lignes.map(function(l){ return {d:l.d, s:l.s, q:l.q, pu:-(l.pu !== undefined ? l.pu : l.m), m:-l.m}; }),
                  total: -F0.total, versements: [], solde: 0, franchise: F0.franchise, clientePro: F0.clientePro,
                  nature: F0.nature, ref: c.factureNum, refLe: c.factureLe, commandeNum: F0.commandeNum || c.num || "", refClient: F0.refClient || ""};
-        var fen = window.open("", "_blank");
-        if (fen){ try{ fen.document.write('<p style="font:16px sans-serif;margin:40px">Préparation de l\'avoir…</p>'); }catch(e){} }
         if (bAv) occupe(bAv, "Émission…");
         var id = c.id;
         emettreDocument("avoir", id, A).then(function(r){
-          if (!r.numero){ if (fen) try{ fen.close(); }catch(e){} toast(r.erreur); render(); return; }
+          if (!r.numero){ toast(r.erreur); render(); return; }
           var cc = commande(id);
           if (cc){ cc.avoirNum = r.numero; cc.avoirLe = r.doc.emiseLe; cc.avoir = r.doc;
                    journaliser(cc, "Avoir " + r.numero + " établi, annulant la facture " + cc.factureNum); }
-          sauverTout(); ouvrirDocument(r.doc, fen); render();
+          sauverTout(); ouvrirDocument(r.doc); render();
           toast("Avoir " + r.numero + " établi.");
         });
       });
@@ -13420,7 +13683,14 @@ function friseCommande(c){
   }
   var b = null;
   if (c.statut === "devis") b = bouton("Accord reçu : à fabriquer", function(){ c.accordLe = c.accordLe || Date.now(); passer("acceptee", "Commande acceptée : à fabriquer"); }, true);
-  else if (c.statut === "acceptee") b = bouton("Je commence la fabrication", function(){ passer("encours", "En fabrication"); }, true);
+  else if (c.statut === "acceptee") b = bouton("Je commence la fabrication", function(){
+    /* seules les pièces pas encore faites demandent de la matière */
+    var lotsC = articlesCommande(c).filter(function(a){ return a.q > 0 && a.cid && creation(a.cid); }).map(function(a){
+      var deja = state.pieces.filter(function(p){ return p.cmdId === c.id && p.cid === a.cid; }).length;
+      return {cr: creation(a.cid), n: a.q - deja};
+    }).filter(function(l){ return l.n > 0; });
+    avantFabrication(lotsC, function(){ passer("encours", "En fabrication"); });
+  }, true);
   else if (c.statut === "encours") b = bouton("C'est prêt", function(){ passer("terminee", "Prête à remettre ou à envoyer"); }, true);
   else if (c.statut === "terminee") b = bouton("C'est livré", function(){ passer("livree", "Livrée"); }, true);
   else if (c.statut === "livree" && !c.factureNum) b = bouton("Passer à la facture", function(){ var x = document.getElementById("cmd-facture"); if (x){ x.scrollIntoView({behavior:"smooth", block:"start"}); var bx = x.querySelector("button.primary, button"); if (bx) bx.focus(); } }, true);
@@ -14065,14 +14335,10 @@ function renderCommandeDetail(main, c){
       confirmer({titre:"Émettre la facture ?",
         texte:"Une facture émise ne peut plus être modifiée ni supprimée. Pour la corriger, tu établiras un avoir. Vérifie :",
         details: det, bouton:"Émettre la facture", annuler:"Vérifier encore"}, function(){
-        /* La fenêtre s'ouvre tout de suite (sinon le navigateur la bloque),
-           puis se remplit quand le numéro est arrivé. */
-        var fen = window.open("", "_blank");
-        if (fen){ try{ fen.document.write('<p style="font:16px sans-serif;margin:40px">Préparation de la facture…</p>'); }catch(e){} }
         occupe(bF, "Numérotation…");
         var id = c.id;
         emettreDocument("facture", id, F).then(function(r){
-          if (!r.numero){ if (fen) try{ fen.close(); }catch(e){} toast(r.erreur); render(); return; }
+          if (!r.numero){ toast(r.erreur); render(); return; }
           /* La commande est relue ici : pendant la numérotation, un autre
              onglet ou la synchronisation a pu remplacer les données. La
              facture, elle, est déjà gardée dans le registre. */
@@ -14081,7 +14347,7 @@ function renderCommandeDetail(main, c){
             cc.factureNum = r.numero; cc.factureLe = r.doc.emiseLe; cc.facture = r.doc;
             journaliser(cc, "Facture " + r.numero + " émise (" + eur(r.doc.total) + ")");
           }
-          sauverTout(); ouvrirDocument(r.doc, fen); render();
+          sauverTout(); ouvrirDocument(r.doc); render();
           toast(cc ? "Facture " + r.numero + " émise." : "Facture " + r.numero + " émise et gardée dans le registre des factures (la commande a été modifiée ailleurs entre-temps).");
         });
       });
@@ -14146,17 +14412,11 @@ function renderCommandeDetail(main, c){
   main.appendChild(sup);
 }
 
-/* La facture s'ouvre dans une fenêtre imprimable : pas de dépendance, pas de
-   bibliothèque PDF, et « Imprimer → Enregistrer en PDF » fait le reste. */
 /* La facture est le seul document de l'application qui sorte de l'atelier :
    c'est elle que la cliente garde, et elle dit le sérieux de l'artisane.
-   Elle s'ouvre dans une fenêtre imprimable — « Imprimer » puis « Enregistrer
-   en PDF » suffit, sans bibliothèque ni dépendance. La mise en page est
-   pensée pour le papier : une page A4, des marges franches, et les mentions
-   obligatoires lisibles sans être envahissantes. */
-/* Ce que dit la facture est figé au moment où elle est émise : modifier
-   ensuite la commande (prix, cliente, règlements) ne change pas un document
-   déjà remis. */
+   Elle devient un vrai fichier PDF (pdf.js, mis en page sur une page A4 avec
+   des marges franches) ; les mentions obligatoires restent lisibles sans être
+   envahissantes. Voir « LA FACTURE EN PDF » plus bas. */
 function instantaneFacture(c){
   var r = state.reglages;
   var nom = String(r.raisonSociale || "").trim();
@@ -14199,173 +14459,102 @@ function instantaneFacture(c){
   };
 }
 
-function ouvrirFacture(c, fenetre){
+function ouvrirFacture(c){
   var F = JSON.parse(JSON.stringify(c.facture || instantaneFacture(c)));
   F.numero = F.numero || c.factureNum; F.emiseLe = F.emiseLe || c.factureLe; F.type = "facture";
-  ouvrirDocument(F, fenetre);
+  ouvrirDocument(F);
 }
-function ouvrirDocument(F, fenetre){
+
+/* ═════ LA FACTURE EN PDF ═════
+   Une facture (ou un avoir) est un vrai fichier PDF, fabriqué sur l'appareil
+   par pdf.js (CrochomptePdf) : on le voit tel qu'il sera, on le télécharge,
+   on l'imprime ou on l'envoie. Plus de page d'impression à mettre en forme
+   soi-même : le fichier est identique sur tous les appareils (V57). */
+function dateFrDocument(d){
+  if (!d) return "";
+  var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d));
+  return m ? m[3] + "/" + m[2] + "/" + m[1] : dateCourte(d);
+}
+function nomFichierDocument(F){
+  return (F.type === "avoir" ? "Avoir-" : "Facture-") + String(F.numero || "sans-numero").replace(/[^\w.-]+/g, "-") + ".pdf";
+}
+function octetsDocument(F){
+  return window.CrochomptePdf.facture(F, {eur: eur, date: dateFrDocument});
+}
+/* Enregistre un fichier sur l'appareil (le navigateur le range dans « Téléchargements »). */
+function telechargerFichier(blob, nom){
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url; a.download = nom; a.style.display = "none";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 20000);
+}
+/* Dessine les pages du PDF dans « zone », telles qu'elles seront imprimées. */
+function apercuPdf(octets, zone){
+  chargerPdfjs().then(function(pdfjs){
+    var base = new URL("vendor/pdfjs/", location.href).href;
+    return pdfjs.getDocument({data: octets.slice(), standardFontDataUrl: base + "standard_fonts/", wasmUrl: base + "wasm/", isEvalSupported: false}).promise;
+  }).then(function(doc){
+    var largeur = Math.max(260, Math.min(zone.clientWidth - 24 || 560, 620));
+    var dpr = Math.min(2, window.devicePixelRatio || 1);
+    var chaine = Promise.resolve();
+    zone.innerHTML = "";
+    for (var i = 1; i <= Math.min(doc.numPages, 4); i++){
+      chaine = chaine.then((function(num){ return function(){
+        return doc.getPage(num).then(function(page){
+          var vp1 = page.getViewport({scale: 1});
+          var vp = page.getViewport({scale: largeur / vp1.width * dpr});
+          var c = document.createElement("canvas");
+          c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+          c.style.width = Math.round(vp.width / dpr) + "px";
+          c.setAttribute("role", "img"); c.setAttribute("aria-label", "Page " + num + " sur " + doc.numPages + " du document");
+          zone.appendChild(c);
+          var ctx = c.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
+          return page.render({canvasContext: ctx, viewport: vp}).promise;
+        });
+      }; })(i));
+    }
+    return chaine.then(function(){
+      if (doc.numPages > 4) zone.appendChild(el('<p class="hint" style="margin:0">… et ' + (doc.numPages - 4) + ' autre' + (doc.numPages - 4 > 1 ? 's' : '') + ' page' + (doc.numPages - 4 > 1 ? 's' : '') + ' dans le fichier.</p>'));
+      try{ doc.destroy(); }catch(e){}
+    });
+  }).catch(function(){
+    zone.innerHTML = '<p class="hint" style="margin:0">L\'aperçu n\'est pas disponible pour le moment (il demande une connexion la première fois). Le PDF, lui, se télécharge normalement.</p>';
+  });
+}
+function ouvrirDocument(F){
   var avoir = F.type === "avoir";
-  var dateFr = function(d){ if (!d) return ""; var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d));
-    return m ? m[3] + "/" + m[2] + "/" + m[1] : dateCourte(d); };
-  var lignes = F.lignes;
-  var solde = F.solde;
-  /* Un vendeur non identifiable rend la facture invalide : tant que les
-     réglages ne sont pas remplis, on le signale au lieu de l'imprimer en
-     silence avec des crochets. */
-  var manque = !F.vendeur.nom || !F.vendeur.adresse;
-
-  var h = '<!doctype html><html lang="fr"><head><meta charset="utf-8">'+
-  '<meta name="viewport" content="width=device-width, initial-scale=1">'+
-  '<title>'+(avoir ? 'Avoir ' : 'Facture ')+esc(F.numero)+'</title><style>'+
-  '*{box-sizing:border-box}'+
-  'body{font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;'+
-    'color:#15181a;background:#f4f6f3;margin:0;padding:28px 16px 60px}'+
-  '.page{max-width:780px;margin:0 auto;background:#fff;padding:44px 48px 40px;'+
-    'border-radius:4px;box-shadow:0 1px 3px rgba(0,0,0,.09)}'+
-  '.alerte{max-width:780px;margin:0 auto 14px;background:#fbf1dc;border:1px solid #e0c188;'+
-    'border-radius:8px;padding:12px 16px;font-size:13.5px;color:#7a4e00}'+
-  '.ent{display:flex;justify-content:space-between;gap:36px;flex-wrap:wrap;'+
-    'padding-bottom:26px;border-bottom:2px solid #15181a}'+
-  '.ent h1{font-size:15px;letter-spacing:.14em;text-transform:uppercase;margin:0 0 6px;'+
-    'font-weight:600;color:#5b6560}'+
-  '.num{font-size:27px;font-weight:700;letter-spacing:-.01em;margin:0 0 10px;'+
-    'font-variant-numeric:tabular-nums}'+
-  '.dates{font-size:13px;color:#5b6560;margin:0;line-height:1.75}'+
-  '.moi{text-align:right;font-size:13.5px;line-height:1.7;max-width:280px}'+
-  '.moi .nom{font-size:16px;font-weight:700;display:block;margin-bottom:3px}'+
-  '.moi .vide{color:#b23}'+
-  '.parties{display:flex;gap:36px;flex-wrap:wrap;margin:26px 0 6px}'+
-  '.bloc{flex:1;min-width:210px}'+
-  '.bloc .lab{font-size:11px;letter-spacing:.1em;text-transform:uppercase;'+
-    'color:#5b6560;font-weight:600;margin:0 0 5px}'+
-  '.bloc .val{font-size:15px;font-weight:600;margin:0}'+
-  '.bloc .sec{font-size:13.5px;color:#5b6560;margin:2px 0 0}'+
-  'table{width:100%;border-collapse:collapse;margin:26px 0 0}'+
-  'th{text-align:left;font-size:11px;letter-spacing:.09em;text-transform:uppercase;'+
-    'color:#5b6560;font-weight:600;padding:0 0 9px;border-bottom:1px solid #15181a}'+
-  'th.n,td.n{text-align:right;font-variant-numeric:tabular-nums}'+
-  'td{padding:13px 0;border-bottom:1px solid #e4e8e2;vertical-align:top}'+
-  'td .det{display:block;font-size:13px;color:#5b6560;margin-top:3px}'+
-  'tr.sous td{border-bottom:none;padding:9px 0 3px;color:#5b6560}'+
-  'tr.total td{border-top:2px solid #15181a;border-bottom:none;padding-top:13px;'+
-    'font-size:17px;font-weight:700}'+
-  'tr.du td{border-bottom:none;padding-top:4px;font-size:19px;font-weight:700;color:#0f5132}'+
-  '.ment{margin-top:34px;padding-top:20px;border-top:1px solid #e4e8e2;'+
-    'font-size:12px;line-height:1.7;color:#4d5651}'+
-  '.ment p{margin:0 0 7px}'+
-  '.ment .cle{font-weight:600;color:#15181a}'+
-  '.pied{margin-top:26px;font-size:11.5px;color:#8a938d;text-align:center}'+
-  '.barre{max-width:780px;margin:18px auto 0;text-align:center}'+
-  '.barre button{font:inherit;font-size:15px;font-weight:600;padding:12px 26px;'+
-    'border:0;border-radius:8px;background:#0f5132;color:#fff;cursor:pointer}'+
-  '@media print{'+
-    'body{background:#fff;padding:0;font-size:12.5px}'+
-    '.page{box-shadow:none;max-width:none;padding:0;border-radius:0}'+
-    '.noprint{display:none!important}'+
-    '@page{margin:18mm 16mm}'+
-  '}'+
-  '@media (max-width:560px){'+
-    '.page{padding:26px 20px}.ent{gap:18px}.moi{text-align:left}'+
-  '}'+
-  '</style></head><body>';
-
+  var manque = !F.vendeur || !F.vendeur.nom || !F.vendeur.adresse;
+  var octets;
+  try{ octets = octetsDocument(F); }
+  catch(e){ toast("Le PDF n'a pas pu être préparé. Réessaie, ou signale-le si cela se reproduit."); return; }
+  var blob = new Blob([octets], {type: "application/pdf"});
+  var nom = nomFichierDocument(F);
+  var box = el('<div class="fact-doc"></div>');
   if (manque){
-    h += '<div class="alerte noprint"><b>Cette facture n\'est pas encore valable.</b> '+
-      'Une facture doit dire clairement qui vend. Complète ton nom et ton '+
-      'adresse dans Réglages → Tes mentions de facture, puis rouvre-la.</div>';
+    box.appendChild(el('<p class="fact-alerte"><b>Cette facture n\'est pas encore valable.</b> Une facture doit dire clairement qui vend. '+
+      'Complète ton nom et ton adresse dans Réglages → Tes mentions de facture, puis rouvre-la.</p>'));
   }
-
-  h += '<div class="page">'+
-    '<div class="ent">'+
-      '<div>'+
-        '<h1>'+(avoir ? 'Avoir' : 'Facture')+'</h1>'+
-        '<p class="num">'+esc(F.numero)+'</p>'+
-        '<p class="dates">Émis'+(avoir?'':'e')+' le '+esc(dateFr(F.emiseLe))+
-          (avoir && F.ref ? '<br>Annule la facture n° '+esc(F.ref)+(F.refLe ? ' du '+esc(dateFr(F.refLe)) : '') : '')+
-          (!avoir && F.dateVente ? '<br>Date de la vente : '+esc(dateFr(F.dateVente)) : '')+
-          (F.commandeNum ? '<br>Commande n° '+esc(F.commandeNum) : '')+
-          (F.refClient ? '<br>Votre bon de commande : '+esc(F.refClient) : '')+'</p>'+
-      '</div>'+
-      '<div class="moi">'+
-        '<span class="nom'+(F.vendeur.nom?'':' vide')+'">'+
-          esc(F.vendeur.nom || "[ Ton nom ou ta raison sociale ]")+'</span>'+
-        (F.vendeur.adresse ? esc(F.vendeur.adresse) : '<span class="vide">[ Ton adresse ]</span>')+'<br>'+
-        (F.vendeur.siret ? 'SIRET '+esc(F.vendeur.siret) : '')+
-        (F.vendeur.siret && F.vendeur.contact ? '<br>' : '')+
-        esc(F.vendeur.contact || "")+
-      '</div>'+
-    '</div>'+
-
-    '<div class="parties">'+
-      '<div class="bloc">'+
-        '<p class="lab">'+(avoir ? 'Établi pour' : 'Facturé à')+'</p>'+
-        '<p class="val">'+esc(F.client.nom || "—")+'</p>'+
-        (F.client.adresse ? '<p class="sec">'+esc(F.client.adresse)+'</p>' : '')+
-        (F.client.siren ? '<p class="sec">SIREN '+esc(F.client.siren)+'</p>' : '')+
-        (F.livraison ? '<p class="sec">Livraison : '+esc(F.livraison)+'</p>' : '')+
-        (F.client.contact ? '<p class="sec">'+esc(F.client.contact)+'</p>' : '')+
-      '</div>'+
-      (avoir ? '' : '<div class="bloc">'+
-        '<p class="lab">Règlement</p>'+
-        '<p class="val">'+(solde > 0 ? esc(eur(solde))+' à régler' : 'Réglée')+'</p>'+
-        '<p class="sec">'+(solde > 0
-          ? 'à réception de la facture'
-          : 'Merci, tout est réglé.')+'</p>'+
-      '</div>')+
-    '</div>'+
-
-    '<table><thead><tr><th>Désignation</th><th class="n">Qté</th><th class="n">Prix unitaire</th><th class="n">Montant</th></tr></thead><tbody>';
-
-  lignes.forEach(function(l){
-    h += '<tr><td>'+esc(l.d)+
-      (l.s ? '<span class="det">'+esc(l.s)+'</span>' : '')+
-      '</td><td class="n">'+(l.q || 1)+'</td><td class="n">'+esc(eur(l.pu !== undefined ? l.pu : l.m))+'</td>'+
-      '<td class="n">'+esc(eur(l.m))+'</td></tr>';
-  });
-  h += '<tr class="total"><td colspan="3">Total'+(F.franchise ? '' : ' TTC')+'</td><td class="n">'+esc(eur(F.total))+'</td></tr>';
-  (F.versements || []).forEach(function(v){
-    /* Un remboursement (montant négatif) augmente ce qui reste à régler. */
-    h += '<tr class="sous"><td colspan="3">'+esc(v.lib)+(v.date ? ' le '+esc(dateFr(v.date)) : '')+
-      '</td><td class="n">'+(v.m < 0 ? '+ ' : '− ')+esc(eur(Math.abs(v.m)))+'</td></tr>';
-  });
-  if (!avoir && (F.versements || []).length){
-    h += '<tr class="du"><td colspan="3">Reste à régler</td><td class="n">'+esc(eur(solde))+'</td></tr>';
+  var act = el('<div class="fact-act"></div>');
+  act.appendChild(bouton("Télécharger le PDF", function(){ telechargerFichier(blob, nom); toast("« " + nom + " » enregistré dans tes téléchargements."); }, true));
+  act.appendChild(bouton("Imprimer", function(){
+    var url = URL.createObjectURL(blob);
+    var w = window.open(url, "_blank");
+    if (!w){ toast("Ton navigateur a bloqué l'ouverture. Autorise les fenêtres pop-up pour ce site, ou télécharge le PDF puis imprime-le."); URL.revokeObjectURL(url); return; }
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 120000);
+  }));
+  var fichier = null;
+  try{ fichier = new File([blob], nom, {type: "application/pdf"}); }catch(e){}
+  if (fichier && navigator.canShare && navigator.canShare({files: [fichier]})){
+    act.appendChild(bouton("Envoyer…", function(){
+      navigator.share({files: [fichier], title: nom}).catch(function(){});
+    }));
   }
-  h += '</tbody></table>'+
-
-    '<div class="ment">'+
-      (F.nature ? '<p><span class="cle">Nature de l\'opération :</span> '+esc(F.nature)+'.</p>' : '')+
-      (F.franchise ? '<p><span class="cle">TVA non applicable</span>, article 293 B du code général des impôts.</p>' : '')+
-      (avoir ? '<p><span class="cle">Avoir</span> annulant la facture n° '+esc(F.ref || '')+' pour la totalité de son montant.</p>' : '')+
-      ((F.personnalisee && !F.clientePro)
-        ? '<p><span class="cle">Pas de droit de rétractation.</span> Article confectionné selon '+
-          'les spécifications demandées : conformément à l\'article L221-28 du code de la '+
-          'consommation, il n\'ouvre pas de droit de rétractation.</p>'
-        : '')+
-      (!avoir && F.arrhes
-        ? '<p><span class="cle">Arrhes.</span> Les sommes versées à la commande ont la nature '+
-          'd\'arrhes au sens de l\'article L214-1 du code de la consommation : la partie qui achète peut '+
-          'se dédire en les perdant, la partie qui vend en restituant le double.</p>'
-        : (!avoir && F.acompte
-          ? '<p><span class="cle">Acompte.</span> Les sommes versées à la commande ont la nature '+
-            'd\'acompte : la vente est ferme et définitive pour les deux parties.</p>'
-          : ''))+
-      (!avoir && F.clientePro
-        ? '<p><span class="cle">Retard de paiement.</span> Pénalités au taux de trois fois '+
-          'l\'intérêt légal en vigueur. Indemnité forfaitaire pour frais de recouvrement : 40 €. '+
-          'Pas d\'escompte pour paiement anticipé.</p>'
-        : '')+
-    '</div>'+
-    '<p class="pied">'+(F.vendeur && F.vendeur.nom ? esc(F.vendeur.nom) + ' · ' : '')+(avoir ? 'Avoir n° ' : 'Facture n° ')+esc(F.numero)+'</p>'+
-  '</div>'+
-  '<div class="barre noprint"><button type="button">'+
-    'Imprimer ou enregistrer en PDF</button></div>'+
-  '</body></html>';
-
-  var w = fenetre && !fenetre.closed ? fenetre : window.open("", "_blank");
-  if (!w){ toast((avoir ? "Avoir " : "Facture ") + F.numero + " enregistré" + (avoir ? "" : "e") + ", mais ton navigateur a bloqué son affichage. Autorise les fenêtres pop-up pour ce site, puis rouvre-la depuis le registre des factures."); return; }
-  ecrireFenetre(w, h);
+  box.appendChild(act);
+  var zone = el('<div class="fact-apercu" aria-live="polite"><p class="hint" style="margin:0">Préparation de l\'aperçu…</p></div>');
+  box.appendChild(zone);
+  confirmer({titre: (avoir ? "Avoir " : "Facture ") + F.numero, contenu: box, bouton: "Fermer", sansAnnuler: true, large: true}, function(){});
+  apercuPdf(octets, zone);
 }
 
 /* ═════ MES PATRONS : ÉCRAN ═════ */

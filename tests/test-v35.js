@@ -154,9 +154,8 @@ async function modeComplet(p){
       await ligne.getByRole('button', {name:/^Ouvrir la commande/}).click(); await p.waitForTimeout(250);
       await p.getByRole('button', {name:'Établir la facture'}).click(); await p.waitForTimeout(200);
       R.facture_confirmation_demandee = (await p.textContent('.dlg h2')).includes('Émettre la facture');
-      const [fen] = await Promise.all([p.waitForEvent('popup'), p.click('.dlg [data-oui]')]);
-      await p.waitForTimeout(400);
-      const titre = await fen.title(); await fen.close();
+      await p.click('.dlg [data-oui]'); await p.waitForTimeout(700);
+      const titre = await p.textContent('.dlg h2'); await p.click('.dlg [data-oui]'); await p.waitForTimeout(200);
       return titre;
     };
     const an = new Date().getFullYear();
@@ -171,13 +170,12 @@ async function modeComplet(p){
     await p.evaluate(()=>{ window.__fauxEchecFacture = true; });
     await onglet(p, 'Commandes');
     await p.locator('#main tr', {hasText:'Ana'}).getByRole('button', {name:/^Ouvrir la commande/}).click(); await p.waitForTimeout(250);
-    const pop = p.waitForEvent('popup').catch(()=>null);
     await p.getByRole('button', {name:'Établir la facture'}).click(); await p.waitForTimeout(200);
     await p.click('.dlg [data-oui]'); await p.waitForTimeout(500);
     n = await nums();
     R.facture_sans_reseau_rien_emis = n[3] === null;
     R.facture_sans_reseau_message = /Réessaie/.test(await p.textContent('body'));
-    const fenAna = await pop; R.facture_sans_reseau_fenetre_fermee = !fenAna || fenAna.isClosed();
+    R.facture_sans_reseau_fenetre_fermee = (await p.locator('.fact-doc').count()) === 0;
     await p.close();
 
     /* 6. Tous les écrans, ordinateur et téléphone : pas de NaN, pas de

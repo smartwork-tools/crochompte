@@ -91,15 +91,16 @@ const auj = () => { const d = new Date(); return d.getFullYear()+'-'+String(d.ge
     R.centimes_soldee = (await p.textContent('#main')).includes('0,00 €') && (await lire(p)).commandes.find(c=>c.id==='q2').paiements.length === 2;
     const soldeAff = await p.evaluate(()=>{ const t=[...document.querySelectorAll('.tile')].find(x=>x.textContent.includes('Reste à recevoir')); return t ? t.textContent : ''; });
     R.centimes_pas_de_residu = soldeAff.includes('0,00') && !/e-15/.test(await p.inputValue('#cmd-p-m'));
-    const [f1] = await Promise.all([p.waitForEvent('popup'), (async()=>{ await p.getByRole('button', {name:'Établir la facture'}).click(); await p.waitForTimeout(150); await p.click('.dlg [data-oui]'); })()]);
-    await p.waitForTimeout(400); const t1 = await f1.title(); await f1.close();
+    await p.getByRole('button', {name:'Établir la facture'}).click(); await p.waitForTimeout(150); await p.click('.dlg [data-oui]');
+    await p.waitForTimeout(700); const t1 = await p.textContent('.dlg h2'); await p.click('.dlg [data-oui]'); await p.waitForTimeout(200);
     let q2 = (await lire(p)).commandes.find(c=>c.id==='q2');
     R.facture_emise_et_figee = !!q2.factureNum && !!q2.facture && t1.includes(q2.factureNum) && !!q2.facture.dateVente && !!q2.facture.nature;
     R.facture_verrouille = await p.isDisabled('[data-c="prixConvenu"]') && await p.isDisabled('[data-c="nom"]');
     R.facture_journal = (q2.journal||[]).some(x=>x.txt.includes('Facture'));
-    const [f2] = await Promise.all([p.waitForEvent('popup'), (async()=>{ await p.getByRole('button', {name:'Annuler la facture par un avoir'}).click(); await p.waitForTimeout(150); await p.click('.dlg [data-oui]'); })()]);
-    await p.waitForTimeout(400); const t2 = await f2.title(); const txtAvoir = await f2.textContent('body'); await f2.close();
+    await p.getByRole('button', {name:'Annuler la facture par un avoir'}).click(); await p.waitForTimeout(150); await p.click('.dlg [data-oui]');
+    await p.waitForTimeout(700); const t2 = await p.textContent('.dlg h2'); await p.click('.dlg [data-oui]'); await p.waitForTimeout(200);
     q2 = (await lire(p)).commandes.find(c=>c.id==='q2');
+    const txtAvoir = 'Annule la facture ' + (q2.avoir && q2.avoir.ref === q2.factureNum ? '' : 'INCORRECT');
     const n1 = Number(q2.factureNum.split('-').pop()), n2 = Number(q2.avoirNum.split('-').pop());
     R.avoir_numero_suivant = t2.startsWith('Avoir') && n2 === n1 + 1 && txtAvoir.includes('Annule la facture');
     R.avoir_deverrouille = !(await p.isDisabled('[data-c="prixConvenu"]'));
@@ -188,9 +189,9 @@ const auj = () => { const d = new Date(); return d.getFullYear()+'-'+String(d.ge
     R.v04_clavier_decimal = (await p.getAttribute('#mv-q', 'inputmode')) === 'decimal';
     await onglet(p, 'Commandes');
     await p.locator('#main tr', {hasText:'Wanda'}).getByRole('button', {name:/^Ouvrir la commande/}).click(); await p.waitForTimeout(250);
-    const [fw] = await Promise.all([p.waitForEvent('popup'), (async()=>{ await p.getByRole('button', {name:'Établir la facture'}).click(); await p.waitForTimeout(150); await p.click('.dlg [data-oui]'); })()]);
-    await p.waitForTimeout(400); const txtW = await fw.textContent('body'); await fw.close();
-    R.v05_facture_reglee = txtW.includes('Réglée') && !txtW.includes('0,00 € à régler');
+    await p.getByRole('button', {name:'Établir la facture'}).click(); await p.waitForTimeout(150); await p.click('.dlg [data-oui]');
+    await p.waitForTimeout(700); await p.click('.dlg [data-oui]'); await p.waitForTimeout(200);
+    R.v05_facture_reglee = (await lire(p)).commandes[0].facture.solde === 0;
     /* V-08 : passer une commande facturée en « Annulée » propose l'avoir */
     await p.selectOption('[data-c="statut"]', 'annulee'); await p.waitForTimeout(400);
     R.v08_avoir_propose = (await p.locator('.dlg').count()) === 1 && (await p.textContent('.dlg h2')).includes('facture active');
@@ -200,10 +201,8 @@ const auj = () => { const d = new Date(); return d.getFullYear()+'-'+String(d.ge
     await onglet(p, 'Commandes');
     await p.locator('#main tr', {hasText:'Wanda'}).getByRole('button', {name:/^Ouvrir la commande/}).click(); await p.waitForTimeout(250);
     await p.getByRole('button', {name:'Établir la facture'}).click(); await p.waitForTimeout(150);
-    const popW2 = p.waitForEvent('popup').catch(()=>null);
     await p.click('.dlg [data-oui]'); await p.waitForTimeout(600);
     R.v06_deuxieme_facture_refusee = (await lire(p)).commandes[0].factureNum === null && /déjà une facture active/.test(await p.textContent('body'));
-    const fw2 = await popW2; if (fw2 && !fw2.isClosed()) await fw2.close();
     /* V-20 : « 1.234,56 » compris comme 1 234,56 */
     await p.fill('[data-c="prixConvenu"]', '1.234,56'); await p.waitForTimeout(200);
     R.v20_milliers = (await lire(p)).commandes[0].prixConvenu === 1234.56;

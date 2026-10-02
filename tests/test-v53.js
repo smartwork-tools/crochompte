@@ -31,6 +31,7 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
       sauverTout(); view.sub = 'matieres'; view.nmCat = null; aller('stock');
     });
     await p.waitForTimeout(400);
+    await p.getByRole('button', {name:/Ajouter une matière/}).first().click(); await p.waitForTimeout(300);
     /* 1. le formulaire suit la catégorie */
     const champs = async () => p.$$eval('#nm-champs input, #nm-champs select', xs => xs.map(x => x.id).filter(Boolean));
     const cFil = await champs();
@@ -47,19 +48,17 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     R.petites_tailles = await dans(p, function(){ return CROCHETS.indexOf(0.5) >= 0 && CROCHETS.indexOf(0.6) >= 0 && CROCHETS.indexOf(30) >= 0; });
     await p.fill('#nm-nom', ''); await p.fill('#nm-prix', '3');
     await p.selectOption('#nm-type', 'crochet'); await p.selectOption('#nm-diam', '0.5');
-    await p.click('#nm-ajouter'); await p.waitForTimeout(250);
-    R.confirmation_avant_ajout = /Ajouter cette matière/.test(await p.locator('.dlg').textContent()) && await dans(p, function(){ return !state.matieres.some(function(m){ return m.nom === 'Crochet 0,5 mm'; }); });
     await p.click('.dlg [data-oui]'); await p.waitForTimeout(400);
     const out = await dans(p, function(){ var m = state.matieres.filter(function(x){ return x.nom === 'Crochet 0,5 mm'; })[0]; return m ? {cat:m.cat, d:m.diametre, t:m.typeOutil} : null; });
     R.crochet_ajoute = !!out && out.cat === 'outil' && out.d === 0.5 && out.t === 'crochet';
     const noms = async () => p.$$eval('#main table input[data-role="nom"]', xs => xs.map(x => x.value));
     R.outils_dans_la_liste = /Outils/.test(await p.locator('#main table').first().textContent()) && (await noms()).includes('Crochet 0,5 mm');
     /* 3. un fil avec son stock de départ en couleur */
+    await p.getByRole('button', {name:/Ajouter une matière/}).first().click(); await p.waitForTimeout(300);
     await p.selectOption('#nm-cat', 'fil'); await p.waitForTimeout(150);
     await p.fill('#nm-nom', 'Laine test 50 g'); await p.fill('#nm-prix', '2.7'); await p.fill('#nm-cont', '50');
     await p.fill('#nm-coul', 'jaune'); await p.fill('#nm-bain', '4821'); await p.fill('#nm-lots', '10');
-    await p.click('#nm-ajouter'); await p.waitForTimeout(250);
-    R.recap_stock_depart = /10 pelotes \(500 g\), couleur jaune · bain 4821/.test((await p.locator('.dlg').textContent()).replace(/ | /g,' '));
+    R.recap_stock_depart = /Stock de départ : 10 pelotes \(500 g\)/.test((await p.locator('.dlg').textContent()).replace(/ | /g,' '));
     await p.click('.dlg [data-oui]'); await p.waitForTimeout(400);
     const lt = await dans(p, function(){ var m = state.matieres.filter(function(x){ return x.nom === 'Laine test 50 g'; })[0]; window.__mid = m.id; return {s:m.stock, v:m.variantes.map(function(v){ return [v.coloris, v.bain, v.stock]; })}; });
     R.stock_par_couleur = lt.s === 500 && lt.v.length === 1 && lt.v[0][0] === 'jaune' && lt.v[0][1] === '4821' && lt.v[0][2] === 500;
