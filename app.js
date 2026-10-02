@@ -2086,10 +2086,10 @@ var focusApresRendu = false;
 var PROFILS = [
   {id:"amateur", nom:"Créateur ou créatrice amateur",
    d:"Je crochète pour le plaisir et je vends parfois une pièce. Pas de statut déclaré : pas de facture, pas de registres, seulement mes coûts, mes prix et mes ventes.",
-   profil:"vend", mode:"complet", pro:false, onglets:["accueil","creations","commandes","ventes","patrons","stock","indicateurs","reglages"]},
+   profil:"vend", mode:"complet", pro:false, onglets:["accueil","creations","catalogue","commandes","ventes","patrons","stock","indicateurs","reglages"]},
   {id:"pro", nom:"Artisan ou artisane pro",
    d:"Activité déclarée : prix conseillés, commandes, factures, seuils et registres, ventes sur les marchés ou en ligne.",
-   profil:"vend", mode:"complet", pro:true, onglets:["accueil","creations","commandes","ventes","patrons","stock","indicateurs","reglages"]}
+   profil:"vend", mode:"complet", pro:true, onglets:["accueil","creations","catalogue","commandes","ventes","patrons","stock","indicateurs","reglages"]}
 ];
 /* Anciens identifiants (V44) : on les ramène aux deux profils. */
 var PROFILS_ALIAS = {loisir:"amateur", quelques:"amateur", createur:"pro", artisan:"pro", marche:"pro"};
@@ -2131,8 +2131,10 @@ var TABS = [
   /* La mise en route et le catalogue s'ouvrent depuis l'Accueil ou une
      création : leur onglet n'apparaît que pendant qu'on y est. */
   {id:"demarrage",   nom:"Mise en route",  base:true, tantQueLa:true},
-  {id:"catalogue",   nom:"Catalogue",      base:true, tantQueLa:true},
   {id:"creations",   nom:"Mes créations",  base:true},
+  /* Le catalogue de modèles a sa place fixe depuis la V58.1 : c'est là qu'on
+     cherche l'inspiration, avec des fiches toutes prêtes. */
+  {id:"catalogue",   nom:"Catalogue",      base:true},
   {id:"fiche",       nom:"Fiche en cours", brouillon:true},
   {id:"commandes",   nom:"Commandes",      base:true},
   {id:"ventes",      nom:"Mes ventes",     base:true},
@@ -2292,13 +2294,13 @@ function renderSideBas(){
     z.appendChild(bloc);
   }
   var liens = el('<div class="side-liens"></div>');
-  var bN = el('<button type="button">Nouveautés' + (nouveautesNonVues() ? ' ·<span style="color:var(--warn);font-weight:700"> nouveau</span>' : '') + '</button>');
-  bN.addEventListener("click", function(){ dialogueNouveautes(); });
-  liens.appendChild(bN);
+  /* V58.1 : plus de lien « Nouveautés » ni de numéro de version à l'écran,
+     demandé par Karim : ces messages parlaient aux développeurs, pas aux
+     personnes qui crochètent. La version reste dans le courriel de
+     signalement, où elle aide à reproduire un problème. */
   var bA = el('<button type="button">Apparence</button>');
   bA.addEventListener("click", function(){ dialogueApparence(); });
   liens.appendChild(bA);
-  liens.appendChild(el('<span>' + esc(VERSION_APP) + '</span>'));
   z.appendChild(liens);
 }
 
@@ -3633,17 +3635,17 @@ function renderAccueil(main){
     '<p style="margin:10px 0 0" class="foot-liens"><a href="confidentialite.html" target="_blank" rel="noopener">Politique de confidentialité</a> · '+
     '<a href="cgv.html" target="_blank" rel="noopener">Conditions générales</a> · '+
     '<a href="mailto:bonjour@crochompte.com">Nous écrire</a> · '+
-    '<a href="' + esc(lienSignalement()) + '">Signaler un problème</a> · '+
-    '<a href="#" id="lien-nouveautes">Nouveautés' + (nouveautesNonVues() ? '<span class="nouv-pastille">Nouveau</span>' : '') + '</a></p>'+
+    '<a href="' + esc(lienSignalement()) + '">Signaler un problème</a></p>'+
     '<p style="margin:10px 0 0;font-size:12px">© 2026 Crochompte. Tous droits réservés.</p></footer>'));
-  var lnv = main.querySelector("#lien-nouveautes");
-  if (lnv) lnv.addEventListener("click", function(e){ e.preventDefault(); dialogueNouveautes(); });
 }
 
 
 /* ═════ NOUVEAUTÉS ET SIGNALEMENT ═════ */
-var VERSION_APP = "V58";
+var VERSION_APP = "V58.1";
 var NOUVEAUTES = [
+  {v:"V58.1", d:"Octobre 2026", l:[
+    "Le catalogue de modèles a maintenant sa place fixe dans le menu, juste après Mes créations : des fiches toutes prêtes pour trouver l'inspiration et démarrer en un clic."
+  ]},
   {v:"V58", d:"Octobre 2026", l:[
     "Nouvelle interface : les rubriques dans un menu à gauche sur ordinateur, une barre d'onglets en bas sur téléphone, et la recherche toujours en haut.",
     "Trois ambiances de couleurs (vert atelier, terre cuite, prune), chacune en clair ou en sombre : bouton Apparence en haut, ou Réglages › Apparence.",

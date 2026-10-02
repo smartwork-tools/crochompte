@@ -92,16 +92,14 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     R.aide_contextuelle = /Exemple/.test(await p.locator('.dlg').last().textContent());
     await p.keyboard.press('Escape'); await p.waitForTimeout(150); await p.keyboard.press('Escape'); await p.waitForTimeout(150);
     R.carte_a_verifier = /À vérifier/.test(await p.locator('.crea-card', {hasText:'Panier'}).textContent());
-    /* 8. thème, nouveautés, signalement, conflit */
+    /* 8. thème, signalement, conflit */
     const th = await dans(p, function(){ appliquerTheme('dark'); var a = document.documentElement.getAttribute('data-theme'); appliquerTheme('auto'); return [a, document.documentElement.getAttribute('data-theme')]; });
     R.theme = th[0] === 'dark' && th[1] === null;
     await dans(p, function(){ aller('accueil'); });
     await p.waitForTimeout(300);
-    R.pastille_nouveau = await p.locator('#lien-nouveautes .nouv-pastille').count() === 1;
+    /* V58.1 : plus aucun message de version à l'écran */
+    R.pas_de_message_de_version = await p.locator('#lien-nouveautes').count() === 0 && !/Nouveautés|V5\d/.test(await p.locator('#side, #main').allTextContents().then(t => t.join(' ')));
     R.signaler_un_probleme = /mailto:bonjour@crochompte\.com\?subject=.*V5[0-9]/.test(await p.locator('a', {hasText:'Signaler un problème'}).getAttribute('href'));
-    await p.click('#lien-nouveautes'); await p.waitForTimeout(250);
-    R.nouveautes = /Ce qui a changé/.test(await p.locator('.dlg').textContent()) && await dans(p, function(){ return /^V5[0-9](\.\d+)?$/.test(state.reglages.nouveautesVues); });
-    await p.click('.dlg [data-oui]'); await p.waitForTimeout(250);
     await dans(p, function(){ window.CrochomptePont.conflit(Date.now() - 3600000); });
     await p.waitForTimeout(200);
     R.conflit_visible_partout = await p.locator('#main .bandeau-global').count() === 1;

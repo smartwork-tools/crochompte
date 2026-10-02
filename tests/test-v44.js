@@ -33,7 +33,7 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     R.question_accueil = (await p.locator('.profil-accueil .profil-carte').count()) === 2 && (await p.locator('.dlg-fond').count()) === 0 && /amateur ou en pro/.test(await p.textContent('.profil-accueil'));
     await p.click('.profil-carte[data-p="amateur"]'); await p.getByRole('button', {name:"C'est moi"}).click(); await p.waitForTimeout(400);
     const tabs = await p.$$eval('#nav button', bs => bs.map(b => b.textContent.trim()));
-    R.onglets_amateur = tabs.join(',') === 'Accueil,Mes créations,Commandes,Mes ventes,Mes patrons,Matières,Mes chiffres,Réglages';
+    R.onglets_amateur = tabs.join(',') === 'Accueil,Mes créations,Catalogue,Commandes,Mes ventes,Mes patrons,Matières,Mes chiffres,Réglages';
     R.profil_applique = await dans(p, function(){ return state.reglages.profilType === 'amateur' && state.reglages.profil === 'vend' && state.reglages.mode === 'complet' && state.reglages.statut === 'non_declare' && !estPro(); });
     R.question_disparue = (await p.locator('.profil-accueil').count()) === 0;
 
@@ -64,9 +64,9 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     await dans(p, function(){ allerOnglet('indicateurs'); }); await p.waitForTimeout(300);
     R.pro_registres = /Tes registres/.test(await p.textContent('#main')) && /Tes seuils/.test(await p.textContent('#main'));
 
-    /* 4. onglets pro, catalogue et mise en route seulement pendant qu'on y est */
+    /* 4. onglets pro ; le catalogue a sa place fixe (V58.1), la mise en route seulement pendant qu'on y est */
     const tabs2 = (await p.$$eval('#nav button', bs => bs.map(b => b.textContent.trim()))).filter(x => !/^Fiche/.test(x));
-    R.onglets_pro = tabs2.indexOf('Commandes') >= 0 && tabs2.indexOf('Mes ventes') >= 0 && tabs2.indexOf('Catalogue') < 0 && tabs2.indexOf('Mise en route') < 0 && tabs2.length === 8;
+    R.onglets_pro = tabs2.indexOf('Commandes') >= 0 && tabs2.indexOf('Mes ventes') >= 0 && tabs2.indexOf('Catalogue') >= 0 && tabs2.indexOf('Mise en route') < 0 && tabs2.length === 9;
     await dans(p, function(){ view.modeleVu = 'bonnet'; aller('catalogue', {garderVue:true}); }); await p.waitForTimeout(300);
     R.onglet_catalogue_visible_pendant = (await p.$$eval('#nav button', bs => bs.map(b => b.textContent.trim()))).indexOf('Catalogue') >= 0;
 
