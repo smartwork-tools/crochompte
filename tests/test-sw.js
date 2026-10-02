@@ -35,7 +35,7 @@ function serveur(port){
   R.en_cache = await p.evaluate(async ()=>{
     const k = await caches.keys(); if (!k.length) return [];
     const c = await caches.open(k[0]);
-    const l = ['index.html','boot.js?v=57','pdf.js?v=57','app.js?v=57','sync.js?v=57','vendor/supabase/supabase.min.mjs'];
+    const l = ['index.html','boot.js?v=58','pdf.js?v=58','app.js?v=58','sync.js?v=58','vendor/supabase/supabase.min.mjs'];
     const ok = await Promise.all(l.map(u=>c.match(u).then(r=>!!r)));
     return ok.every(Boolean);
   });

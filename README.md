@@ -18,7 +18,7 @@ appareil à l'autre.
 | `boot.js` | ce qui démarre avant tout (anti-cadre, thème) |
 | `app.js` | l'application elle-même (calculs, écrans). Voir « Carte du code » plus bas |
 | `sync.js` | comptes, synchronisation, abonnement. **Facultatif** (sans `config.js`, rien ne part nulle part) |
-| `pdf.js` | fabrique les factures et avoirs en vrai PDF (écriture directe du fichier, sans bibliothèque) |
+| `pdf.js` | fabrique les documents en vrai PDF : factures, avoirs, devis, bons de commande et de livraison, relevé mensuel (écriture directe du fichier, sans bibliothèque) |
 | `sw.js` | copie de l'application sur l'appareil, pour l'ouvrir sans réseau |
 | `config.js` / `config.example.js` | adresse du projet Supabase, clé publique, liens de paiement. Public et versionné |
 | `manifest.webmanifest`, `icones/`, `polices/` | « Ajouter à l'écran d'accueil », icônes, polices (licence SIL OFL) |

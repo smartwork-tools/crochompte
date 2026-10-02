@@ -32,7 +32,7 @@ async function connecter(p){
     R.purge_pieces = s1.pieces.length === 1 && s1.pieces[0].id === "p1";
     const dk = s1.matieres.find(m=>m.id==="coton_dk");
     R.purge_achats = dk.mouv.length === 0 && dk.stock === 0;
-    R.accueil_malgre_vuAccueil = (await p.textContent('#nav [aria-current="true"]')).trim() === 'Accueil';
+    R.accueil_malgre_vuAccueil = (await p.textContent('#nav [aria-current="true"]')).replace(/\d+$/, '').trim() === 'Accueil';
     await p.close();
 
     // 2. Accueil : points à traiter calculés sur les vraies données
@@ -51,7 +51,7 @@ async function connecter(p){
       s.matieres[0].seuil = 500; s.matieres[0].stock = 10;
       window.CrochomptePont.ecrire(s);
     });
-    await p.click('#brand'); await p.waitForTimeout(300);
+    await p.locator('.brand:visible').first().click(); await p.waitForTimeout(300);
     const todo = await p.textContent('.todo');
     R.todo_retard = todo.includes('1 commande en retard') && todo.includes('Alice');
     R.todo_bientot = todo.includes('à remettre dans les 7 jours') && todo.includes('Bea');
@@ -67,16 +67,16 @@ async function connecter(p){
     await p.locator('.crea-id').first().click(); await p.waitForTimeout(300);
     R.fiche_ouverte = (await p.textContent('#nav [aria-current="true"]')).includes('Création');
     await p.goBack(); await p.waitForTimeout(400);
-    R.precedent_revient_liste = (await p.textContent('#nav [aria-current="true"]')).trim() === 'Mes créations';
+    R.precedent_revient_liste = (await p.textContent('#nav [aria-current="true"]')).replace(/\d+$/, '').trim() === 'Mes créations';
     await p.goBack(); await p.waitForTimeout(400);
-    R.precedent_revient_accueil = (await p.textContent('#nav [aria-current="true"]')).trim() === 'Accueil';
+    R.precedent_revient_accueil = (await p.textContent('#nav [aria-current="true"]')).replace(/\d+$/, '').trim() === 'Accueil';
     await p.goForward(); await p.waitForTimeout(300);
-    R.suivant_fonctionne = (await p.textContent('#nav [aria-current="true"]')).trim() === 'Mes créations';
+    R.suivant_fonctionne = (await p.textContent('#nav [aria-current="true"]')).replace(/\d+$/, '').trim() === 'Mes créations';
 
     // 4. Quitter une fiche modifiée : confirmation
     await p.locator('.crea-id').first().click(); await p.waitForTimeout(300);
     await p.click('.savebar button:has-text("Fermer")'); await p.waitForTimeout(400);
-    R.fermer_sans_modif_direct = (await p.textContent('#nav [aria-current="true"]')).trim() === 'Mes créations' && !(await p.isVisible('.dlg'));
+    R.fermer_sans_modif_direct = (await p.textContent('#nav [aria-current="true"]')).replace(/\d+$/, '').trim() === 'Mes créations' && !(await p.isVisible('.dlg'));
     await p.locator('.crea-id').first().click(); await p.waitForTimeout(300);
     const champNom = p.locator('#main input[type=text]').first();
     await champNom.fill('Nom modifié'); await p.waitForTimeout(150);
@@ -106,7 +106,7 @@ async function connecter(p){
     R.zero_debloque = !(await p.isDisabled('.dlg [data-oui]'));
     await p.click('.dlg [data-oui]'); await p.waitForTimeout(700);
     R.zero_fait = await p.evaluate(()=> window.CrochomptePont.lire().creations.length === 0 && window.CrochomptePont.lire().commandes.length === 0);
-    R.zero_retour_accueil = (await p.textContent('#nav [aria-current="true"]')).trim() === 'Accueil';
+    R.zero_retour_accueil = (await p.textContent('#nav [aria-current="true"]')).replace(/\d+$/, '').trim() === 'Accueil';
 
     // 7. Déconnexion : l'atelier quitte le navigateur
     await graine(p);
@@ -133,7 +133,7 @@ async function connecter(p){
     await p.click('.toast button:has-text("Annuler")'); await p.waitForTimeout(250);
     R.piece_restauree = await p.evaluate(()=> window.CrochomptePont.lire().pieces.length === 1);
     R.pas_de_debordement = await p.evaluate(()=> document.documentElement.scrollWidth <= window.innerWidth + 1);
-    await p.click('#brand'); await p.waitForTimeout(300);
+    await p.locator('.brand:visible').first().click(); await p.waitForTimeout(300);
     await p.screenshot({path:require('path').join(__dirname,'captures','accueil-tel.png'), fullPage:true});
     await p.close();
 

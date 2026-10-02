@@ -194,22 +194,40 @@ function creer(opts){
    total, versements, solde, mentions…). fmt : {eur(n), date(iso)} fournis par
    l'application, pour écrire les montants et les dates comme partout ailleurs. */
 var ENCRE = [0.08, 0.09, 0.1], GRIS = [0.36, 0.4, 0.38], CLAIR = [0.85, 0.88, 0.85], VERT = [0.06, 0.32, 0.2], ROUGE = [0.7, 0.13, 0.2];
-function facture(F, fmt, meta){
+/* Les cinq documents d'une commande partagent la même mise en page : une
+   facture, un avoir, un devis, un bon de commande, un bon de livraison. Ce
+   qui change : le titre, les dates utiles, le bloc de droite, les colonnes
+   de prix (absentes d'un bon de livraison) et les mentions (V58). */
+var TYPES_DOC = {
+  facture:   {titre:"FACTURE",          nom:"Facture",          parties:"FACTURÉ À",   prix:true},
+  avoir:     {titre:"AVOIR",            nom:"Avoir",            parties:"ÉTABLI POUR", prix:true},
+  devis:     {titre:"DEVIS",            nom:"Devis",            parties:"DEVIS POUR",  prix:true},
+  commande:  {titre:"BON DE COMMANDE",  nom:"Bon de commande",  parties:"COMMANDÉ PAR", prix:true},
+  livraison: {titre:"BON DE LIVRAISON", nom:"Bon de livraison", parties:"LIVRÉ À",     prix:false}
+};
+function documentPdf(F, fmt, meta){
   meta = meta || {};
-  var avoir = F.type === "avoir";
-  var doc = creer({titre: (avoir ? "Avoir " : "Facture ") + (F.numero || ""), auteur: (F.vendeur && F.vendeur.nom) || ""});
+  var type = TYPES_DOC[F.type] ? F.type : "facture", T = TYPES_DOC[type];
+  var avoir = type === "avoir", facture = type === "facture", devis = type === "devis", bon = type === "commande", livraison = type === "livraison";
+  var doc = creer({titre: T.nom + " " + (F.numero || ""), auteur: (F.vendeur && F.vendeur.nom) || ""});
   var M = 46, W = doc.L, D = W - M, bas = doc.H - 62;
   var eur = fmt.eur, date = fmt.date;
   var y = 52;
 
   /* — En-tête : le document à gauche, le vendeur à droite — */
-  doc.texte(M, y + 6, avoir ? "AVOIR" : "FACTURE", {taille: 8.5, gras: true, couleur: GRIS, espacement: 1.4});
+  doc.texte(M, y + 6, T.titre, {taille: 8.5, gras: true, couleur: GRIS, espacement: 1.4});
   doc.texte(M, y + 34, F.numero || "", {taille: 23, gras: true});
   var yl = y + 54, dates = [];
-  dates.push((avoir ? "Émis le " : "Émise le ") + date(F.emiseLe));
+  if (facture) dates.push("Émise le " + date(F.emiseLe));
+  else if (avoir) dates.push("Émis le " + date(F.emiseLe));
+  else dates.push("Établi le " + date(F.emiseLe));
   if (avoir && F.ref) dates.push("Annule la facture n° " + F.ref + (F.refLe ? " du " + date(F.refLe) : ""));
-  if (!avoir && F.dateVente) dates.push("Date de la vente : " + date(F.dateVente));
-  if (F.commandeNum) dates.push("Commande n° " + F.commandeNum);
+  if (facture && F.dateVente) dates.push("Date de la vente : " + date(F.dateVente));
+  if (devis && F.validite) dates.push("Valable jusqu'au " + date(F.validite));
+  if (bon && F.accordLe) dates.push("Accord reçu le " + date(F.accordLe));
+  if ((devis || bon) && F.livraisonLe) dates.push((devis ? "Livraison souhaitée le " : "Livraison prévue le ") + date(F.livraisonLe));
+  if (livraison && F.livreLe) dates.push("Livré le " + date(F.livreLe));
+  if (F.commandeNum && !bon) dates.push("Commande n° " + F.commandeNum);
   if (F.refClient) dates.push("Votre bon de commande : " + F.refClient);
   dates.forEach(function(t){ doc.texte(M, yl, t, {taille: 9, couleur: GRIS}); yl += 13; });
 
@@ -229,27 +247,39 @@ function facture(F, fmt, meta){
 
   /* — Les deux parties — */
   var C = F.client || {}, colB = M + 292, yA = y + 8, yB = y + 8;
-  doc.texte(M, yA, avoir ? "ÉTABLI POUR" : "FACTURÉ À", {taille: 7.5, gras: true, couleur: GRIS, espacement: 1.1}); yA += 16;
+  doc.texte(M, yA, T.parties, {taille: 7.5, gras: true, couleur: GRIS, espacement: 1.1}); yA += 16;
   doc.texte(M, yA, C.nom || "—", {taille: 11.5, gras: true}); yA += 15;
   [C.adresse, C.siren ? "SIREN " + C.siren : "", F.livraison ? "Livraison : " + F.livraison : "", C.contact].forEach(function(t){
     if (!t) return;
     couper(t, 250, 9.5, false).forEach(function(l){ doc.texte(M, yA, l, {taille: 9.5, couleur: GRIS}); yA += 13; });
   });
-  if (!avoir){
+  if (facture || bon){
     doc.texte(colB, yB, "RÈGLEMENT", {taille: 7.5, gras: true, couleur: GRIS, espacement: 1.1}); yB += 16;
-    doc.texte(colB, yB, F.solde > 0 ? eur(F.solde) + " à régler" : "Réglée", {taille: 11.5, gras: true}); yB += 15;
-    doc.texte(colB, yB, F.solde > 0 ? "à réception de la facture" : "Merci, tout est réglé.", {taille: 9.5, couleur: GRIS}); yB += 13;
+    doc.texte(colB, yB, F.solde > 0 ? eur(F.solde) + (bon ? " restent à régler" : " à régler") : "Réglée", {taille: 11.5, gras: true}); yB += 15;
+    doc.texte(colB, yB, F.solde > 0 ? (bon ? "à la livraison" : "à réception de la facture") : "Merci, tout est réglé.", {taille: 9.5, couleur: GRIS}); yB += 13;
+  } else if (devis){
+    doc.texte(colB, yB, "POUR ACCEPTER", {taille: 7.5, gras: true, couleur: GRIS, espacement: 1.1}); yB += 16;
+    doc.texte(colB, yB, F.acompteDemande > 0 ? "Acompte de " + eur(F.acompteDemande) : "Un accord écrit suffit", {taille: 11.5, gras: true}); yB += 15;
+    couper(F.acompteDemande > 0 ? "à la commande, le reste à la livraison." : "par message ou par mail : la fabrication commence ensuite.", 230, 9.5, false)
+      .forEach(function(l){ doc.texte(colB, yB, l, {taille: 9.5, couleur: GRIS}); yB += 13; });
+  } else if (livraison){
+    var nArt = (F.lignes || []).reduce(function(s, l){ return s + (Number(l.q) || 0); }, 0);
+    doc.texte(colB, yB, "CONTENU", {taille: 7.5, gras: true, couleur: GRIS, espacement: 1.1}); yB += 16;
+    doc.texte(colB, yB, nArt + (nArt > 1 ? " articles" : " article"), {taille: 11.5, gras: true}); yB += 15;
+    doc.texte(colB, yB, "à vérifier à la réception", {taille: 9.5, couleur: GRIS}); yB += 13;
   }
   y = Math.max(yA, yB) + 20;
 
   /* — Le tableau — */
-  var xMont = D, xPU = D - 96, xQte = xPU - 92, largDes = xQte - 40 - M;
+  var xMont = D, xPU = D - 96, xQte = T.prix ? xPU - 92 : D, largDes = xQte - 40 - M;
   function enteteTableau(){
     var o = {taille: 7.5, gras: true, couleur: GRIS, espacement: 1};
     doc.texte(M, y, "DÉSIGNATION", o);
     doc.texte(xQte, y, "QTÉ", {taille: 7.5, gras: true, couleur: GRIS, espacement: 1, align: "r"});
-    doc.texte(xPU, y, "PRIX UNITAIRE", {taille: 7.5, gras: true, couleur: GRIS, espacement: 1, align: "r"});
-    doc.texte(xMont, y, "MONTANT", {taille: 7.5, gras: true, couleur: GRIS, espacement: 1, align: "r"});
+    if (T.prix){
+      doc.texte(xPU, y, "PRIX UNITAIRE", {taille: 7.5, gras: true, couleur: GRIS, espacement: 1, align: "r"});
+      doc.texte(xMont, y, "MONTANT", {taille: 7.5, gras: true, couleur: GRIS, espacement: 1, align: "r"});
+    }
     doc.filet(M, y + 7, D, y + 7, {ep: 0.8});
     y += 7;
   }
@@ -261,43 +291,55 @@ function facture(F, fmt, meta){
     var yy = y + 10 + 9;
     des.forEach(function(t, i){ doc.texte(M, yy + i * 13, t, {taille: 10}); });
     doc.texte(xQte, yy, String(l.q || 1), {taille: 10, align: "r"});
-    doc.texte(xPU, yy, eur(l.pu !== undefined ? l.pu : l.m), {taille: 10, align: "r"});
-    doc.texte(xMont, yy, eur(l.m), {taille: 10, align: "r"});
-    det.forEach(function(t, i){ doc.texte(M, yy + des.length * 13 - 13 + 13 + i * 11.5, t, {taille: 8.5, couleur: GRIS}); });
+    if (T.prix){
+      doc.texte(xPU, yy, eur(l.pu !== undefined ? l.pu : l.m), {taille: 10, align: "r"});
+      doc.texte(xMont, yy, eur(l.m), {taille: 10, align: "r"});
+    }
+    det.forEach(function(t, i){ doc.texte(M, yy + des.length * 13 + i * 11.5, t, {taille: 8.5, couleur: GRIS}); });
     y += h;
     doc.filet(M, y, D, y, {ep: 0.5, couleur: CLAIR});
   });
 
   /* — Les totaux (gardés ensemble) — */
-  var vers = F.versements || [];
-  var hTot = 40 + vers.length * 17 + (!avoir && vers.length ? 30 : 0);
-  if (y + hTot > bas){ doc.nouvellePage(); y = 56; }
-  y += 6;
-  doc.filet(M, y, D, y, {ep: 1.4});
-  y += 22;
-  doc.texte(M, y, "Total" + (F.franchise ? "" : " TTC"), {taille: 12.5, gras: true});
-  doc.texte(xMont, y, eur(F.total), {taille: 12.5, gras: true, align: "r"});
-  vers.forEach(function(v){
-    y += 18;
-    doc.texte(M, y, v.lib + (v.date ? " le " + date(v.date) : ""), {taille: 9.5, couleur: GRIS});
-    doc.texte(xMont, y, (v.m < 0 ? "+ " : "– ") + eur(Math.abs(v.m)), {taille: 9.5, couleur: GRIS, align: "r"});
-  });
-  if (!avoir && vers.length){
-    y += 8; doc.filet(xQte - 90, y, D, y, {ep: 0.5, couleur: CLAIR}); y += 20;
-    doc.texte(M, y, "Reste à régler", {taille: 13.5, gras: true, couleur: VERT});
-    doc.texte(xMont, y, eur(F.solde), {taille: 13.5, gras: true, couleur: VERT, align: "r"});
+  if (T.prix){
+    var vers = (F.versements || []).slice();
+    if (devis && F.acompteDemande > 0) vers = [{lib: "Acompte à la commande", m: F.acompteDemande, prevu: true}];
+    var avecReste = (facture || bon || devis) && vers.length;
+    var hTot = 40 + vers.length * 17 + (avecReste ? 30 : 0);
+    if (y + hTot > bas){ doc.nouvellePage(); y = 56; }
+    y += 6;
+    doc.filet(M, y, D, y, {ep: 1.4});
+    y += 22;
+    doc.texte(M, y, "Total" + (F.franchise ? "" : " TTC"), {taille: 12.5, gras: true});
+    doc.texte(xMont, y, eur(F.total), {taille: 12.5, gras: true, align: "r"});
+    vers.forEach(function(v){
+      y += 18;
+      doc.texte(M, y, v.lib + (v.date ? " le " + date(v.date) : ""), {taille: 9.5, couleur: GRIS});
+      doc.texte(xMont, y, (v.m < 0 ? "+ " : "– ") + eur(Math.abs(v.m)), {taille: 9.5, couleur: GRIS, align: "r"});
+    });
+    if (avecReste){
+      y += 8; doc.filet(xQte - 90, y, D, y, {ep: 0.5, couleur: CLAIR}); y += 20;
+      var resteV = devis ? Math.max(0, F.total - F.acompteDemande) : F.solde;
+      doc.texte(M, y, devis ? "Reste à la livraison" : bon ? "Reste à régler à la livraison" : "Reste à régler", {taille: 13.5, gras: true, couleur: VERT});
+      doc.texte(xMont, y, eur(resteV), {taille: 13.5, gras: true, couleur: VERT, align: "r"});
+    }
+    y += 30;
+  } else {
+    y += 26;
   }
-  y += 30;
 
-  /* — Mentions légales — */
+  /* — Mentions — */
   var m = [];
-  if (F.nature) m.push([{t: "Nature de l'opération : ", b: true}, {t: F.nature + "."}]);
-  if (F.franchise) m.push([{t: "TVA non applicable", b: true}, {t: ", article 293 B du code général des impôts."}]);
+  if (F.nature && (facture || avoir)) m.push([{t: "Nature de l'opération : ", b: true}, {t: F.nature + "."}]);
+  if (devis) m.push([{t: "Devis gratuit", b: true}, {t: (F.validite ? ", valable jusqu'au " + date(F.validite) : "") + ". Les prix sont fermes pendant sa durée de validité. Pour accepter, réponds par écrit (message ou mail)" + (F.acompteDemande > 0 ? " et verse l'acompte indiqué : la fabrication commence ensuite." : " : la fabrication commence ensuite.")}]);
+  if (bon) m.push([{t: "Bon de commande. ", b: true}, {t: "Il récapitule ce qui est convenu" + (F.accordLe ? " depuis l'accord du " + date(F.accordLe) : "") + ". La facture sera établie à la livraison."}]);
+  if (livraison) m.push([{t: "À la réception, ", b: true}, {t: "merci de vérifier le contenu et de signaler toute réserve sous 48 heures. La facture est établie séparément."}]);
+  if (F.franchise && T.prix) m.push([{t: "TVA non applicable", b: true}, {t: ", article 293 B du code général des impôts."}]);
   if (avoir) m.push([{t: "Avoir", b: true}, {t: " annulant la facture n° " + (F.ref || "") + " pour la totalité de son montant."}]);
-  if (F.personnalisee && !F.clientePro) m.push([{t: "Pas de droit de rétractation. ", b: true}, {t: "Article confectionné selon les spécifications demandées : conformément à l'article L221-28 du code de la consommation, il n'ouvre pas de droit de rétractation."}]);
-  if (!avoir && F.arrhes) m.push([{t: "Arrhes. ", b: true}, {t: "Les sommes versées à la commande ont la nature d'arrhes au sens de l'article L214-1 du code de la consommation : la partie qui achète peut se dédire en les perdant, la partie qui vend en restituant le double."}]);
-  else if (!avoir && F.acompte) m.push([{t: "Acompte. ", b: true}, {t: "Les sommes versées à la commande ont la nature d'acompte : la vente est ferme et définitive pour les deux parties."}]);
-  if (!avoir && F.clientePro) m.push([{t: "Retard de paiement. ", b: true}, {t: "Pénalités au taux de trois fois l'intérêt légal en vigueur. Indemnité forfaitaire pour frais de recouvrement : 40 €. Pas d'escompte pour paiement anticipé."}]);
+  if (F.personnalisee && !F.clientePro && !livraison) m.push([{t: "Pas de droit de rétractation. ", b: true}, {t: "Article confectionné selon les spécifications demandées : conformément à l'article L221-28 du code de la consommation, il n'ouvre pas droit à rétractation."}]);
+  if ((facture || bon) && F.arrhes) m.push([{t: "Arrhes. ", b: true}, {t: "Les sommes versées à la commande ont la nature d'arrhes au sens de l'article L214-1 du code de la consommation : la partie qui achète peut se dédire en les perdant, la partie qui vend en les restituant au double."}]);
+  else if ((facture || bon) && F.acompte) m.push([{t: "Acompte. ", b: true}, {t: "Les sommes versées à la commande ont la nature d'acompte : la vente est ferme et définitive pour les deux parties."}]);
+  if (facture && F.clientePro) m.push([{t: "Retard de paiement. ", b: true}, {t: "Pénalités au taux de trois fois l'intérêt légal en vigueur. Indemnité forfaitaire pour frais de recouvrement : 40 €. Pas d'escompte pour paiement anticipé."}]);
   var premiere = true;
   m.forEach(function(par){
     var yFin = doc.paragraphe(par, M, y, D - M, {taille: 8, interligne: 11.2, mesure: true});
@@ -305,12 +347,89 @@ function facture(F, fmt, meta){
     if (premiere){ doc.filet(M, y - 12, D, y - 12, {ep: 0.5, couleur: CLAIR}); premiere = false; }
     y = doc.paragraphe(par, M, y, D - M, {taille: 8, interligne: 11.2, couleur: [0.25, 0.28, 0.26]}) + 6;
   });
+  /* Le bon de livraison se signe à la remise. */
+  if (livraison){
+    if (y + 70 > bas){ doc.nouvellePage(); y = 56; }
+    y += 18;
+    doc.texte(M, y, "Reçu le ______ / ______ / __________", {taille: 9.5, couleur: GRIS});
+    doc.texte(colB, y, "Signature", {taille: 9.5, couleur: GRIS});
+    doc.rect(colB, y + 8, D - colB, 46, {bord: CLAIR, ep: 0.8});
+  }
 
-  var nomDoc = (avoir ? "Avoir " : "Facture ") + (F.numero || "");
+  var nomDoc = T.nom + " " + (F.numero || "");
   return doc.fin(function(d, i, n){
     d.texte(W / 2, d.H - 30, (V.nom ? V.nom + " · " : "") + nomDoc + (n > 1 ? " · page " + i + "/" + n : ""), {taille: 7.5, couleur: [0.5, 0.54, 0.52], align: "c"});
   });
 }
+/* Compatibilité : « facture » reste le nom historique. */
+function facture(F, fmt, meta){ return documentPdf(F, fmt, meta); }
 
-window.CrochomptePdf = {creer: creer, facture: facture, largeur: largeur, couper: couper, octet: octet};
+/* ── Le relevé mensuel (V58) : un mois d'activité sur une page, pour sa
+   comptabilité ou sa déclaration. R = {mois, annee, vendeur, recettes:[{d, lib, m}],
+   achats:[{d, lib, m}], totalRecettes, totalAchats, resultat, statut, mentions:[]} ── */
+function releve(R, fmt){
+  var doc = creer({titre: "Relevé " + R.titreMois, auteur: (R.vendeur && R.vendeur.nom) || ""});
+  var M = 46, W = doc.L, D = W - M, bas = doc.H - 62, eur = fmt.eur, date = fmt.date;
+  var y = 52;
+  doc.texte(M, y + 6, "RELEVÉ MENSUEL", {taille: 8.5, gras: true, couleur: GRIS, espacement: 1.4});
+  doc.texte(M, y + 34, R.titreMois, {taille: 23, gras: true});
+  doc.texte(M, y + 54, "Établi le " + date(R.etabliLe), {taille: 9, couleur: GRIS});
+  var V = R.vendeur || {}, yr = y + 6;
+  couper(V.nom || "", 235, 12.5, true).forEach(function(t){ doc.texte(D, yr + 8, t, {taille: 12.5, gras: true, align: "r"}); yr += 15; });
+  yr += 3;
+  if (V.adresse) couper(V.adresse, 235, 9.5, false).forEach(function(t){ doc.texte(D, yr + 8, t, {taille: 9.5, align: "r", couleur: [0.2, 0.22, 0.21]}); yr += 13; });
+  if (V.siret){ doc.texte(D, yr + 8, "SIRET " + V.siret, {taille: 9.5, align: "r", couleur: [0.2, 0.22, 0.21]}); yr += 13; }
+  y = Math.max(y + 68, yr) + 8;
+  doc.filet(M, y, D, y, {ep: 1.4});
+  y += 24;
+  /* Les trois chiffres */
+  var tiers = (D - M) / 3;
+  [["RECETTES ENCAISSÉES", eur(R.totalRecettes), VERT], ["ACHATS DE MATIÈRES", eur(R.totalAchats), ENCRE], ["RÉSULTAT DU MOIS", eur(R.resultat), R.resultat < 0 ? ROUGE : VERT]].forEach(function(t, i){
+    var x = M + i * tiers;
+    doc.texte(x, y, t[0], {taille: 7.5, gras: true, couleur: GRIS, espacement: 1});
+    doc.texte(x, y + 22, t[1], {taille: 17, gras: true, couleur: t[2]});
+  });
+  y += 46;
+  doc.filet(M, y, D, y, {ep: 0.5, couleur: CLAIR});
+  y += 22;
+  function section(titre, lignes, total, vide){
+    doc.texte(M, y, titre, {taille: 10.5, gras: true}); y += 10;
+    doc.texte(M, y + 6, "DATE", {taille: 7.5, gras: true, couleur: GRIS, espacement: 1});
+    doc.texte(M + 70, y + 6, "LIBELLÉ", {taille: 7.5, gras: true, couleur: GRIS, espacement: 1});
+    doc.texte(D, y + 6, "MONTANT", {taille: 7.5, gras: true, couleur: GRIS, espacement: 1, align: "r"});
+    doc.filet(M, y + 13, D, y + 13, {ep: 0.8}); y += 13;
+    if (!lignes.length){ y += 18; doc.texte(M, y, vide, {taille: 9.5, couleur: GRIS}); y += 6; }
+    lignes.forEach(function(l){
+      var des = couper(l.lib || "", D - M - 70 - 100, 9.5, false);
+      var h = 8 + des.length * 12.5 + 6;
+      if (y + h > bas){ doc.nouvellePage(); y = 56; }
+      var yy = y + 8 + 9;
+      doc.texte(M, yy, date(l.d), {taille: 9.5, couleur: GRIS});
+      des.forEach(function(t, i){ doc.texte(M + 70, yy + i * 12.5, t, {taille: 9.5}); });
+      doc.texte(D, yy, eur(l.m), {taille: 9.5, align: "r"});
+      y += h;
+      doc.filet(M, y, D, y, {ep: 0.5, couleur: CLAIR});
+    });
+    if (y + 30 > bas){ doc.nouvellePage(); y = 56; }
+    y += 18;
+    doc.texte(M, y, "Total", {taille: 10.5, gras: true});
+    doc.texte(D, y, eur(total), {taille: 10.5, gras: true, align: "r"});
+    y += 30;
+  }
+  section("Recettes encaissées", R.recettes || [], R.totalRecettes, "Aucune recette encaissée ce mois-ci.");
+  section("Achats de matières", R.achats || [], R.totalAchats, "Aucun achat noté ce mois-ci.");
+  var premiere = true;
+  (R.mentions || []).forEach(function(txt){
+    var par = [{t: txt}];
+    var yFin = doc.paragraphe(par, M, y, D - M, {taille: 8, interligne: 11.2, mesure: true});
+    if (yFin + 6 > bas){ doc.nouvellePage(); y = 56; premiere = false; }
+    if (premiere){ doc.filet(M, y - 12, D, y - 12, {ep: 0.5, couleur: CLAIR}); premiere = false; }
+    y = doc.paragraphe(par, M, y, D - M, {taille: 8, interligne: 11.2, couleur: [0.25, 0.28, 0.26]}) + 6;
+  });
+  return doc.fin(function(d, i, n){
+    d.texte(W / 2, d.H - 30, (V.nom ? V.nom + " · " : "") + "Relevé " + R.titreMois + (n > 1 ? " · page " + i + "/" + n : ""), {taille: 7.5, couleur: [0.5, 0.54, 0.52], align: "c"});
+  });
+}
+
+window.CrochomptePdf = {creer: creer, facture: facture, document: documentPdf, releve: releve, largeur: largeur, couper: couper, octet: octet};
 })();

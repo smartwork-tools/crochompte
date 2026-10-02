@@ -15,6 +15,9 @@
   try{
     var t = localStorage.getItem("crochompte-theme");
     if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    /* L'ambiance de couleurs (V58), appliquée elle aussi avant le premier affichage. */
+    var p = localStorage.getItem("crochompte-palette");
+    if (p === "terre" || p === "prune") document.documentElement.setAttribute("data-pal", p);
   }catch(e){}
   /* config.js absent : mode local, sans compte. Le script est facultatif. */
   var cfgScript = document.querySelector('script[src^="config.js"]');

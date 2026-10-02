@@ -35,7 +35,7 @@ const path = require('path');
   await p.screenshot({path:require('path').join(__dirname,'captures','patron-fiche.png'), clip:{x:0,y:100,width:1200,height:700}});
   // « Ajouter un nouveau patron »
   await p.selectOption('#f-patron', '__nouveau'); await p.waitForTimeout(500);
-  R.nouveau_ouvre_fenetre_sans_quitter_la_fiche = (await p.isVisible('.dlg')) && (await p.textContent('#nav [aria-current="true"]')).trim().startsWith('Création');
+  R.nouveau_ouvre_fenetre_sans_quitter_la_fiche = (await p.isVisible('.dlg')) && (await p.textContent('#nav [aria-current="true"]')).replace(/\d+$/, '').trim().startsWith('Création');
   R.nouveau_ne_cree_rien_avant_validation = await p.evaluate(()=> { const s=window.CrochomptePont.lire(); return s.patrons.length === 1; });
   R.erreurs = errs;
   console.log(JSON.stringify(R,null,1));

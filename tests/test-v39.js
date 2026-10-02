@@ -48,9 +48,9 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
 
     /* 2. L'onglet de la fiche porte le nom de la création */
     await dans(p, function(){ ouvrirFiche('c1'); }); await p.waitForTimeout(200);
-    R.onglet_fiche_nomme = (await p.textContent('#nav [aria-current="true"]')).trim() === 'Création : Lapin Céleste' && /Création : « Lapin Céleste »/.test(await p.textContent('#main h1'));
+    R.onglet_fiche_nomme = (await p.textContent('#nav [aria-current="true"]')).replace(/\d+$/, '').trim() === 'Création : Lapin Céleste' && /Création : « Lapin Céleste »/.test(await p.textContent('#main h1'));
     await dans(p, function(){ nouvelleFiche('vide'); }); await p.waitForTimeout(200);
-    R.onglet_nouvelle_fiche = (await p.textContent('#nav [aria-current="true"]')).trim() === 'Nouvelle création';
+    R.onglet_nouvelle_fiche = (await p.textContent('#nav [aria-current="true"]')).replace(/\d+$/, '').trim() === 'Nouvelle création';
     await dans(p, function(){ view.draft = null; oublierBrouillon(); });
 
     /* 3. Mes créations : une carte par création, ses pièces dessous, avec le coût réel */
@@ -124,14 +124,14 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     /* 8. Accueil : ce mois-ci en chiffres, et « Reprendre » */
     await dans(p, function(){ piece('pa').termineLe = Date.now(); piece('pa').sessions = [{d: Date.now(), poste:'crochet', min: 90}]; sauverTout(); aller('accueil'); });
     await p.waitForTimeout(300);
-    const h8 = await p.textContent('.acc-hero h1');
-    R.accueil_encaisse_et_termine = /encaissé/.test(h8) && /terminé 1 pièce/.test(h8);
-    const pr8 = await p.textContent('.acc-hero .preuve');
+    const h8 = await p.textContent('.acc-tete');
+    R.accueil_encaisse_et_termine = /encaissés/.test(h8) && /1 pièce terminée/.test(h8);
+    const pr8 = await p.textContent('#main .reprise');
     R.accueil_reprendre = /Reprendre/.test(pr8) && /Lapin Céleste/.test(pr8) && /Toutes mes créations/.test(pr8);
     R.accueil_pas_de_vitrine = !/Ta création/.test(pr8);
     R.accueil_temps_chrono = /Temps chronométré/.test(await p.textContent('#main')) && /2 h/.test(await p.textContent('#main'));   /* 90 min sur « pa » + 30 min de retouche sur « pe » */
     await dans(p, function(){ demarrerChrono('pe'); aller('accueil'); }); await p.waitForTimeout(200);
-    R.accueil_chrono_en_cours = /Chronomètre en cours sur « Bonnet côtelé »/.test(await p.textContent('.acc-hero .preuve'));
+    R.accueil_chrono_en_cours = /Chronomètre en cours sur « Bonnet côtelé »/.test(await p.textContent('#main .reprise'));
     await dans(p, function(){ arreterChrono(true); });
     await p.getByRole('button', {name:'Voir la pièce'}).count();
 
