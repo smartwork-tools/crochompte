@@ -150,7 +150,7 @@ async function seConnecter(p){
     R.portail_essayer_sans_compte = await p2.locator('#portail-sans-compte').count() === 1;
     await p2.click('#portail-sans-compte'); await p2.waitForTimeout(500);
     const txtS = await p2.locator('#main').textContent();
-    R.sans_compte_ouvert = /Tu essaies sans compte/.test(txtS) && await p2.locator('#entete-creer-compte').count() === 1 && await p2.locator('#sy-c-identifiant').count() === 0;
+    R.sans_compte_ouvert = /Essai sans compte/.test(txtS) && await p2.locator('#entete-creer-compte').count() === 1 && await p2.locator('#sy-c-identifiant').count() === 0;
     await p2.evaluate(()=>{ localStorage.setItem('crochompte-v1.sansCompte', JSON.stringify({depuis: Date.now() - 20 * 864e5})); });
     await p2.reload(); await p2.waitForTimeout(800);
     R.sans_compte_portail_fin = /essai sans compte est terminé/.test(await p2.locator('#main').textContent()) && await p2.locator('#portail-sans-compte').count() === 0;

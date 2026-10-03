@@ -48,7 +48,7 @@ const txt = async (p, sel) => (await p.locator(sel).first().textContent()).repla
     R.menu_avec_icones = (await p.locator('#side #nav button svg').count()) >= 7;
     R.accueil_courant = (await p.locator('#nav [aria-current="true"]').textContent()).includes('Accueil');
     R.barre_onglets_cachee_ordinateur = !(await p.locator('#tabbar').isVisible());
-    R.salutation = /Bonjour|Bonsoir/.test(await txt(p, '#salut'));
+    R.salutation = /Bonjour|Bonsoir|Bienvenue/.test(await txt(p, '#salut'));
     R.pas_de_bande_sombre = (await p.locator('.acc-hero').count()) === 0 && /Bonjour/.test(await txt(p, '#main h1'));
     R.accueil_a_faire_et_crochet = /À faire/.test(await txt(p, '#main')) && /Sur le crochet/.test(await txt(p, '#main'));
     R.pas_de_debordement = await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1);
@@ -81,7 +81,7 @@ const txt = async (p, sel) => (await p.locator(sel).first().textContent()).repla
     R.creations_liste_inchangee = (await p.locator('#main .crea-card').count()) === 3;
 
     /* 4. matières : cartes et compacte, mêmes gestes ; fenêtre de modification */
-    await dans(p, function(){ definirVue('stock', 'cartes'); view.sub = 'matieres'; aller('stock'); }); await p.waitForTimeout(300);
+    await dans(p, function(){ definirVue('stock', 'cartes'); view.mfExemples = true; view.sub = 'matieres'; aller('stock'); }); await p.waitForTimeout(300);
     R.matieres_cartes = (await p.locator('#main .mat-carte').count()) > 10;
     await p.click('#main .mat-carte .mc-nom'); await p.waitForTimeout(200);
     R.modifier_matiere = /Modifier/.test(await txt(p, '.dlg h2')) && await p.locator('#dlgc-prix').count() === 1;
@@ -164,7 +164,8 @@ const txt = async (p, sel) => (await p.locator(sel).first().textContent()).repla
     await dans(p, function(){ aller('accueil'); }); await p.waitForTimeout(300);
     R.tel_barre_onglets = await p.locator('#tabbar').isVisible() && (await p.locator('#tabbar button').count()) === 5 && !(await p.locator('#side').isVisible());
     await p.click('#tabbar button:nth-child(4)'); await p.waitForTimeout(300);
-    R.tel_onglet_matieres = await dans(p, function(){ return view.tab === 'stock'; }) && (await p.locator('#tabbar [aria-current="true"]').textContent()).includes('Matières');
+    /* V59 : « Mes ventes » remplace Matières dans la barre (Matières est dans « Plus »). */
+    R.tel_onglet_matieres = await dans(p, function(){ return view.tab === 'ventes'; }) && (await p.locator('#tabbar [aria-current="true"]').textContent()).includes('Ventes');
     await p.click('#tabbar button:nth-child(5)'); await p.waitForTimeout(300);
     R.tel_plus_ouvre_le_menu = !(await p.evaluate(() => document.getElementById('menu-mobile').hidden)) && /Mes chiffres/.test(await txt(p, '#mm-liste'));
     await p.click('#mm-liste >> text=Mes chiffres'); await p.waitForTimeout(400);

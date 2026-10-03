@@ -28,7 +28,7 @@ const {graine} = require('./aide.js');
   R.patron_cree = pat.titre === 'patron-test';
   R.trois_pages = pat.pages.length === 3;
   R.texte_extrait = /Rang 1 : 6 ms/.test(pat.texte) && /Rang 21/.test(pat.texte);
-  R.fiche_patron_ouverte = (await p.textContent('#main')).includes('Les pages du patron');
+  R.fiche_patron_ouverte = (await p.textContent('#main')).includes('Gérer les pages');
   await p.waitForTimeout(600);
   R.images_affichees = await p.evaluate(()=> [...document.querySelectorAll('.pages img')].filter(i=>!i.hidden && i.naturalWidth>500).length);
   await p.screenshot({path:path.join(__dirname,'captures','pdf-patron.png'), fullPage:false});
@@ -38,7 +38,7 @@ const {graine} = require('./aide.js');
   R.page_suivante = (await p.textContent('.visio-num')) === 'Page 2 sur 3';
   await p.screenshot({path:path.join(__dirname,'captures','visio.png')});
   await p.goBack(); await p.waitForTimeout(500);
-  R.precedent_ferme_visionneuse = !(await p.isVisible('.visio')) && (await p.textContent('#main')).includes('Les pages du patron');
+  R.precedent_ferme_visionneuse = !(await p.isVisible('.visio')) && (await p.textContent('#main')).includes('Gérer les pages');
   // 2. Photo d'une création depuis un PDF
   await p.click('#nav >> text=Mes créations'); await p.waitForTimeout(300);
   await p.locator('.crea-id').first().click(); await p.waitForTimeout(400);

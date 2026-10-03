@@ -122,7 +122,7 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     R.graphique_nomme = await p.evaluate(()=>{ const s = document.querySelector('#main svg[role="img"]'); return !s || /Graphique/.test(s.getAttribute('aria-label')||''); });
 
     /* 10. Accessibilité : colonnes d'actions nommées, boutons ✕ qui disent quoi */
-    await dans(p, function(){ view.sub = 'matieres'; aller('stock'); });
+    await dans(p, function(){ definirVue('stock', 'liste'); view.sub = 'matieres'; aller('stock'); });
     R.colonne_actions_nommee = await p.locator('#main th .sr-only').count() > 0;
     R.bouton_supprimer_nomme = await p.evaluate(()=>{ const b = document.querySelector('#main [data-role="del"]'); return !!b && /Supprimer la matière .+/.test(b.getAttribute('aria-label')); });
 

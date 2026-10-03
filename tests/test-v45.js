@@ -78,7 +78,7 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     /* 5. la commande livrée apparaît dans Mes ventes avec son reste à recevoir */
     await dans(p, function(){ view.ventesFiltre = 'toutes'; aller('ventes'); }); await p.waitForTimeout(300);
     const v = (await p.textContent('#main')).replace(/\u202f|\u00a0/g, ' ');
-    R.commande_dans_ventes = (await p.locator('.t-ventes tbody tr', {hasText:'Sam'}).count()) === 1 && /20,00 €/.test(await p.locator('.t-ventes tbody tr', {hasText:'Sam'}).textContent()) && /Reste à recevoir\s*20,00 €/.test(v);
+    R.commande_dans_ventes = (await p.locator('.t-ventes tbody tr', {hasText:'Sam'}).count()) === 1 && /20,00 €/.test(await p.locator('.t-ventes tbody tr', {hasText:'Sam'}).textContent()) && /(Reste à recevoir|À réclamer sur ces ventes)\s*20,00 €/.test(v);
     R.bouton_encaisser = (await p.locator('.t-ventes tbody tr', {hasText:'Sam'}).getByRole('button', {name:'Encaisser'}).count()) === 1;
     await p.getByRole('button', {name:/^Reste à recevoir/}).click(); await p.waitForTimeout(300);
     R.filtre_reste = (await p.locator('.t-ventes tbody tr').count()) === 1;

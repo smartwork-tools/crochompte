@@ -30,7 +30,7 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
   try {
     const p = await page(b);
     await graine(p);
-    await dans(p, function(){ appliquerProfil('pro', {sansRendu:true}); state.reglages.confirmeLe = Date.now(); sauverTout(); view.sub = 'matieres'; aller('stock'); });
+    await dans(p, function(){ appliquerProfil('pro', {sansRendu:true}); state.reglages.confirmeLe = Date.now(); definirVue('stock', 'liste'); view.mfExemples = true; sauverTout(); view.sub = 'matieres'; aller('stock'); });
     await p.waitForTimeout(300);
     /* 1. Mes matières : stock visible et achat en place */
     R.colonne_stock = /En stock/.test(await p.textContent('#main thead'));
@@ -61,7 +61,7 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     /* 4. Mes chiffres : quatre tuiles en haut, le reste replié */
     await dans(p, function(){ ajouterPieces('c1', 1, 'termine', 'vendu'); sauverTout(); allerOnglet('indicateurs'); }); await p.waitForTimeout(300);
     R.titre_mes_chiffres = /Mes chiffres/.test(await p.textContent('#main h1'));
-    R.quatre_tuiles = (await p.locator('#main > .tiles').first().locator('.tile').count()) === 4;
+    R.quatre_tuiles = (await p.locator('#main > .tiles').first().locator('.tile').count()) === 5;   /* V59 : + « Vendu » */
     const plis = await p.$$eval('details.ind-pli', ds => ds.map(d => [d.querySelector('summary').textContent.trim(), d.open]));
     R.sections_repliees = plis.length >= 2 && plis.every(x => !x[1]);
     R.seuils_visibles = (await p.locator('#main').textContent()).indexOf('Tes seuils') >= 0;

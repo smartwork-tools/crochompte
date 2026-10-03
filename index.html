@@ -7,7 +7,7 @@
      seules connexions permises sont celles vers le serveur Supabase. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://upload.wikimedia.org https://www.gutenberg.org; connect-src 'self' https://jsmmajntopdozkmzrniy.supabase.co wss://jsmmajntopdozkmzrniy.supabase.co; font-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<script src="boot.js?v=581"></script>
+<script src="boot.js?v=59"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0f5f57">
 <link rel="manifest" href="manifest.webmanifest">
@@ -213,7 +213,22 @@
   .side #nav button[aria-current="true"]{background:var(--primary);color:var(--on-primary);font-weight:600;}
   .side #nav button .cpt{margin-left:auto;font-size:12px;font-weight:700;background:var(--warn-soft);color:var(--warn);border-radius:20px;padding:1px 8px;}
   .side #nav button[aria-current="true"] .cpt{background:var(--on-primary);color:var(--primary);}
-  .side #nav button.ong-fiche{color:var(--primary-ink);font-style:italic;}
+  .side #nav button.ong-fiche{font-style:italic;margin-left:14px;min-height:38px;font-size:13.5px;}
+  .side #nav button.ong-fiche:not([aria-current="true"]){color:var(--primary-ink);}
+  tr.ligne-clic{cursor:pointer;}
+  td.cmd-acts .btn{display:block;width:100%;white-space:nowrap;}
+  td.cmd-acts .btn + .btn{margin-top:6px;}
+  .lp-grille{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(260px,1fr);gap:20px;align-items:start;}
+  @media (max-width:900px){ .lp-grille{grid-template-columns:1fr;} }
+  .lp-fig{margin:0;}
+  .lp-fig img{display:block;width:100%;height:auto;border:1px solid var(--rule);border-radius:10px;background:#fff;}
+  .lp-fig figcaption{font-size:12.5px;color:var(--muted);margin-top:6px;text-align:center;}
+  .lp-texte{max-height:70vh;overflow:auto;}
+  .lp-outils{position:sticky;top:12px;}
+  .jauge-plan{height:8px;border-radius:6px;background:var(--surface-2);overflow:hidden;}
+  .jauge-plan i{display:block;height:100%;border-radius:6px;}
+  tr.ligne-clic:hover td{background:var(--surface-2);}
+  .side #nav button > span:not(.cpt){overflow:hidden;text-overflow:ellipsis;min-width:0;}
   .side-bas{margin-top:auto;display:flex;flex-direction:column;gap:8px;padding:0 4px;}
   .side-bas .essai{border:1px solid var(--rule);border-radius:12px;padding:11px 12px;background:var(--primary-soft);display:flex;flex-direction:column;gap:7px;font-size:13px;}
   .side-bas .essai b{font-size:13.5px;}
@@ -343,6 +358,8 @@
   .pagehead{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin:0 0 20px;}
   .pagehead h1{font-size:23px;letter-spacing:-.02em;line-height:1.2;}
   .pagehead p{margin:5px 0 0;color:var(--muted);font-size:14px;max-width:62ch;}
+  /* V59 : sur téléphone, la phrase d'introduction tient en deux lignes. */
+  @media (max-width:700px){ .pagehead p{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:13.5px;} }
   .pagehead .ph-act{display:flex;gap:8px;flex-wrap:wrap;}
   .vide{background:var(--surface);border:1px dashed var(--rule-strong);border-radius:12px;
     padding:34px 24px;text-align:center;}
@@ -755,6 +772,9 @@
     font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);}
   @media (max-width:520px){ .picker-ov{padding:0;} .picker{max-height:100vh;border-radius:0;width:100%;} }
   /* Chronomètre : visible partout tant qu'il tourne. */
+  /* V59 : les messages passent au-dessus de la barre du chronomètre. */
+  body.avec-chrono #toasts{bottom:calc(env(safe-area-inset-bottom,0px) + 92px) !important;}
+  @media (max-width:1100px){ body.app-ouverte.avec-chrono #toasts{bottom:calc(env(safe-area-inset-bottom,0px) + 150px) !important;} }
   .chronobar{position:fixed;left:50%;transform:translateX(-50%);z-index:85;
     bottom:calc(env(safe-area-inset-bottom,0px) + 18px);
     display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:30px;
@@ -979,6 +999,7 @@
   .savebar-enreg{display:flex;gap:14px;align-items:center;flex-wrap:wrap;}
   .pat-ajout .champ-err{margin-top:6px;}
   .profils{display:grid;gap:10px;margin:6px 0 2px}
+  .profil-accueil{margin-bottom:24px;}
   .profil-accueil .profils{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
   .profil-carte{display:flex;flex-direction:column;gap:3px;text-align:left;padding:12px 14px;border:1.5px solid var(--rule);border-radius:12px;background:var(--surface);cursor:pointer;font:inherit;color:inherit}
   .profil-carte span{font-size:13px;color:var(--muted);line-height:1.35}
@@ -1010,6 +1031,29 @@
     .t-pieces td{padding:4px 0}
     .t-cmd td[data-l="Articles"], .t-cmd td[data-l="Reçu"]{display:none}
     .t-cmd td{padding:4px 0}
+    /* V59 : fiches denses sur téléphone (voir densifier dans app.js) */
+    .resp table.t-dense tbody tr{display:flex;flex-wrap:wrap;align-items:baseline;column-gap:16px;row-gap:5px;padding:11px 13px;margin:0 0 8px}
+    .resp table.t-dense td, .resp table.t-dense td[data-l]{display:inline-flex;flex-wrap:wrap;align-items:baseline;gap:0 6px;padding:0;border:none;width:auto;min-width:0;text-align:left;justify-items:start;font-size:13.5px}
+    .resp table.t-dense td::before{font-size:11.5px;font-weight:500}
+    .resp table.t-dense td .hint{font-size:11.5px}
+    .resp table.t-dense td.d-titre{order:-1;flex:1 1 100%;display:block;font-size:15px;font-weight:600;padding:0 0 2px}
+    .resp table.t-dense td.d-titre::before{display:none}
+    .resp table.t-dense td.d-titre .hint{display:block;margin-top:1px;font-weight:400}
+    .resp table.t-dense td.vide, .resp table.t-dense td.d-cache{display:none}
+    .resp table.t-dense td.d-acts{flex:1 1 100%;display:flex;justify-content:flex-end;gap:8px;padding:6px 0 0}
+    .resp table.t-dense td.d-acts::before{display:none}
+    /* un seul petit bouton : il remonte à droite du titre */
+    .resp table.t-dense{--acts:112px}
+    .resp table.t-dense.t-mat{--acts:168px}
+    .resp table.t-dense tr:has(td.d-acts:not(.cmd-acts)) td.d-titre{flex:0 0 calc(100% - var(--acts) - 16px)}
+    .resp table.t-dense td.d-acts:not(.cmd-acts){order:-1;flex:0 0 var(--acts);padding:0;align-self:flex-start}
+    .resp table.t-dense td.d-acts .act-col{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+    .resp table.t-dense .lien-nom{font-size:15px;font-weight:600;text-align:left;padding:0}
+    .t-cmd td[data-l]{grid-template-columns:110px 1fr}
+    .t-cmd td.n[data-l]::before{justify-self:start}
+    .t-cmd td.cmd-acts{display:flex;gap:8px;padding-top:8px}
+    .t-cmd td.cmd-acts .btn{flex:1 1 0;width:auto}
+    .t-cmd td.cmd-acts .btn + .btn{margin-top:0}
   }
   .frise-card{margin-bottom:16px}
   .frise{list-style:none;margin:0 0 12px;padding:0;display:flex;gap:0;overflow-x:auto}
@@ -1318,6 +1362,12 @@
   .abo-bandeau{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:10px 14px;margin:0 0 14px;border-radius:12px;background:var(--primary-soft);border:1px solid var(--primary);font-size:14px;}
   .abo-bandeau.warn{background:var(--warn-soft);border-color:var(--warn);}
   .abo-bandeau p{margin:0;}
+  /* V59 : sur téléphone, le bandeau d'essai tient sur une ligne. */
+  @media (max-width:1100px){
+    .abo-bandeau{flex-wrap:nowrap;padding:6px 8px 6px 12px;font-size:13px;margin-bottom:10px;}
+    .abo-bandeau .ab-long{display:none;}
+    .abo-bandeau .btn{min-height:34px;padding:4px 12px;font-size:13px;white-space:nowrap;}
+  }
   .offres{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:12px 0;}
   .offre{border:1.5px solid var(--rule);border-radius:12px;padding:14px;background:var(--card);display:flex;flex-direction:column;gap:6px;}
   .offre.reco{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-soft);}
@@ -1382,14 +1432,14 @@
      Sans ce fichier (ou s'il ne se charge pas), rien ne change : l'objet
      global reste absent et l'application démarre hors ligne, comme avant. -->
 <script src="config.js"></script>
-<script src="pdf.js?v=581"></script>
-<script src="app.js?v=581"></script>
+<script src="pdf.js?v=59"></script>
+<script src="app.js?v=59"></script>
 
 <!-- Comptes et synchronisation (module facultatif) : sans config.js,
      l'application fonctionne hors ligne, tout reste dans le navigateur.
      Avec config.js, se connecter devient obligatoire. Le message de repli
      (si ce module ne se charge pas) et l'écouteur d'erreur vivent dans
      app.js, section DÉMARRAGE. -->
-<script type="module" src="sync.js?v=581" id="script-sync"></script>
+<script type="module" src="sync.js?v=59" id="script-sync"></script>
 </body>
 </html>

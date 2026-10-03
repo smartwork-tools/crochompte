@@ -57,7 +57,7 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     });
     await p.waitForTimeout(300);
     const tete = await p.textContent('#main thead');
-    R.colonnes_neutres = /Commandé par/.test(tete) && /Reçu/.test(tete) && /Reste à recevoir/.test(tete) && !/Cliente|Versé|Reste dû/.test(tete);
+    R.colonnes_neutres = /Commandé par/.test(tete) && /Reçu/.test(tete) && /(Reste à recevoir|À recevoir)/.test(tete) && !/Cliente|Versé|Reste dû/.test(tete);
     R.etape_payee_en_entier = (await p.locator('#main tbody tr', {hasText:'Sam'}).locator('.chip', {hasText:'Payée en entier'}).count()) === 1;
     const opts = await dans(p, function(){ return STATUTS_CMD.map(function(s){ return s.nom; }); });
     R.statuts_parlent_comme_les_etapes = opts.indexOf('À fabriquer') >= 0 && opts.indexOf('Prête') >= 0 && opts.indexOf('Acceptée') < 0 && opts.indexOf('Terminée') < 0;

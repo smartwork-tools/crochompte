@@ -163,6 +163,8 @@ const auj = () => { const d = new Date(); return d.getFullYear()+'-'+String(d.ge
     R.brouillon_repris = (await p.inputValue('#f-nom')) === 'Bonnet du brouillon';
 
     /* 6. Unité protégée, achats conservés à la suppression */
+    /* V59 : Matières s'ouvre en vue compacte ; l'unité se modifie dans la vue Liste. */
+    await p.evaluate(()=>{ localStorage.setItem('crochompte-vues', JSON.stringify(Object.assign(JSON.parse(localStorage.getItem('crochompte-vues')||'{}'), {stock:'liste'}))); });
     await onglet(p, 'Matières');
     await p.getByRole('button', {name:'Mes matières'}).click(); await p.waitForTimeout(250);
     const uniteAvant = await p.evaluate(()=>{ const s = window.CrochomptePont.lire(); const m = s.matieres.find(m=>s.creations.some(c=>c.lignes.some(l=>l.mid===m.id))); return {id:m.id, u:m.unite}; });

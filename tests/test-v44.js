@@ -33,7 +33,7 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     R.question_accueil = (await p.locator('.profil-accueil .profil-carte').count()) === 2 && (await p.locator('.dlg-fond').count()) === 0 && /amateur ou en pro/.test(await p.textContent('.profil-accueil'));
     await p.click('.profil-carte[data-p="amateur"]'); await p.getByRole('button', {name:"C'est moi"}).click(); await p.waitForTimeout(400);
     const tabs = await p.$$eval('#nav button', bs => bs.map(b => b.textContent.trim()));
-    R.onglets_amateur = tabs.join(',') === 'Accueil,Mes créations,Catalogue,Commandes,Mes ventes,Mes patrons,Matières,Mes chiffres,Réglages';
+    R.onglets_amateur = tabs.join(',') === 'Accueil,Mes créations,Catalogue,Mes ventes,Mes patrons,Matières,Réglages';
     R.profil_applique = await dans(p, function(){ return state.reglages.profilType === 'amateur' && state.reglages.profil === 'vend' && state.reglages.mode === 'complet' && state.reglages.statut === 'non_declare' && !estPro(); });
     R.question_disparue = (await p.locator('.profil-accueil').count()) === 0;
 

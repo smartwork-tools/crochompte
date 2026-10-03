@@ -27,7 +27,7 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     const p = await page(b);
     await graine(p);
     await dans(p, function(){
-      appliquerProfil('pro', {sansRendu:true}); state.reglages.confirmeLe = Date.now(); state.reglages.tauxPerte = 0;
+      appliquerProfil('pro', {sansRendu:true}); state.reglages.confirmeLe = Date.now(); state.reglages.tauxPerte = 0; definirVue('stock', 'liste');
       sauverTout(); view.sub = 'matieres'; view.nmCat = null; aller('stock');
     });
     await p.waitForTimeout(400);
