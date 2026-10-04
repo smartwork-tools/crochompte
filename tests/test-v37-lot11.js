@@ -103,8 +103,8 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     R.conflit_fiche_ma_version = (await lire(p)).creations.find(c=>c.id==='c3').prix === 36;
 
     /* 7. Stock négatif : alerte sur l'Accueil même sans seuil */
-    /* V55 : signalé seulement si le stock est suivi (ici : un achat noté sur une autre matière) */
-    await dans(p, function(){ state.matieres[1].mouv = [{d: Date.now(), t:'entree', q:100, p:5, pu:0.05, sa:100}]; state.matieres[0].stock = -40; state.matieres[0].seuil = 0; sauverTout(); aller('accueil'); });
+    /* V61 : signalé seulement si CETTE matière est suivie (un achat ou un inventaire noté sur elle) */
+    await dans(p, function(){ state.matieres[0].mouv = [{d: Date.now(), t:'entree', q:100, p:5, pu:0.05, sa:100}]; state.matieres[0].stock = -40; state.matieres[0].seuil = 0; sauverTout(); aller('accueil'); });
     R.accueil_stock_negatif = /stock négatif/.test(await p.textContent('#main'));
 
     /* 8. Achat en lots : 3 lots remplissent la quantité */

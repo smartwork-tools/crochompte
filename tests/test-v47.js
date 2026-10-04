@@ -48,7 +48,7 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     R.etape_fabrication = await dans(p, function(){ return commandes()[0].statut === 'encours'; }) && /En fabrication/.test(await p.locator('.frise li.cur').textContent());
     await p.getByRole('button', {name:"C'est prêt"}).click(); await p.waitForTimeout(400);
     await p.getByRole('button', {name:"C'est livré"}).click(); await p.waitForTimeout(400);
-    R.etape_livree = await dans(p, function(){ var c = commandes()[0]; return c.statut === 'livree' && !!c.livreeLe; }) && (await p.getByRole('button', {name:'Passer à la facture'}).count()) === 1;
+    R.etape_livree = await dans(p, function(){ var c = commandes()[0]; return c.statut === 'livree' && !!c.livreeLe; }) && (await p.getByRole('button', {name:'Établir la facture'}).count()) >= 1;
     /* 3. heures et minutes */
     await p.fill('#cmd-h', '2'); await p.fill('#cmd-h-min', '30'); await p.waitForTimeout(200);
     R.heures_minutes = await dans(p, function(){ return Math.abs(commandes()[0].heuresEstimees - 2.5) < 0.001; });

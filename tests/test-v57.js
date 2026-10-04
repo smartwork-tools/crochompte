@@ -153,7 +153,10 @@ const txt = async (p, sel) => (await p.locator(sel).first().textContent()).repla
     await p.selectOption('tr[data-pid="s2"] [data-role="prod"]', 'encours'); await p.waitForTimeout(300);
     await p.locator('.manque-liste .lien-mini').first().click(); await p.waitForTimeout(350);
     R.achat_depuis_manque = /J'ai acheté/.test(await txt(p, '.dlg')) && await p.locator('#am-n').count() === 1;
-    await dans(p, function(){ try { fermerCouche(); } catch(e){} });
+    await dans(p, function(){ try { fermerCouche(); } catch(e){} }); await p.waitForTimeout(500);
+    /* V61 : achat abandonné → retour à la fenêtre du manque ; « Pas maintenant » garde la pièce à faire */
+    R.retour_au_manque = /Il te manque de la matière/.test(await txt(p, '.dlg'));
+    await p.getByRole('button', {name:/Pas maintenant/}).click(); await p.waitForTimeout(300);
     R.s2_reste_afaire = (await dans(p, function(){ return piece('s2').prod; })) === 'afaire';
 
     /* 7. commande : « Je commence la fabrication » */

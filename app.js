@@ -1490,7 +1490,7 @@ function valeurStockMatieres(){
 /* Un état de stock se lit en une couleur et un mot, jamais en faisant un calcul mental. */
 function etatStock(m){
   var st = Number(m.stock)||0, se = Number(m.seuil)||0;
-  var suivie = se > 0 || st !== 0 || (m.mouv && m.mouv.length > 0);
+  var suivie = se > 0 || matiereSuivie(m);
   if (!suivie)            return {k:"libre", lib:"Non suivie", c:"var(--rule-strong)", pct:0, muet:true};
   if (st <= 0)            return {k:"rupture", lib:"Rupture",     c:"var(--bad)",  pct:0};
   if (se > 0 && st < se)  return {k:"bas",     lib:"À racheter",  c:"var(--warn)", pct:Math.max(6, st/se*100)};
@@ -3364,14 +3364,23 @@ function saluer(){
   var vierge = !state.creations.length && !commandes().length && !(state.pieces || []).length;
   if (!t && vierge){
     titre = "Bienvenue" + (qui ? ", " + qui : "") + " !";
-    texte = "Commence par la question du haut, puis calcule ta première création : tout le reste se remplit à partir d'elle.";
+    /* V61 : la question du profil a peut-être déjà sa réponse. */
+    texte = state.reglages.profil ? "Calcule ta première création : pars d'un modèle du catalogue, tout le reste se remplit à partir d'elle."
+                                  : "Commence par la question du haut, puis calcule ta première création : tout le reste se remplit à partir d'elle.";
   } else if (morceaux.length){
     titre = "Bon retour" + (qui ? ", " + qui : "") + " !";
     texte = "Depuis ta dernière visite : " + morceaux.join(", ") + ".";
   } else {
     var np = 0; try{ np = pointsAFaire().length; }catch(e){}
+    /* V61 : un « bonjour, rien d'urgent » à chaque ouverture cachait le bas de
+       l'écran sur téléphone : on ne salue que s'il y a quelque chose à dire,
+       et une fois par jour. */
+    var jour = aujourdhuiISO(), deja = "";
+    try{ deja = localStorage.getItem("crochompte-salut-jour") || ""; }catch(e){}
+    if (!np || deja === jour) return;
+    try{ localStorage.setItem("crochompte-salut-jour", jour); }catch(e){}
     titre = bonjour + (qui ? ", " + qui : "") + ".";
-    texte = np ? pluriel(np, "point à regarder", "points à regarder") + " aujourd'hui, sur l'Accueil." : "Rien d'urgent aujourd'hui. Bon crochet !";
+    texte = pluriel(np, "point à regarder", "points à regarder") + " aujourd'hui, sur l'Accueil.";
   }
   afficherSalut(titre, texte);
 }
@@ -3381,7 +3390,7 @@ function afficherSalut(titre, texte){
     '<div><b>' + esc(titre) + '</b><span>' + esc(texte) + '</span></div><button type="button" class="toast-x" aria-label="Fermer ce message">×</button></div>');
   z.querySelector(".toast-x").addEventListener("click", function(){ z.remove(); });
   document.body.appendChild(z);
-  setTimeout(function fin(){ if (z.matches(":hover")){ setTimeout(fin, 1500); return; } z.classList.add("part"); setTimeout(function(){ z.remove(); }, 400); }, 8000);
+  setTimeout(function fin(){ if (z.matches(":hover")){ setTimeout(fin, 1500); return; } z.classList.add("part"); setTimeout(function(){ z.remove(); }, 400); }, window.innerWidth < 700 ? 5000 : 8000);
 }
 
 /* ═════ 6 bis. ÉCRAN DE CONNEXION OBLIGATOIRE ═════
@@ -3656,10 +3665,9 @@ function pointsAFaire(){
   /* V59 : une couleur en négatif se signale aussi (le total de la matière
      pouvait rester positif et cacher le blanc à -75 g). */
   var negatifs = [];
-  if (suitLeStock()) state.matieres.forEach(function(m){
-    var vn = (m.variantes || []).filter(function(v){ return (Number(v.stock)||0) < -1e-9; });
-    if (vn.length) vn.forEach(function(v){ negatifs.push(m.nom + " (" + libelleVariante(v) + ")"); });
-    else if ((Number(m.stock)||0) < -1e-9) negatifs.push(m.nom);
+  state.matieres.forEach(function(m){
+    if (!matiereSuivie(m)) return;
+    if ((Number(m.stock)||0) < -1e-9) negatifs.push(m.nom);
   });
   if (negatifs.length) ajout("bad", pluriel(negatifs.length, "matière en stock négatif", "matières en stock négatif"),
     negatifs.slice(0,3).join(", ") + (negatifs.length > 3 ? "…" : "") +
@@ -3899,7 +3907,7 @@ function renderAccueil(main){
     {fait: state.creations.length > 0, t:"Calcule ta première création",
      d:"Pars d'un modèle du catalogue : matières et temps sont déjà remplis, tu corriges avec tes chiffres.",
      lib:"Commencer", a:function(){ view.modeleVu = null; view.catMode = "types"; aller("catalogue"); }},
-    {fait: aUneVente, t: vend ? "Note ta première vente ou commande" : "Suis ta première pièce",
+    {fait: aUneVente, t: vend ? (ongletAmateurMasque("commandes") ? "Note ta première vente" : "Note ta première vente ou commande") : "Suis ta première pièce",
      d: vend ? "Tes encaissements, tes échéances et tes indicateurs se remplissent à partir de là."
              : "Ce que tu produis et ce que ton loisir te coûte se calculent à partir de là.",
      lib: vend ? (estPro() ? "Nouvelle commande" : "Noter une vente") : "Mes créations",
@@ -3983,7 +3991,7 @@ function renderAccueil(main){
   if (r.mode === "complet") tl.appendChild(tuile("Pièces terminées", String(termM), "suivies dans « Mes créations »"));
   if (r.mode === "complet" && minMois >= 1) tl.appendChild(tuile("Temps chronométré", dureeTexte(Math.round(minMois)), "sur tes pièces ce mois-ci"));
   else tl.appendChild(tuile("Créations calculées", String(creationsActives().length), "dans « Mes créations »"));
-  if (vend) tl.appendChild(tuile("Commandes à fabriquer", String(plan2.n),
+  if (vend && !ongletAmateurMasque("commandes")) tl.appendChild(tuile("Commandes à fabriquer", String(plan2.n),
     plan2.n ? dureeTexte(plan2.heures*60) + " de travail promis" : "aucune pour l'instant"));
   var lienInd = el('<p style="margin:14px 0 0"><a href="#">Voir tous mes chiffres →</a></p>');
   lienInd.querySelector("a").addEventListener("click", function(e){ e.preventDefault(); aller("indicateurs"); });
@@ -4007,8 +4015,15 @@ function renderAccueil(main){
 
 
 /* ═════ NOUVEAUTÉS ET SIGNALEMENT ═════ */
-var VERSION_APP = "V60";
+var VERSION_APP = "V61";
 var NOUVEAUTES = [
+  {v:"V61", d:"Octobre 2026", l:[
+    "Il manque de la matière au lancement ? « J'ai acheté » note l'achat puis te ramène au lancement, qui se fait avec les mêmes réglages.",
+    "Le chronomètre affiche tes étapes en petites tuiles : le temps passé face au temps prévu ; touche une étape pour lancer, changer ou mettre en pause.",
+    "Plus d'alerte pour une matière que tu n'as jamais achetée (les étiquettes d'un modèle, par exemple).",
+    "« Nouvelle création » part d'une fiche vide ; une matière créée depuis la fiche s'y ajoute directement.",
+    "Valider l'accord d'une commande réserve aussi tes pièces prêtes, et la facture s'établit en un geste."
+  ]},
   {v:"V60", d:"Octobre 2026", l:[
     "Actualiser la page te laisse là où tu étais : même rubrique, même fiche, même commande.",
     "Une ligne de matière par couleur, crochet, contenance et prix d'achat : tes couleurs sont devenues des lignes, avec leur propre stock. « Dupliquer » crée une autre couleur en un geste.",
@@ -4609,6 +4624,13 @@ function renderCreations(main){
   var inv = inviteComplet("Suivre chaque pièce une par une, de la fabrication à la vente : temps réel, coût réel, gain réel.");
   if (inv && calculs.length) main.appendChild(inv);
 
+  /* V61 : une fiche commencée et pas enregistrée se reprend aussi d'ici. */
+  var bgC = !view.draft ? brouillonGarde() : null;
+  if (bgC){
+    var bnB = el('<div class="banner"><p><b>Création commencée, pas encore enregistrée : « '+esc(bgC.d.nom || "sans nom")+' ».</b> Reprends-la là où tu l\'avais laissée.</p></div>');
+    bnB.appendChild(bouton("Reprendre la fiche", reprendreBrouillon, true));
+    main.appendChild(bnB);
+  }
   if (!calculs.length){
     main.appendChild(etatVide("Aucune création pour l'instant",
       "Commence par celle que tu vends ou fabriques le plus souvent : c'est celle où une erreur de prix te coûte le plus cher. Le catalogue remplit les matières et les temps à ta place.",
@@ -4889,7 +4911,7 @@ function densifier(t, titre){
 function boutonVendreOuFabriquer(c){
   var n = enStock(c.id), b;
   if (n > 0){ b = bouton("Vendre (" + n + ")", function(){ dialogueVente(c.id); }); b.setAttribute("aria-label", "Vendre « " + c.nom + " » : " + pluriel(n, "pièce") + " en stock"); }
-  else { b = bouton("Fabriquer", function(){ dialogueAjoutPieces(c.id); }); b.setAttribute("aria-label", "Fabriquer « " + c.nom + " » : aucune pièce en stock"); b.title = "Aucune pièce en stock : note sa fabrication. Déjà faite ? La fenêtre Vendre (en haut) le permet en un geste."; }
+  else { b = bouton("Fabriquer", function(){ dialogueAjoutPieces(c.id, {fabriquer: true, prod: "encours"}); }); b.setAttribute("aria-label", "Fabriquer « " + c.nom + " » : aucune pièce en stock"); b.title = "Aucune pièce en stock : note sa fabrication. Déjà faite ? La fenêtre Vendre (en haut) le permet en un geste."; }
   b.classList.add("sm");
   return b;
 }
@@ -5237,13 +5259,17 @@ function lierPrixAchat(nLots, iUnit, iTotal, apres){
   });
   return {majDepuisN: majDepuisN, definir: function(unit){ dernier = "unit"; iUnit.value = unit > 0 ? arrondi(unit) : ""; majDepuisN(); }};
 }
-function dialogueAchatMatiere(m){
+/* opts (V61) : n = nombre de lots proposé ; apres(ligne) une fois l'achat
+   noté ; siAnnule() si l'on ferme sans noter. C'est ce qui permet de revenir
+   là où l'on était (un lancement de fabrication, par exemple). */
+function dialogueAchatMatiere(m, opts){
+  opts = opts || {};
   var lotLib = m.contenance > 1 ? nomLot(m, 2) + " de " + qte(m.contenance, m.unite) : m.unite;
   var unLot = m.contenance > 1 ? (m.cat === "fil" ? "d'une pelote" : m.cat === "garn" ? "d'un sac" : "d'un lot") : "d'une unité";
   var box = el('<div><div class="grid3">'+
-    '<label class="f"><span>Combien de '+esc(lotLib)+'</span><input id="am-n" type="number" min="0.01" step="1" inputmode="decimal" value="1"></label>'+
+    '<label class="f"><span>Combien de '+esc(lotLib)+'</span><input id="am-n" type="number" min="0.01" step="1" inputmode="decimal" value="'+esc(opts.n > 0 ? opts.n : 1)+'"></label>'+
     '<label class="f"><span>Prix '+esc(unLot)+' (€)</span><input id="am-pu" type="number" min="0" step="0.01" inputmode="decimal" value="'+esc(Number(m.prix) || "")+'"></label>'+
-    '<label class="f"><span>Total payé (€)</span><input id="am-p" type="number" min="0" step="0.01" inputmode="decimal" value="'+esc(Number(m.prix) || "")+'"></label>'+
+    '<label class="f"><span>Total payé (€)</span><input id="am-p" type="number" min="0" step="0.01" inputmode="decimal" value="'+esc(Number(m.prix) ? cts(Number(m.prix) * (opts.n > 0 ? opts.n : 1)) : "")+'"></label>'+
     '</div><div class="am-coul"></div><p class="hint" id="am-aide" style="margin:8px 0 0"></p></div>');
   var iN = box.querySelector("#am-n"), iP = box.querySelector("#am-p"), iU = box.querySelector("#am-pu"), aide = box.querySelector("#am-aide");
   var coul = null;   /* V60 : une ligne = une couleur ; une autre couleur = une autre ligne */
@@ -5256,6 +5282,7 @@ function dialogueAchatMatiere(m){
   iN.addEventListener("input", function(){ lien.majDepuisN(); maj(); });
   maj();
   dialogueChamps({titre:"J'ai acheté « " + m.nom + " »", contenu: box, champs:[], bouton:"Noter l'achat",
+    texte: opts.texte || "", siAnnule: opts.siAnnule,
     verifier:function(){
       if (!(Number(lireNombre(iN.value)) > 0)) return "Indique combien tu as acheté.";
       if (coul){ var rc = coul.lire(); if (rc.erreur) return rc.erreur; }
@@ -5284,6 +5311,7 @@ function dialogueAchatMatiere(m){
     var ra = noterAchatLigne(m, n * (Number(m.contenance) || 1), p > 0 ? p : null, "Achat");
     sauverTout(); render();
     toast("Achat noté : " + qte(n * (Number(m.contenance) || 1), m.unite) + " de " + m.nom + (ra.nouvelle ? " · nouveau lot à " + eur(ra.m.prix) : ra.m !== m ? " · lot à " + eur(ra.m.prix) : ""));
+    if (opts.apres) setTimeout(function(){ opts.apres(ra.m); }, 60);
   });
 }
 
@@ -5807,10 +5835,18 @@ function dialogueAjoutPieces(cid, opts){
     aide.textContent = v.indexOf("cmd:") === 0 ? "La pièce est reliée à la commande : son temps chronométré et ses matières comptent dans la commande, et elle sera marquée vendue à la livraison."
       : v === "offert" ? "Elle ne sera pas comptée dans ton stock à vendre."
       : "Elle rejoint ton stock : tu la vendras depuis Mes ventes ou au marché.";
+    /* V61 : ce qui manquera, visible avant de valider (le détail et l'achat
+       sont proposés au lancement). */
+    var crM = creation(selC.value), nM = Math.max(1, Number(box.querySelector("#ap-n").value) || 1);
+    var mq = crM ? manquesPourFabriquer([{cr: crM, n: nM}]) : [];
+    manqueAide.textContent = mq.length ? "Il manquera de la matière : " + mq.map(function(x){ return x.m.nom + " (" + texteLots(x.m, x.manque) + ")"; }).join(", ") + "." : "";
   }
+  var manqueAide = el('<p class="hint" style="margin:6px 0 0;color:var(--warn)"></p>'); box.appendChild(manqueAide);
+  box.querySelector("#ap-n").addEventListener("input", majAide);
   selC.addEventListener("change", remplirPour); selPour.addEventListener("change", majAide);
   remplirPour();
-  dialogueChamps({titre:"Ajouter des pièces au suivi", contenu: box, champs: [], bouton:"Ajouter", annuler:"Annuler"}, function(){
+  var crT = cid ? creation(cid) : null;
+  dialogueChamps({titre: opts.fabriquer && crT ? "Fabriquer « " + crT.nom + " »" : "Ajouter des pièces au suivi", contenu: box, champs: [], bouton: opts.fabriquer ? "Lancer" : "Ajouter", annuler:"Annuler"}, function(){
     var n = Math.max(1, Number(box.querySelector("#ap-n").value)||1);
     var crA = creation(selC.value), prodA = selP.value, pour = selPour.value;
     function ajouter(){
@@ -5858,7 +5894,9 @@ function dupliquerCreation(id){
   faire();
 }
 function nouvelleFiche(modele){
-  var mod = typeof modele === "string" ? modele : "ami_moyen";
+  /* V61 : « Nouvelle création » part d'une fiche vide (avant, un amigurumi
+     d'exemple avec ses yeux et sa ouate se glissait dans un bonnet). */
+  var mod = typeof modele === "string" ? modele : "vide";
   if (view.draft && ficheModifiee()){ siBrouillonLibre(function(){ view.draft = null; nouvelleFiche(mod); }); return; }
   view.draft = creationDepuisModele(mod,"",0,"direct");
   view.draft.nom = "";
@@ -7587,7 +7625,7 @@ function renderMesMatieres(main){
      c'est-à-dire ceux des matières utilisées dans une création. */
   var indL = state.matieres.filter(function(m){ return m.prixIndicatif && matiereUtilisee(m); });
   var ind = indL.length;
-  var ban = el('<div class="banner"><p>'+
+  var ban = !ind && !(state.creations || []).length ? el('<div></div>') : el('<div class="banner"><p>'+
     (ind ? '<b>'+pluriel(ind, "matière utilisée dans tes créations a", "matières utilisées dans tes créations ont")+' encore un prix indicatif</b> ('+
            esc(indL.slice(0, 3).map(function(m){ return m.nom; }).join(", ") + (ind > 3 ? "…" : ""))+'). Note ce que tu as vraiment payé avec « J\'ai acheté » : tes calculs deviennent justes d\'un coup.'
          : '<b>Tes créations reposent sur tes prix.</b> Aucune ne dépend d\'un prix indicatif.')+
@@ -8031,7 +8069,8 @@ var FORM_MAT = {
    qu'on a déjà en stock, couleur par couleur. Pas de seconde page à valider.
    Le formulaire suit la catégorie choisie ; seuls le nom, le prix et la
    contenance servent au calcul, le reste sert à s'y retrouver. */
-function dialogueNouvelleMatiere(catInit){
+function dialogueNouvelleMatiere(catInit, opts){
+  opts = opts || {};
   var cat = FORM_MAT[catInit] ? catInit : (FORM_MAT[view.nmCat] ? view.nmCat : "fil");
   var box = el('<div class="nm-form">'+
     '<label class="f" style="max-width:360px"><span>C\'est…</span><select id="nm-cat"></select></label>'+
@@ -8148,6 +8187,7 @@ function dialogueNouvelleMatiere(catInit){
       : (F.couleur ? "Chaque couleur devient sa propre ligne, avec son stock. Une autre couleur plus tard : « Dupliquer » sur la ligne." : "Ce nombre devient ton stock de départ.");
   }
   construire();
+  if (opts.nom){ var iNom0 = zone.querySelector("#nm-nom"); if (iNom0){ iNom0.value = opts.nom; majResume(); } }
   /* Changer de catégorie garde ce qui vaut pour toutes : le nom et le prix. */
   selCat.addEventListener("change", function(){
     var nom = zone.querySelector("#nm-nom").value, prix = zone.querySelector("#nm-prix").value;
@@ -8196,7 +8236,9 @@ function dialogueNouvelleMatiere(catInit){
     return {m: m, lignes: lignes, cont: cont, achat: achatSel === "achat", achatLe: achatD ? dateVersTs(achatD) : Date.now()};
   }
   var lecture = null;
-  box.querySelector("#nm-catalogue").addEventListener("click", function(){ fermerCouche(function(){ view.sub = "catalogue"; render(); }); });
+  /* Depuis une fiche, on ne quitte pas la fiche pour le catalogue (V61). */
+  if (opts.apres) box.querySelector("#nm-catalogue").closest("p").remove();
+  else box.querySelector("#nm-catalogue").addEventListener("click", function(){ fermerCouche(function(){ view.sub = "catalogue"; render(); }); });
   dialogueChamps({titre:"Ajouter une matière", large:true, contenu: box, champs:[], bouton:"Ajouter la matière", annuler:"Annuler",
     verifier: function(){
       lecture = lire();
@@ -8222,6 +8264,7 @@ function dialogueNouvelleMatiere(catInit){
       else mouvementMatiere(ligne, "inventaire", l.lots * lecture.cont, null, "Stock de départ (déjà chez moi)");
     });
     sauverTout();
+    if (opts.apres){ toast(crees.length > 1 ? crees.length + " lignes de « " + m.nomBase + " » ajoutées ; la première est dans ta fiche." : "« " + m.nom + " » ajoutée à tes matières et à ta fiche."); opts.apres(m); return; }
     /* V59 : la matière ajoutée se voit tout de suite (filtrée par son nom),
        au lieu de se perdre au milieu de la liste. */
     view.mfQ = m.nomBase; view.mfCat = ""; view.matNouvelle = m.id;
@@ -9125,7 +9168,7 @@ function consommerPour(cr, n, p){
       return;
     }
     var r = sortirLots(cible, besoin, "Fabrication : " + cr.nom, {pid: p ? p.id : undefined});
-    if (r.manque) manques.push(cible.nom);
+    if (r.manque && matiereSuivie(cible)) manques.push(cible.nom);
     if (p && r.derniere && r.derniere.id !== m.id){ p.couleurs = p.couleurs || {}; p.couleurs[m.id] = r.derniere.id; }
   });
   return manques;
@@ -9238,7 +9281,11 @@ function prevenirManques(manques){
    est suivi (un achat, un inventaire ou un stock noté) sont concernées : une
    matière jamais stockée ne déclenche rien. */
 function matiereSuivie(m){
-  return (m.mouv && m.mouv.length > 0) || (Number(m.stock) || 0) > 1e-9 || (m.variantes || []).length > 0;
+  /* V61 : une matière dont on n'a jamais noté ni achat ni inventaire n'est
+     pas suivie, même si des fabrications l'ont fait passer sous zéro
+     (les étiquettes d'un modèle du catalogue, par exemple) : pas d'alerte. */
+  return (m.mouv || []).some(function(x){ return !x.annule && (x.t === "entree" || x.t === "inventaire" || x.t === "transfert"); }) ||
+         (Number(m.stock) || 0) > 1e-9 || (m.variantes || []).length > 0;
 }
 /* lots : [{cr, n}] ; renvoie [{m, besoin, dispo, manque}] */
 function manquesPourFabriquer(lots){
@@ -9380,7 +9427,15 @@ function avantFabrication(lots, suite, refus){
     var li = el('<li><span><b>'+esc(x.m.nom)+'</b> : il te faut '+esc(texteLots(x.m, x.besoin))+', tu en as '+esc(texteLots(x.m, x.dispo))+
       ' <span class="manque-reste">(il en manque '+esc(texteLots(x.m, x.manque))+')</span></span></li>');
     var b = el('<button type="button" class="lien-mini">J\'ai acheté</button>');
-    b.addEventListener("click", function(){ fermerCouche(function(){ if (refus) refus(); dialogueAchatMatiere(x.m); }); });
+    /* V61 : noter l'achat ne fait plus perdre le lancement en cours : une
+       fois l'achat noté (ou abandonné), on revient ici avec les mêmes
+       pièces ; s'il ne manque plus rien, la fabrication se lance. */
+    b.addEventListener("click", function(){
+      var reprendre = function(){ avantFabrication(lots, suite, refus); };
+      var cont = Number(x.m.contenance) || 1, nLots = cont > 1 ? Math.ceil(x.manque / cont - 1e-9) : Math.ceil(x.manque - 1e-9);
+      fermerCouche(function(){ dialogueAchatMatiere(lotCourant(x.m), {n: Math.max(1, nLots), apres: reprendre, siAnnule: reprendre,
+        texte: "Il en manque " + texteLots(x.m, x.manque) + " pour " + noms + ". Une fois l'achat noté, tu reviens au lancement."}); });
+    });
     li.appendChild(b);
     ul.appendChild(li);
   });
@@ -10550,7 +10605,7 @@ function renderIndicateurs(main){
     t2.appendChild(tuile("Pièces terminées · " + per.nom.toLowerCase(), String(termP),
       "passées en « terminée » dans « Mes créations »", "acc-1"));
   }
-  if (vend){
+  if (vend && !ongletAmateurMasque("commandes")){
     var plan = planDeCharge();
     t2.appendChild(tuile("Commandes à fabriquer", String(plan.n),
       plan.n ? dureeTexte(plan.heures * 60) + " de travail promis" + (plan.enRetard ? " · " + plan.enRetard + " en retard" : "")
@@ -11986,19 +12041,11 @@ function ouvrirPicker(choisie){
       liste.appendChild(el('<p class="hint" style="padding:18px 4px;margin:0">'+
         'Rien ne correspond à « '+esc(q.value)+' ».</p>'));
       var bn = bouton("Créer la matière « " + (q.value.trim() || "Nouvelle matière") + " »", function(){
-        var nom = q.value.trim() || "Nouvelle matière";
+        /* V61 : la vraie fenêtre d'ajout (prix, contenance, couleur, stock),
+           puis retour à la fiche avec la matière déjà choisie. */
+        var nom = q.value.trim();
         var catN = famActive === "tous" ? "fil" : famActive;
-        var m = {id:uid(), nom:nom, cat:catN,
-                 prix:0, contenance:100, unite:"g", stock:0, seuil:0, pmp:0, mouv:[],
-                 refCat:null, fibre:"", composition:"", grosseur:"", metrage:null,
-                 prixIndicatif:false, perso:true, maj:Date.now()};
-        confirmer({titre:"Créer la matière « " + nom + " » ?", texte:"Elle sera ajoutée à tes matières, sans prix pour l'instant :",
-          details:["Catégorie : " + famNomMat(catN), "Prix : à renseigner ensuite dans « Mes matières » (0 € d'ici là, la fiche sera sous-estimée)"],
-          bouton:"Confirmer l'ajout", annuler:"Corriger"}, function(){
-          state.matieres.push(m); sauverTout();
-          fermerPicker(function(){ choisie(m.id); });
-          toast("Matière créée. Pense à renseigner son prix dans « Mes matières ».");
-        });
+        fermerPicker(function(){ dialogueNouvelleMatiere(catN, {nom: nom, apres: function(m){ choisie(m.id); }}); });
       }, true);
       bn.style.margin = "0 4px 8px";
       liste.appendChild(bn);
@@ -12430,6 +12477,15 @@ function majBarreChrono(){
 /* Bilan d'une création : ce qu'elle dure vraiment, face à l'estimation. */
 /* Pendant que ça tourne on veut voir les secondes défiler ; une fois arrêté,
    on veut une durée lisible — et jamais « 0 min » pour du temps réellement passé. */
+/* Pour les tuiles d'étapes (V61) : court, toujours sur une ligne. */
+var COURT_POSTE = {prep:"Prépa.", crochet:"Crochet", assemb:"Assemb.", finition:"Finition", emball:"Emball."};
+function dureeTuile(min){
+  min = Number(min) || 0;
+  if (min < 1) return "< 1 min";
+  var h = Math.floor(min / 60), m = Math.round(min % 60);
+  if (m === 60){ h++; m = 0; }
+  return h ? h + " h" + (m ? " " + (m < 10 ? "0" : "") + m : "") : m + " min";
+}
 function dureeChrono(min){
   var s = Math.floor(min*60);
   var h = Math.floor(s/3600), m = Math.floor(s/60)%60, ss = s%60;
@@ -12580,17 +12636,44 @@ function carteChrono(cr, rafraichir){
     }, true));
   }
 
-  /* choix du poste, discret */
-  var sel = el('<select aria-label="Étape de travail en cours" style="width:auto;min-width:140px"></select>');
+  /* V61 : les étapes en petites tuiles. Chacune montre le temps passé sur
+     CETTE pièce face au temps prévu dans la fiche ; la toucher lance le
+     chrono sur cette étape (ou y bascule), la retoucher le met en pause. */
+  var etapes = el('<div class="ch-etapes" role="group" aria-label="Étapes de travail"></div>');
+  var mP = p ? mesureDe(p) : {};
   POSTES.forEach(function(x){
-    var o = document.createElement("option"); o.value = x.k; o.textContent = x.nom; sel.appendChild(o);
+    var prevu = Number(cr.temps && cr.temps[x.k]) || 0;
+    if (!prevu && !(Number(mP[x.k]) > 0) && x.k !== "crochet") { /* étape sans temps prévu ni mesuré : gardée, plus discrète */ }
+    var on = actif && ch.poste === x.k;
+    var t = el('<button type="button" class="ch-et'+(on ? ' on' : '')+(!prevu ? ' sans' : '')+'" data-k="'+x.k+'" aria-pressed="'+on+'" title="'+esc(x.aide)+'">'+
+      '<span class="n"><span class="long">'+esc(x.nom)+'</span><span class="court" aria-hidden="true">'+esc(COURT_POSTE[x.k] || x.nom)+'</span></span><span class="t num" data-t="'+x.k+'"></span>'+
+      '<span class="pr">'+(prevu ? '<span class="long">prévu </span>' + esc(dureeTuile(prevu)) : '<span class="long">rien de prévu</span><span class="court">—</span>')+'</span><span class="barre"><i></i></span></button>');
+    t.addEventListener("click", function(){
+      var chx = chronoEnCours();
+      if (chx && p && chx.pid === p.id && chx.poste === x.k){ arreterChrono(); if (rafraichir) rafraichir(); return; }
+      if (chx && p && chx.pid === p.id){ arreterChrono(true); demarrerChrono(p.id, x.k); view.posteChrono = x.k; if (rafraichir) rafraichir(); return; }
+      if (chx && (!p || chx.pid !== p.id)){ toast("Le chronomètre tourne sur une autre pièce : mets-le d'abord en pause."); return; }
+      var pp = p || ouvrirPieceTravail(cr.id);
+      if (!pp){ toast("Impossible de démarrer le chronomètre. Réessaie."); return; }
+      view.pieceChrono = pp.id; view.posteChrono = x.k;
+      demarrerChrono(pp.id, x.k);
+      if (rafraichir) rafraichir();
+    });
+    etapes.appendChild(t);
   });
-  sel.value = actif ? ch.poste : (view.posteChrono || "crochet");
-  sel.addEventListener("change", function(){
-    view.posteChrono = sel.value;
-    if (actif){ var pid = chrono().pid; arreterChrono(true); demarrerChrono(pid, sel.value); if (rafraichir) rafraichir(); }
-  });
-  act.appendChild(sel);
+  function majEtapes(){
+    var chx = chronoEnCours(), vivant = chx && p && chx.pid === p.id ? chronoSecondes() / 60 : 0;
+    POSTES.forEach(function(x){
+      var tile = etapes.querySelector('[data-k="'+x.k+'"]'); if (!tile) return;
+      var mins = (Number(mP[x.k]) || 0) + (chx && p && chx.pid === p.id && chx.poste === x.k ? vivant : 0);
+      var enCours = chx && p && chx.pid === p.id && chx.poste === x.k;
+      tile.querySelector(".t").textContent = enCours ? dureeChrono(mins) : (mins > 0.01 ? dureeTuile(mins) : "—");
+      var prevu = Number(cr.temps && cr.temps[x.k]) || 0, i = tile.querySelector(".barre i");
+      var pc = prevu > 0 ? Math.min(100, mins / prevu * 100) : (mins > 0 ? 100 : 0);
+      i.style.width = pc.toFixed(1) + "%"; i.className = prevu > 0 && mins > prevu ? "trop" : "";
+    });
+  }
+  majEtapes();
 
   if (cumul > 0 && !actif && p && p.prod !== "termine"){
     act.appendChild(bouton("Pièce N° " + num + " terminée", function(){
@@ -12632,23 +12715,16 @@ function carteChrono(cr, rafraichir){
             (th < (state.reglages.tauxHoraire||0)*0.9 ? 'var(--bad)' : 'var(--good)') + '">' +
             esc(eur(th)) + ' / h</b>' + (prov ? ' <span class="hint">(provisoire : la pièce n\'est pas terminée)</span>' : '')
           : "")
-      : "Première séance en cours.";
+      : actif ? "Première séance en cours." : "Pas encore commencée : touche l'étape sur laquelle tu travailles pour lancer le chrono.";
   }
   majSous();
   if (actif){
     var it = setInterval(function(){
       if (!document.body.contains(c)){ clearInterval(it); return; }
-      majSous();
+      majSous(); majEtapes();
     }, 1000);
   }
-
-  /* détail par poste de CETTE pièce */
-  if (p && cumul > 0.01){
-    var m = mesureDe(p);
-    var lignes = POSTES.filter(function(x){ return (Number(m[x.k])||0) > 0.01; })
-      .map(function(x){ return '<span class="ch-poste">'+esc(x.nom)+' <b>'+esc(dureeLisible(m[x.k]))+'</b></span>'; });
-    if (lignes.length) bas.innerHTML = lignes.join("");
-  }
+  bas.appendChild(etapes);
   /* le temps de chaque pièce, séparément */
   if (pieces.length > 1){
     bas.appendChild(el('<div class="ch-pieces"><b>Temps par pièce</b>'+
@@ -15678,7 +15754,8 @@ function friseCommande(c){
   }, true);
   else if (c.statut === "encours") b = bouton("C'est prêt", function(){ passer("terminee", "Prête à remettre ou à envoyer"); }, true);
   else if (c.statut === "terminee") b = bouton("C'est livré", function(){ passer("livree", "Livrée"); }, true);
-  else if (c.statut === "livree" && !c.factureNum) b = bouton("Passer à la facture", function(){ var x = document.getElementById("cmd-facture"); if (x){ x.scrollIntoView({behavior:"smooth", block:"start"}); var bx = x.querySelector("button.primary, button"); if (bx) bx.focus(); } }, true);
+  /* V61 : un seul geste, comme les autres étapes : la facture se prépare tout de suite. */
+  else if (c.statut === "livree" && !c.factureNum) b = bouton("Facturer", function(){ var x = document.getElementById("cmd-facture"); if (x){ x.scrollIntoView({behavior:"smooth", block:"start"}); var bx = [].filter.call(x.querySelectorAll("button"), function(y){ return /Établir la facture/.test(y.textContent); })[0]; if (bx) bx.click(); } }, true);
   else if (c.statut === "livree" && soldeDu(c) > 0.004) b = bouton("Noter un règlement de " + eur(soldeDu(c)), function(){ dialogueReglement(c); }, true);
   if (b) act.appendChild(b);
   act.appendChild(el('<span class="hint">'+esc(et.action ? (et.k === "soldee" ? "Tout est réglé." : "Prochaine étape : " + et.action.charAt(0).toLowerCase() + et.action.slice(1) + ".") : "")+'</span>'));
@@ -16023,10 +16100,11 @@ function renderCommandeDetail(main, c){
       if (errs.length){ toast(errs[0].lib + " : " + errs[0].msg); try{ errs[0].champ.focus(); }catch(e){} return; }
       if (!c.client || !c.client.nom){ toast("Note d'abord pour qui est la commande"); return; }
       if (!totalDu(c)){ toast("Note d'abord le prix convenu"); return; }
-      c.accordLe = new Date().toISOString();
-      if (c.statut === "devis") c.statut = "acceptee";
       journaliser(c, "Accord validé : " + eur(totalDu(c)) + " avec " + c.client.nom);
-      sauverTout(); render(); toast("Accord validé");
+      /* V61 : mêmes effets que « Accord reçu » en haut (réservation du stock prêt). */
+      if (c.statut === "devis" || c.brouillon){ delete c.brouillon; changerStatutCommande(c, "acceptee"); }
+      c.accordLe = new Date().toISOString();
+      sauverTout(); render(); toast("Accord validé : à fabriquer");
     }, true));
   } else {
     barAccord.appendChild(el('<p class="hint" style="margin:0">Accord validé le <b>'+
