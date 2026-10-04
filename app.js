@@ -506,7 +506,7 @@ function assainir(s){
       return {id: texte(v.id) || ("v_" + uid()), coloris: texte(v.coloris), bain: texte(v.bain), stock: nombre(v.stock), cree: nombre(v.cree)};
     });
     idsUniques(m.variantes, "v_");
-    ["marque","taille","materiau","couleur","typeOutil"].forEach(function(k){ if (m[k] !== undefined) m[k] = texte(m[k]); });
+    ["marque","taille","materiau","couleur","typeOutil","nomBase","lotDe","origine"].forEach(function(k){ if (m[k] !== undefined) m[k] = texte(m[k]); });
     if (m.diametre !== undefined && m.diametre !== null) m.diametre = borne(m.diametre, 0, 100);
     m.offres = objets(m.offres);
     m.offres.forEach(function(o){ o.fid = texte(o.fid); o.prix = borne(o.prix, 0, 1e6); o.contenance = borne(o.contenance, 0, 1e7);
@@ -673,7 +673,8 @@ function migrer(s){
      permettra, plus tard, de retirer les reprises d'anciens formats ci-dessus
      quand plus aucun atelier enregistré n'aura un numéro plus petit
      (select count(*) from ateliers where (donnees->>'schema')::int < N). */
-  s.schema = Math.max(Number(s.schema) || 0, 56);
+  separerLignesMatieres(s);
+  s.schema = Math.max(Number(s.schema) || 0, 60);
   return s;
 }
 /* Les ventes et livraisons d'avant cette version n'étaient pas figées : on
@@ -1077,6 +1078,163 @@ function creerVariante(m, coloris, bain){
   variantes(m).push(v);
   return v;
 }
+/* ═════ LIGNES DE MATIÈRES (V60) ═════
+   Une ligne = un article précis : un nom, une couleur, un crochet, une
+   contenance et UN prix d'achat, avec son propre stock. « Laine 50 g · Jaune
+   · 3,5 mm à 5 € » et « Laine 50 g · Jaune · 3,5 mm à 4 € » sont deux lignes
+   (deux lots) du même article ; « Laine 50 g · Rouge » est une ligne sœur.
+   - un achat au prix de la ligne s'y ajoute ; à un autre prix, il ouvre (ou
+     complète) le lot à ce prix ;
+   - une fabrication puise dans les lots du même article, le plus ancien
+     d'abord (premier entré, premier sorti) ;
+   - une création peut, pour une pièce, utiliser une ligne sœur (autre
+     couleur) quand la sienne est vide. */
+function nomBaseDe(m){ return (m && (m.nomBase || m.nom)) || ""; }
+function nomLigne(base, couleur){ return couleur ? base + " · " + couleur : base; }
+function cleArticle(m){
+  return [m.cat, plier(nomBaseDe(m)), plier(m.couleur || ""), Number(m.crochetMin) || "", Number(m.contenance) || 1, m.unite].join("|");
+}
+function trierLots(a, b){ return (Number(a.cree) || 0) - (Number(b.cree) || 0); }
+/* Les lots du même article (la ligne comprise), du plus ancien au plus récent. */
+function lotsDe(m){
+  if (!m) return [];
+  var k = cleArticle(m);
+  return state.matieres.filter(function(x){ return x === m || cleArticle(x) === k; }).sort(trierLots);
+}
+/* Le lot qui sortira en premier : le plus ancien qui a du stock. */
+function lotCourant(m){
+  if (!m || (Number(m.stock) || 0) > 1e-9 || m.cat === "outil") return m;
+  var l = lotsDe(m).filter(function(x){ return (Number(x.stock) || 0) > 1e-9; });
+  return l.length ? l[0] : m;
+}
+/* Stock de tout l'article (tous ses lots). */
+function stockArticle(m){
+  var t = 0; lotsDe(m).forEach(function(x){ t += Number(x.stock) || 0; });
+  return Math.round(t * 1000) / 1000;
+}
+/* Les autres lignes du même nom (autres couleurs, crochets ou prix). */
+function lignesSoeurs(m){
+  if (!m) return [];
+  var b = plier(nomBaseDe(m));
+  return state.matieres.filter(function(x){ return x !== m && x.cat === m.cat && x.unite === m.unite && plier(nomBaseDe(x)) === b; });
+}
+function libelleLigne(m){
+  if (!m) return "";
+  var d = [];
+  if (m.crochetMin) d.push(nb(m.crochetMin) + " mm");
+  if (m.cat !== "outil" && Number(m.prix) > 0) d.push(eur(m.prix) + (Number(m.contenance) > 1 ? " " + libLotCourt(m) : ""));
+  return m.nom + (d.length ? " (" + d.join(", ") + ")" : "");
+}
+function lotEpuise(m){
+  if (!m || m.cat === "outil" || Math.abs(Number(m.stock) || 0) > 1e-9) return false;
+  if (!lotsDe(m).some(function(x){ return x !== m && (Number(x.stock) || 0) > 1e-9; })) return false;
+  return !(state.creations || []).some(function(c){ return (c.lignes || []).some(function(l){ return l.mid === m.id; }); });
+}
+/* Une nouvelle ligne à partir d'une autre : même fiche, stock à zéro. */
+function dupliquerLigne(m0, champs){
+  var m = clone(m0);
+  m.id = "m_" + uid(); m.stock = 0; m.mouv = []; m.variantes = []; m.offres = clone(m0.offres || []);
+  m.perso = true; m.prixIndicatif = false; m.prixSource = null; m.refCat = null; m.cree = Date.now(); m.maj = Date.now();
+  m.nomBase = nomBaseDe(m0);
+  for (var k in (champs || {})) m[k] = champs[k];
+  m.nom = nomLigne(m.nomBase, m.couleur || "");
+  m.pmp = (Number(m.contenance) || 1) > 0 ? (Number(m.prix) || 0) / (Number(m.contenance) || 1) : 0;
+  return m;
+}
+/* Noter un achat sur une ligne. Au prix de la ligne (ou si elle est vide, ou
+   jamais achetée) : sur la ligne. À un autre prix : sur le lot à ce prix,
+   créé au besoin. Renvoie {m: ligne utilisée, nouvelle: vrai si créée}. */
+function ligneAchat(m, q, prixTotal){
+  if (!m || m.cat === "outil" || !(prixTotal > 0) || !(q > 0)) return {m: m, nouvelle: false};
+  var parLot = Math.round(prixTotal / q * (Number(m.contenance) || 1) * 100) / 100;
+  var memePrix = function(x){ return Math.abs((Number(x.prix) || 0) - parLot) <= 0.005; };
+  if (memePrix(m) || m.prixIndicatif || !((Number(m.stock) || 0) > 1e-9)) return {m: m, nouvelle: false};
+  var ex = lotsDe(m).filter(function(x){ return x !== m && memePrix(x); })[0];
+  if (ex) return {m: ex, nouvelle: false};
+  return {m: dupliquerLigne(m, {prix: parLot, couleur: m.couleur || "", lotDe: m.id}), nouvelle: true};
+}
+function noterAchatLigne(m, q, prixTotal, note, extra){
+  var r = ligneAchat(m, q, prixTotal);
+  if (r.nouvelle) state.matieres.push(r.m);
+  mouvementMatiere(r.m, "entree", q, prixTotal > 0 ? prixTotal : null, note, extra || {});
+  r.m.prixIndicatif = false;
+  return r;
+}
+/* Sortie de fabrication : on puise dans les lots, le plus ancien d'abord ;
+   ce qui manque est retiré de la ligne demandée (elle passe en négatif).
+   Renvoie {manque, derniere: la dernière ligne touchée}. */
+function sortirLots(m, besoin, note, extra){
+  var reste = Math.round(besoin * 1000) / 1000, derniere = null;
+  if (m.cat !== "outil") lotsDe(m).forEach(function(x){
+    if (reste <= 1e-9) return;
+    var dispo = Number(x.stock) || 0; if (dispo <= 1e-9) return;
+    var q = Math.round(Math.min(dispo, reste) * 1000) / 1000;
+    mouvementMatiere(x, "sortie", q, null, note, extra); reste = Math.round((reste - q) * 1000) / 1000; derniere = x;
+  });
+  var manque = reste > 1e-9;
+  if (manque || !derniere){ if (reste > 1e-9 || besoin <= 0) mouvementMatiere(m, "sortie", Math.max(0, reste), null, note, extra); derniere = derniere || m; }
+  return {manque: manque, derniere: derniere};
+}
+/* Reprise des anciennes couleurs : chaque couleur devient une ligne à part,
+   avec son stock. Le stock « sans couleur précisée » reste sur la ligne
+   d'origine ; s'il n'y en a pas, la ligne d'origine devient la première
+   couleur. Les créations, pièces et couleurs habituelles suivent. */
+function separerLignesMatieres(s){
+  var carte = {}, nouvelles = [];
+  s.matieres.forEach(function(m){
+    var vs = Array.isArray(m.variantes) ? m.variantes.slice() : [];
+    if (!vs.length){ m.variantes = []; return; }
+    var base = m.nomBase || m.nom;
+    var libre = Number(m.stock) || 0; vs.forEach(function(v){ libre -= Number(v.stock) || 0; });
+    var garde = Math.abs(libre) < 1e-6 ? vs[0] : null;
+    var sortis = 0;
+    m.variantes = [];
+    vs.forEach(function(v){
+      var lib = (v.coloris || "couleur sans nom") + (v.bain ? " · bain " + v.bain : "");
+      if (v === garde){ carte[m.id + "|" + v.id] = m.id; return; }
+      var n = clone(m);
+      n.id = "m_" + uid(); n.nomBase = base; n.couleur = lib; n.nom = nomLigne(base, lib);
+      n.stock = 0; n.mouv = []; n.variantes = []; n.seuil = 0; n.cree = Number(v.cree) || Date.now(); n.origine = m.id; n.perso = true;
+      var q = Math.round((Number(v.stock) || 0) * 1000) / 1000;
+      if (Math.abs(q) > 1e-9) mouvementMatiere(n, "transfert", q, null, "Reprise de la couleur « " + lib + " » de « " + base + " »");
+      sortis += q;
+      carte[m.id + "|" + v.id] = n.id; nouvelles.push(n);
+    });
+    m.nomBase = base;
+    if (garde){ m.couleur = (garde.coloris || "couleur sans nom") + (garde.bain ? " · bain " + garde.bain : ""); m.nom = nomLigne(base, m.couleur); }
+    if (Math.abs(sortis) > 1e-9) mouvementMatiere(m, "transfert", -Math.round(sortis * 1000) / 1000, null, "Couleurs séparées en lignes à part");
+  });
+  if (!nouvelles.length && !Object.keys(carte).length) return;
+  nouvelles.forEach(function(n){ s.matieres.push(n); });
+  function vers(mid, vid){ return vid ? carte[mid + "|" + vid] : null; }
+  (s.creations || []).forEach(function(c){
+    (c.lignes || []).forEach(function(l){ if (l.vid){ var k = vers(l.mid, l.vid); if (k) l.mid = k; delete l.vid; } });
+    var vu = {};
+    c.lignes = (c.lignes || []).filter(function(l){
+      if (vu[l.mid]){ vu[l.mid].qte = (Number(vu[l.mid].qte) || 0) + (Number(l.qte) || 0); return false; }
+      vu[l.mid] = l; return true;
+    });
+    if (c.couleursHabituelles){
+      var h = {};
+      Object.keys(c.couleursHabituelles).forEach(function(mid){ var k = vers(mid, c.couleursHabituelles[mid]); if (k && k !== mid) h[mid] = k; });
+      c.couleursHabituelles = h;
+    }
+  });
+  var crs = {}; (s.creations || []).forEach(function(c){ crs[c.id] = c; });
+  (s.pieces || []).forEach(function(p){
+    if (!p.couleurs) return;
+    var h = {}, cr = crs[p.cid];
+    var lignesCr = cr ? (cr.lignes || []).map(function(l){ return l.mid; }) : [];
+    Object.keys(p.couleurs).forEach(function(mid){
+      var k = vers(mid, p.couleurs[mid]);
+      /* La fiche pointe déjà sur cette ligne : rien à substituer. */
+      if (!k || k === mid || lignesCr.indexOf(k) !== -1) return;
+      h[mid] = k;
+    });
+    p.couleurs = h;
+  });
+  s.reglages.lignesV60 = Date.now();
+}
 /* « 10 pelotes (500 g) » pour un fil vendu en pelotes, sinon « 500 g ». */
 /* « la pelote », « le sac », « le lot », « l'unité » : le prix saisi dans la colonne
    « Prix du lot » est celui d'UNE pelote, pas celui du stock. */
@@ -1163,6 +1321,11 @@ function mouvementMatiere(m, type, qte, prixTotal, note, extra){
     /* Pesée en fin d'ouvrage : qte est l'écart (positif = du fil revient au
        stock, négatif = il en a fallu plus que prévu). */
     m.stock = stockAvant + qte;
+  } else if (type === "transfert"){
+    /* V60 : passage de stock d'une ligne à une autre (reprise des couleurs) :
+       qte positive = arrivée, négative = départ, au prix moyen. */
+    if (qte > 0 && stockAvant + qte > 0 && extra.pmpSource > 0) m.pmp = (Math.max(0, stockAvant) * pmpAvant + qte * extra.pmpSource) / (Math.max(0, stockAvant) + qte);
+    m.stock = stockAvant + qte;
   } else if (type === "inventaire"){
     /* L'inventaire d'une couleur ne remplace que cette couleur : le total
        bouge de l'écart. */
@@ -1177,13 +1340,13 @@ function mouvementMatiere(m, type, qte, prixTotal, note, extra){
   }
   var puMouv = null;
   if (type === "entree") puMouv = qte > 0 ? cout / qte : puCatalogue;
-  else if (type === "sortie" || type === "perte" || type === "correction") puMouv = pmpAvant || puCatalogue || null;
+  else if (type === "sortie" || type === "perte" || type === "correction" || type === "transfert") puMouv = pmpAvant || puCatalogue || null;
   else if (type === "inventaire") puMouv = pmpAvant || puCatalogue || null;
   var ecart = type === "inventaire" ? (Number(m.stock) - stockAvant) : null;
   m.mouv.unshift({
     id: "mv_" + uid(),
     d: (extra.le && extra.le <= Date.now()) ? extra.le : Date.now(), t: type, q: qte,
-    p: type === "entree" ? cout : ((type === "sortie" || type === "perte" || type === "correction") && puMouv ? puMouv * qte : (type === "inventaire" && puMouv ? puMouv * ecart : null)),
+    p: type === "entree" ? cout : ((type === "sortie" || type === "perte" || type === "correction" || type === "transfert") && puMouv ? puMouv * qte : (type === "inventaire" && puMouv ? puMouv * ecart : null)),
     pu: puMouv,
     est: estime || undefined,
     sav: stockAvant, pmpav: pmpAvant, prixav: prixAvant,
@@ -1202,7 +1365,7 @@ function mouvementMatiere(m, type, qte, prixTotal, note, extra){
    ancien ne s'annule pas (les suivants en dépendent) : on le corrige par un
    inventaire. */
 function peutAnnulerMouvement(m, mv){
-  if (!mv || mv.annule || mv.t === "annulation" || typeof mv.sav !== "number") return false;
+  if (!mv || mv.annule || mv.t === "annulation" || mv.t === "transfert" || typeof mv.sav !== "number") return false;
   for (var i = 0; i < m.mouv.length; i++){
     var x = m.mouv[i];
     if (x.t === "annulation" || x.annule) continue;
@@ -1265,7 +1428,7 @@ function rejouerMouvements(m){
 /* Annule un mouvement, même ancien : il reste dans le journal, barré, et
    le reste est recalculé. */
 function annulerMouvementQuelconque(m, mv){
-  if (!mv || mv.annule || mv.t === "annulation" || typeof mv.sav !== "number") return false;
+  if (!mv || mv.annule || mv.t === "annulation" || mv.t === "transfert" || typeof mv.sav !== "number") return false;
   if (peutAnnulerMouvement(m, mv)) return annulerMouvement(m, mv);
   mv.annule = Date.now();
   var lib = ({entree:"achat", sortie:"utilisation", perte:"perte", correction:"pesée", inventaire:"inventaire"}[mv.t] || mv.t);
@@ -2059,6 +2222,30 @@ function enregistrerNav(){
   nav.pile.push(k);
   nav.cle = k;
 }
+/* V60 : actualiser la page (F5) rouvre l'écran où l'on était, au même
+   endroit, au lieu de revenir à l'Accueil. Le navigateur garde l'état de
+   l'historique d'un rechargement à l'autre : on le relit une seule fois, au
+   premier affichage de l'atelier. */
+function reprendreApresActualisation(){
+  if (nav.cle !== null || nav.repris) return;
+  nav.repris = true;
+  var hs = null; try{ hs = history.state; }catch(err){}
+  var e = hs && hs.crochompte;
+  if (!e || !e.tab || e.tab === "accueil") return;
+  if (e.tab === "fiche"){
+    var c = e.ficheId ? creation(e.ficheId) : null;
+    if (!c) return;   /* fiche neuve pas enregistrée : l'Accueil propose de la reprendre */
+    view.draft = clone(c); view.draftRef = empreinteFiche(view.draft);
+  }
+  if (e.cmdVue && !(state.commandes || []).some(function(x){ return x.id === e.cmdVue; })) e.cmdVue = null;
+  if (e.patronVu && !(state.patrons || []).some(function(x){ return x.id === e.patronVu; })) e.patronVu = null;
+  for (var k in e) view[k] = e[k];
+  nav.i = hs.i || 0;
+  var y = 0; try{ y = Number(sessionStorage.getItem("crochompte-defil")) || 0; }catch(err){}
+  if (y > 0){ derniereVue = view.tab + "|" + (view.sub||"") + "|" + (view.modeleVu||"") + "|" + (view.ficheId||"") + "|" + (view.cmdVue||"") + "|" + (view.patronVu||"") + "|" + (view.regSection||"");
+    setTimeout(function(){ window.scrollTo(0, y); }, 60); }
+}
+window.addEventListener("pagehide", function(){ try{ sessionStorage.setItem("crochompte-defil", String(window.scrollY || 0)); }catch(err){} });
 /* Les boutons « ← Retour » de l'application remontent à l'écran parent
    (la liste pour une fiche, le catalogue pour un modèle). Si cet écran parent
    est justement celui d'où l'on vient, on recule dans l'historique au lieu
@@ -3085,6 +3272,7 @@ function render(){
     hydraterPhotos(main);
     return;
   }
+  reprendreApresActualisation();
   var bA = bandeauAbonnement(); if (bA) main.appendChild(bA);
   if (view.tab === "accueil")        renderAccueil(main);
   else if (view.tab === "patrons")   renderPatrons(main);
@@ -3478,8 +3666,17 @@ function pointsAFaire(){
     " : plus de sorties que d'achats notés. Note l'achat oublié ou fais un inventaire.",
     "Voir le stock", function(){ view.sub = "matieres"; aller("stock"); });
   var attCoul = piecesCouleurAttente();
-  if (attCoul.length) ajout("warn", pluriel(attCoul.length, "pièce attend la couleur utilisée", "pièces attendent la couleur utilisée"),
-    "Choisis la couleur de fil qui a servi : elle sera retirée du bon stock.", "Choisir la couleur", function(){ dialogueCouleursAttente(); });
+  if (attCoul.length) ajout("warn", pluriel(attCoul.length, "pièce attend la ligne de matière utilisée", "pièces attendent la ligne de matière utilisée"),
+    "Leur matière prévue est vide : choisis la ligne qui a servi (autre couleur ou autre lot), elle sera retirée du bon stock.", "Choisir", function(){ dialogueCouleursAttente(); });
+  /* V60 : ce qu'il faut acheter pour les pièces prévues et les commandes
+     acceptées, face au stock (tous lots compris). */
+  var aAcheter = besoinsMatieres().filter(function(b){ return b.manque > 1e-9; });
+  if (aAcheter.length) ajout("warn", pluriel(aAcheter.length, "matière à acheter", "matières à acheter") + " pour ta production",
+    aAcheter.slice(0, 3).map(function(b){ return b.m.nom + " (il manque " + texteLots(b.m, b.manque) + ")"; }).join(", ") + (aAcheter.length > 3 ? "…" : "") +
+    " : pour tes pièces à faire et tes commandes acceptées.", "Voir", function(){ view.sub = "matieres"; aller("stock"); setTimeout(function(){ var x = document.getElementById("besoins-mat"); if (x) x.scrollIntoView({block:"start"}); }, 80); });
+  var inco = incoherences();
+  if (inco.length) ajout("warn", pluriel(inco.length, "incohérence à vérifier", "incohérences à vérifier"),
+    inco.slice(0, 2).map(function(x){ return x.t; }).join(" · ") + (inco.length > 2 ? "…" : "") + ".", "Vérifier", dialogueCoherence);
   var sousSeuil = alertesStock();
   if (sousSeuil.length) ajout("warn", sousSeuil.length + " matière" + (sousSeuil.length>1?"s":"") + " sous ton seuil d'alerte",
     sousSeuil.slice(0,3).map(function(m){ return m.nom; }).join(", ") + (sousSeuil.length > 3 ? "…" : "") + " : pense à en racheter.",
@@ -3810,8 +4007,16 @@ function renderAccueil(main){
 
 
 /* ═════ NOUVEAUTÉS ET SIGNALEMENT ═════ */
-var VERSION_APP = "V59";
+var VERSION_APP = "V60";
 var NOUVEAUTES = [
+  {v:"V60", d:"Octobre 2026", l:[
+    "Actualiser la page te laisse là où tu étais : même rubrique, même fiche, même commande.",
+    "Une ligne de matière par couleur, crochet, contenance et prix d'achat : tes couleurs sont devenues des lignes, avec leur propre stock. « Dupliquer » crée une autre couleur en un geste.",
+    "Un achat à un autre prix ouvre un nouveau lot ; les fabrications puisent d'abord dans le plus ancien.",
+    "« Vendre » n'apparaît que s'il y a une pièce libre en stock ; sinon « Fabriquer ». Une pièce faite mais pas notée se note terminée et vendue en un seul geste.",
+    "Une commande acceptée réserve tout de suite les pièces prêtes de ton stock : elles ne peuvent plus être vendues ailleurs.",
+    "Nouveau : « Pour ta production » liste les matières à acheter, et le contrôle de cohérence répare ce qui ne colle pas."
+  ]},
   {v:"V59", d:"Octobre 2026", l:[
     "Une commande pilote maintenant ses pièces dans l'atelier : lancer la fabrication, reprendre une pièce déjà en stock, terminer, livrer (la pièce passe en vendue au bon prix), et tout revient en arrière si tu changes d'avis.",
     "Le bouton de l'étape suivante est partout : liste, tableau par étape, planning. Encaisser ouvre une fenêtre déjà remplie (reste dû, moyen, date).",
@@ -4672,11 +4877,21 @@ function densifier(t, titre){
     Array.prototype.forEach.call(tr.children, function(td){
       var l = td.getAttribute("data-l"), tx = td.textContent.replace(/\s+/g, " ").trim();
       if (l === titre) td.classList.add("d-titre");
-      else if (!l){ if (td.querySelector("button, a, input, select")) td.classList.add("d-acts"); else td.classList.add("vide"); }
-      else if ((tx === "—" || tx === "–" || tx === "") && !td.querySelector("button, input, select")) td.classList.add("vide");
+      else if (!l){ if (td.querySelector("button, a, input, select")) td.classList.add("d-acts"); else td.classList.add("d-vide"); }
+      else if ((tx === "—" || tx === "–" || tx === "") && !td.querySelector("button, input, select")) td.classList.add("d-vide");
     });
   });
   return t;
+}
+/* V60 : « Vendre » seulement quand une pièce est prête en stock (avec le
+   nombre) ; sinon « Fabriquer ». La vente d'une pièce faite mais pas notée
+   reste possible, en un geste, depuis la fenêtre de vente. */
+function boutonVendreOuFabriquer(c){
+  var n = enStock(c.id), b;
+  if (n > 0){ b = bouton("Vendre (" + n + ")", function(){ dialogueVente(c.id); }); b.setAttribute("aria-label", "Vendre « " + c.nom + " » : " + pluriel(n, "pièce") + " en stock"); }
+  else { b = bouton("Fabriquer", function(){ dialogueAjoutPieces(c.id); }); b.setAttribute("aria-label", "Fabriquer « " + c.nom + " » : aucune pièce en stock"); b.title = "Aucune pièce en stock : note sa fabrication. Déjà faite ? La fenêtre Vendre (en haut) le permet en un geste."; }
+  b.classList.add("sm");
+  return b;
 }
 function tableCreations(liste, vend, complet){
   /* V59 : une ligne par création, toute la ligne ouvre la fiche ; sur
@@ -4693,12 +4908,12 @@ function tableCreations(liste, vend, complet){
       (vend ? '<td class="n num" data-l="Prix">'+esc(r.prix > 0 ? eur(r.prix) : "—")+'</td><td class="n num" data-l="Conseillé">'+esc(r.prixObjectif > 0 ? eur(r.prixObjectif) : "—")+'</td>'+
               '<td class="n num" data-l="Gain">'+(r.prix > 0 ? esc(eur(r.reste)) : "—")+'</td><td class="n num" data-l="€ / heure"><b class="'+stF.k+'">'+(r.prix > 0 && r.heures > 0 ? esc(eur(r.gainHoraire)) : "—")+'</b></td>'
             : '<td class="n num" data-l="Matières">'+esc(eur(r.matieres))+'</td>')+
-      (complet ? '<td class="n num" data-l="En cours">'+(enCoursN || "–")+'</td><td class="n num" data-l="'+(vend ? 'En stock' : 'Terminées')+'">'+(enStock(c.id) || "–")+'</td>' : '')+
+      (complet ? '<td class="n num" data-l="En cours">'+(enCoursN || "–")+'</td><td class="n num" data-l="'+(vend ? 'En stock' : 'Terminées')+'">'+(enStock(c.id) || "–")+(reserveesDe(c.id) ? '<div class="hint" style="font-size:11px">+ '+esc(pluriel(reserveesDe(c.id), "réservée"))+'</div>' : '')+'</td>' : '')+
       '<td data-l=""><div class="act-col"></div></td></tr>');
     tr.querySelector(".lien-nom").addEventListener("click", function(){ ouvrirFiche(c.id); });
     ligneCliquable(tr, function(){ ouvrirFiche(c.id); });
     var act = tr.querySelector(".act-col");
-    if (vend){ var bV = bouton("Vendre", function(){ dialogueVente(c.id); }); bV.classList.add("sm"); act.appendChild(bV); }
+    if (vend) act.appendChild(boutonVendreOuFabriquer(c));
     else { var bO = bouton("Ouvrir", function(){ ouvrirFiche(c.id); }); bO.classList.add("sm"); act.appendChild(bO); }
     tb.appendChild(tr);
   });
@@ -4733,7 +4948,7 @@ function carteCreation(x, filtre, vend, complet, opts){
   var bF = bouton("Ouvrir la fiche", function(){ ouvrirFiche(c.id); }); bF.classList.add("sm"); act.appendChild(bF);
   var bD = bouton("Dupliquer", function(){ dupliquerCreation(c.id); }); bD.classList.add("sm"); act.appendChild(bD);
   if (complet){ var bP = bouton("+ Pièce", function(){ dialogueAjoutPieces(c.id); }); bP.classList.add("sm"); act.appendChild(bP); }
-  if (vend){ var bV = bouton("Vendre", function(){ dialogueVente(c.id); }); bV.classList.add("sm"); act.appendChild(bV); }
+  if (vend) act.appendChild(boutonVendreOuFabriquer(c));
   if (!complet) return card;
 
   if (!pieces.length){
@@ -5031,8 +5246,7 @@ function dialogueAchatMatiere(m){
     '<label class="f"><span>Total payé (€)</span><input id="am-p" type="number" min="0" step="0.01" inputmode="decimal" value="'+esc(Number(m.prix) || "")+'"></label>'+
     '</div><div class="am-coul"></div><p class="hint" id="am-aide" style="margin:8px 0 0"></p></div>');
   var iN = box.querySelector("#am-n"), iP = box.querySelector("#am-p"), iU = box.querySelector("#am-pu"), aide = box.querySelector("#am-aide");
-  var coul = m.cat === "outil" ? null : champCouleur(m, "am");
-  if (coul) box.querySelector(".am-coul").appendChild(coul.el);
+  var coul = null;   /* V60 : une ligne = une couleur ; une autre couleur = une autre ligne */
   function maj(){
     var n = Number(lireNombre(iN.value)) || 0, p = Number(lireNombre(iP.value)) || 0;
     var q = n * (Number(m.contenance) || 1);
@@ -5054,7 +5268,10 @@ function dialogueAchatMatiere(m){
       if (coul){ var rc = coul.lire(); d.push("Couleur : " + rc.libelle + (rc.nouvelle ? " (nouvelle)" : "")); }
       d.push(p > 0 ? "Prix payé : " + eur(p) + (m.contenance > 1 ? ", soit " + eur(p / n) + " " + (m.cat === "fil" ? "la pelote" : "le lot") : "")
                    : "Prix non saisi : l'achat sera estimé au prix de la fiche.");
-      d.push("Stock après : " + texteLots(m, (Number(m.stock)||0) + q));
+      var la = ligneAchat(m, q, p);
+      if (la.nouvelle) d.push("Prix différent de cette ligne (" + eur(m.prix) + ") : un nouveau lot « " + m.nom + " » à " + eur(la.m.prix) + " sera créé, avec son propre stock. Les fabrications puiseront d'abord dans le plus ancien.");
+      else if (la.m !== m) d.push("Ajouté au lot existant à " + eur(la.m.prix) + " (stock après : " + texteLots(la.m, (Number(la.m.stock)||0) + q) + ").");
+      else d.push("Stock après : " + texteLots(m, (Number(m.stock)||0) + q));
       var alerte = "";
       if (p > 0 && Number(m.prix) > 0 && m.contenance > 0){
         var parLot = p / q * m.contenance;
@@ -5064,11 +5281,9 @@ function dialogueAchatMatiere(m){
     }
   }, function(){
     var n = Number(lireNombre(iN.value)) || 0, p = Number(lireNombre(iP.value)) || 0;
-    var vid = coul ? coul.appliquer(coul.lire()) : undefined;
-    mouvementMatiere(m, "entree", n * (Number(m.contenance) || 1), p > 0 ? p : null, "Achat", {vid: vid});
-    m.prixIndicatif = false;
+    var ra = noterAchatLigne(m, n * (Number(m.contenance) || 1), p > 0 ? p : null, "Achat");
     sauverTout(); render();
-    toast("Achat noté : " + qte(n * (Number(m.contenance) || 1), m.unite) + " de " + m.nom + (vid ? " (" + libelleVariante(varianteDe(m, vid)) + ")" : ""));
+    toast("Achat noté : " + qte(n * (Number(m.contenance) || 1), m.unite) + " de " + m.nom + (ra.nouvelle ? " · nouveau lot à " + eur(ra.m.prix) : ra.m !== m ? " · lot à " + eur(ra.m.prix) : ""));
   });
 }
 
@@ -5090,7 +5305,7 @@ function ligneCliquable(tr, fn){
 }
 function optionsMoyens(sel){ return MOYENS_PAIEMENT.map(function(m){ return '<option value="'+m[0]+'"'+(m[0] === sel ? ' selected' : '')+'>'+m[1]+'</option>'; }).join(""); }
 function pieceEnStockDe(cid){
-  var l = piecesDe(cid).filter(function(p){ return p.prod === "termine" && !horsStock(p) && p.com !== "commande"; });
+  var l = piecesDe(cid).filter(pieceLibre);
   l.sort(function(a, b){ return (a.termineLe || a.cree || 0) - (b.termineLe || b.cree || 0); });
   return l[0] || null;
 }
@@ -5102,6 +5317,10 @@ function vendrePiece(cid, prix, moyen, extra){
      plus ancienne en stock ; sinon une pièce neuve, terminée et vendue. */
   var p = extra.pid ? piece(extra.pid) : null;
   if (!p) p = pieceEnStockDe(cid);
+  /* V60 : sans pièce libre, l'écran ne vend pas « dans le vide » : il passe
+     extra.creer à faux, sauf quand on a dit « je l'ai faite sans la noter »
+     (les ventes importées et les reprises créent la pièce). */
+  if (!p && extra.creer === false) return null;
   if (!p){
     ajouterPieces(cid, 1, "termine", "atelier");
     p = piecesDe(cid).filter(function(x){ return x.prod === "termine" && x.com === "atelier"; }).sort(function(a, b){ return b.cree - a.cree; })[0];
@@ -5144,10 +5363,15 @@ function dialogueVente(cid, opts){
     '<label class="f"><span>À qui (facultatif)</span><input id="vt-client" type="text" maxlength="80" placeholder="Prénom, pseudo…"></label>'+
     '<label class="f" id="vt-piece-w" hidden><span>Quelle pièce</span><select id="vt-piece"></select></label>'+
     '<label class="f" id="vt-cmd-w" hidden><span>Pour une commande ?</span><select id="vt-cmd"></select></label>'+
-    '</div><p class="hint" id="vt-stock" style="margin:8px 0 0"></p></div>');
+    '</div><p class="hint" id="vt-stock" style="margin:8px 0 0"></p>'+
+    /* V60 : aucune pièce libre : on ne vend pas dans le vide. Un seul geste
+       si la pièce existe mais n'a pas été notée. */
+    '<div class="vt-vide" id="vt-vide" hidden><label class="case-ligne"><input type="checkbox" id="vt-faite"> <span>Je l\'ai fabriquée sans la noter : la noter <b>terminée et vendue</b> (ses matières sortent du stock)</span></label>'+
+    '<p class="hint" id="vt-manques" style="margin:6px 0 0"></p></div></div>');
   var sel = box.querySelector("#vt-cid"), inPrix = box.querySelector("#vt-prix"), selCanal = box.querySelector("#vt-canal"), aide = box.querySelector("#vt-stock");
   var selPiece = box.querySelector("#vt-piece"), wPiece = box.querySelector("#vt-piece-w"), selCmd = box.querySelector("#vt-cmd"), wCmd = box.querySelector("#vt-cmd-w");
-  actives.forEach(function(c){ sel.appendChild(el('<option value="'+esc(c.id)+'"'+(c.id === c0.id ? ' selected' : '')+'>'+esc(c.nom)+'</option>')); });
+  actives.forEach(function(c){ var nS = enStock(c.id); sel.appendChild(el('<option value="'+esc(c.id)+'"'+(c.id === c0.id ? ' selected' : '')+'>'+esc(c.nom + (nS ? " · " + nS + " en stock" : " · aucune en stock"))+'</option>')); });
+  var wVide = box.querySelector("#vt-vide"), cFaite = box.querySelector("#vt-faite"), pManq = box.querySelector("#vt-manques");
   state.canaux.forEach(function(cn){ selCanal.appendChild(el('<option value="'+esc(cn.id)+'">'+esc(cn.nom)+'</option>')); });
   function maj(){
     var c = creation(sel.value); if (!c) return;
@@ -5175,9 +5399,17 @@ function dialogueVente(cid, opts){
       attente.forEach(function(k){ selCmd.appendChild(el('<option value="'+esc(k.id)+'">'+esc((k.num ? k.num + " · " : "") + ((k.client && k.client.nom) || "sans nom"))+'</option>')); });
       wCmd.hidden = false;
     } else wCmd.hidden = true;
+    var nRes = reserveesDe(c.id);
     aide.textContent = n > 0 ? n + (n > 1 ? " pièces prêtes" : " pièce prête") + " en stock : la plus ancienne sera vendue."
-      : enCours.length ? "Ta pièce en fabrication passera en « Terminée » et « Vendue », avec son temps chronométré."
-      : "Aucune pièce en stock : une pièce terminée et vendue sera créée, et ses matières sortiront du stock.";
+      : enCours.length ? "Aucune pièce terminée en stock. Ta pièce en fabrication passera en « Terminée » et « Vendue », avec son temps chronométré."
+      : "Aucune pièce de « " + c.nom + " » en stock" + (nRes ? " (" + pluriel(nRes, "pièce réservée", "pièces réservées") + " pour des commandes)" : "") + ".";
+    wVide.hidden = !(n === 0 && !enCours.length);
+    cFaite.checked = false;
+    pManq.textContent = "";
+    if (!wVide.hidden){
+      var mq = manquesPourFabriquer([{cr: c, n: 1}]);
+      pManq.textContent = mq.length ? "Attention, matières insuffisantes : " + mq.map(function(x){ return x.m.nom + " (il manque " + qte(x.manque, x.m.unite) + ")"; }).join(", ") + ". Le stock passera en négatif." : "";
+    }
     if (attente.length) aide.textContent += " Une commande attend cette création : si c'est pour elle, relie-la, l'argent sera compté une seule fois.";
   }
   sel.addEventListener("change", maj); maj();
@@ -5190,12 +5422,16 @@ function dialogueVente(cid, opts){
                                  : "Cette commande est déjà réglée en entier : la pièce est reliée, aucun règlement n'est ajouté.";
   });
   dialogueChamps({titre: opts.titre || "Vendre", contenu: box, bouton:"C'est vendu", champs:[],
-    verifier:function(){ if (!(Number(lireNombre(inPrix.value)) >= 0) || inPrix.value === "") return "Indique le prix payé."; return ""; }
+    verifier:function(){
+      if (!(Number(lireNombre(inPrix.value)) >= 0) || inPrix.value === "") return "Indique le prix payé.";
+      if (!wVide.hidden && !cFaite.checked) return "Aucune pièce de « " + (creation(sel.value) || {}).nom + " » en stock : coche la case si tu l'as fabriquée sans la noter, ou note d'abord sa fabrication.";
+      return "";
+    }
   }, function(){
     var p = vendrePiece(sel.value, Number(lireNombre(inPrix.value)), box.querySelector("#vt-moyen").value, {
       canal: selCanal.value, client: box.querySelector("#vt-client").value.trim(), le: dateVersTs(box.querySelector("#vt-date").value) || Date.now(),
-      pid: wPiece.hidden ? "" : selPiece.value, cmdId: wCmd.hidden ? "" : selCmd.value});
-    if (!p){ toast("La vente n'a pas pu être enregistrée : cette création n'existe plus. Réessaie depuis « Mes créations »."); return; }
+      pid: wPiece.hidden ? "" : selPiece.value, cmdId: wCmd.hidden ? "" : selCmd.value, creer: !wVide.hidden && cFaite.checked || (!wPiece.hidden && !selPiece.value)});
+    if (!p){ toast("La vente n'a pas pu être enregistrée : aucune pièce de cette création en stock."); return; }
     var cr = creation(sel.value);
     var cmdV = commandeLiee(p);
     var noteV = cmdV && (cmdV.paiements || []).some(function(x){ return x.pieceId === p.id; });
@@ -5305,14 +5541,24 @@ function blocStand(date, ventesJour){
     var n = enStock(c.id), vendus = ventesJour.filter(function(x){ return x.type === "piece" && x.p.cid === c.id; }).length;
     var row = el('<div class="stand-ligne">'+vignette(c, 40)+'<div class="stand-nom"><b>'+esc(c.nom)+'</b><span class="hint">'+(n > 0 ? esc(pluriel(n, "pièce")) + " en stock" : "pas en stock")+(vendus ? ' · '+vendus+' vendue'+(vendus > 1 ? 's' : '')+' ce jour' : '')+'</span></div>'+
       '<label class="f stand-prix"><span class="sr-only">Prix</span><input type="number" min="0" step="0.5" inputmode="decimal" value="'+esc(Number(c.prix) || "")+'" aria-label="Prix de '+esc(c.nom)+'"></label></div>');
-    var bV = bouton("Vendu", function(){
+    function vendreStand(creer){
       var prix = Number(lireNombre(row.querySelector("input").value)) || 0;
       var ou = view.ventesOu || "marche";
-      var p = vendrePiece(c.id, prix, view.marcheMoyen || "especes", {canal:ou, le: date === aujourdhuiISO() ? Date.now() : dateVersTs(date) + 43200000});
-      if (p){ if (ou === "marche") p.marche = date; sauverTout(); }
-      render();
-      toast("Vendu : " + c.nom + " · " + eur(prix) + " · " + libelleMoyen(view.marcheMoyen || "especes"));
-    }, true);
+      var p = vendrePiece(c.id, prix, view.marcheMoyen || "especes", {canal:ou, le: date === aujourdhuiISO() ? Date.now() : dateVersTs(date) + 43200000, creer: creer});
+      if (!p){ toast("Aucune pièce de « " + c.nom + " » en stock."); render(); return; }
+      if (ou === "marche") p.marche = date;
+      sauverTout(); render();
+      toast("Vendu : " + c.nom + " · " + eur(prix) + " · " + libelleMoyen(view.marcheMoyen || "especes"), {libelle:"Annuler", fn:function(){ majCom(p, "atelier"); p.marche = null; sauverTout(); render(); toast("Vente annulée : la pièce est de retour en stock."); }});
+    }
+    /* V60 : sans pièce en stock, pas de vente dans le vide : un geste
+       explicite, « faite mais pas notée », qui la note terminée et vendue. */
+    var bV = n > 0 ? bouton("Vendu", function(){ vendreStand(false); }, true)
+      : bouton("Faite, pas notée ?", function(){
+          var mq = manquesPourFabriquer([{cr: c, n: 1}]);
+          confirmer({titre: "Noter « " + c.nom + " » fabriquée et vendue ?", texte: "Aucune pièce de cette création n'est en stock. Si tu l'as fabriquée sans la noter, elle est notée terminée (ses matières sortent du stock) puis vendue.",
+                     details: mq.length ? mq.map(function(x){ return x.m.nom + " : il manque " + qte(x.manque, x.m.unite) + " (le stock passera en négatif)"; }) : null,
+                     bouton: "Oui, fabriquée et vendue"}, function(){ vendreStand(true); });
+        });
     bV.classList.add("stand-btn");
     row.appendChild(bV);
     liste.appendChild(row);
@@ -5322,7 +5568,7 @@ function blocStand(date, ventesJour){
     var bTout = bouton(view.standTout ? "N'afficher que les " + MAXS + " premières" : "Voir les " + (filtreesS.length - MAXS) + " autres créations", function(){ view.standTout = !view.standTout; render(); });
     bTout.classList.add("sm"); bTout.style.marginTop = "8px"; body.appendChild(bTout);
   }
-  body.appendChild(el('<p class="hint" style="margin:8px 0 0">Une pièce pas en stock est créée au moment de la vente, et ses matières sortent du stock.</p>'));
+  body.appendChild(el('<p class="hint" style="margin:8px 0 0">« Vendu » prend la plus ancienne pièce en stock. Une création sans stock ne se vend pas dans le vide : « Faite, pas notée ? » la note fabriquée puis vendue.</p>'));
   /* frais du jour (emplacement, terminal…) pour les jours de marché */
   var cF = el('<div class="grid2" style="margin-top:14px"><label class="f"><span>Lieu du jour (facultatif)</span><input id="mk-lieu" type="text" maxlength="80" value="'+esc(lieuMk.lieu||"")+'" placeholder="Marché de Noël, place du village…"></label>'+
     '<label class="f"><span>Frais du stand ce jour (€)</span><input id="mk-frais" type="number" min="0" step="0.5" inputmode="decimal" value="'+esc(lieuMk.frais||0)+'"></label></div>');
@@ -5423,7 +5669,7 @@ function importerEtsy(texte){
     ventes.forEach(function(v){
       var cid = map[v.nom]; if (!cid) return;
       for (var i = 0; i < v.q; i++){
-        var p = vendrePiece(cid, v.pu, "carte", {canal: canalEtsy, client: v.client, le: v.le});
+        var p = vendrePiece(cid, v.pu, "carte", {canal: canalEtsy, client: v.client, le: v.le, creer: true});
         if (p){ p.etsyTx = v.tx + "#" + i; n++; total += v.pu; }
       }
     });
@@ -6766,13 +7012,12 @@ function carteFilsParCouleur(main){
   var lignes = [];
   state.matieres.forEach(function(m){
     if (m.cat !== "fil") return;
-    variantes(m).forEach(function(v){ if ((Number(v.stock)||0) > 0) lignes.push({m:m, v:v, q:Number(v.stock)}); });
-    var lib = variantes(m).length ? stockLibre(m) : (Number(m.stock)||0);
-    if (lib > 0) lignes.push({m:m, v:null, q:lib});
+    /* V60 : chaque couleur est sa propre ligne (et chaque lot aussi). */
+    if ((Number(m.stock)||0) > 0) lignes.push({m:m, v: m.couleur ? {coloris: m.couleur, bain: ""} : null, q:Number(m.stock)});
   });
   if (!lignes.length) return;
   var c = el('<div class="card" style="margin-bottom:20px"><header><h2>Mes fils par couleur</h2>'+
-    '<p>Ce qu\'il te reste, couleur par couleur. Les quantités se notent dans « Noter un achat, une perte ou un inventaire », en choisissant la couleur.</p></header>'+
+    '<p>Ce qu\'il te reste, couleur par couleur. Chaque couleur est une ligne de « Mes matières » : ses quantités se notent sur elle (achat, perte, inventaire).</p></header>'+
     '<div class="body"><label class="f" style="max-width:360px;margin-bottom:10px"><span>Chercher</span>'+
     '<input type="search" id="fc-q" placeholder="jaune, mérinos, bain 4821…" value="'+esc(view.fcoulQ || "")+'"></label>'+
     '<div class="fc-note"></div><div class="tablewrap resp"><table class="fils-coul"><thead><tr><th>Couleur</th><th>Fil</th><th class="n">En stock</th><th>Crochet</th></tr></thead><tbody></tbody></table></div></div></div>');
@@ -6790,7 +7035,7 @@ function carteFilsParCouleur(main){
     l.forEach(function(x){
       tb.appendChild(el('<tr><td data-l="Couleur"><b>'+esc(x.v ? (x.v.coloris || "couleur sans nom") : "sans couleur précisée")+'</b>'+
         (x.v && x.v.bain ? '<div class="hint" style="margin:0;font-size:11px">bain '+esc(x.v.bain)+'</div>' : '')+'</td>'+
-        '<td data-l="Fil">'+esc(x.m.nom)+'</td>'+
+        '<td data-l="Fil">'+esc(nomBaseDe(x.m))+(lotsDe(x.m).length > 1 ? '<div class="hint" style="margin:0;font-size:11px">lot à '+esc(eur(x.m.prix))+'</div>' : '')+'</td>'+
         '<td class="n" data-l="En stock">'+esc(texteLots(x.m, x.q))+'</td>'+
         '<td data-l="Crochet">'+esc(crochetTexte(x.m) || "—")+'</td></tr>'));
     });
@@ -6852,23 +7097,23 @@ function vueMatieresAlternative(vue, visible){
         var box = el('<div class="savebar" style="flex-wrap:wrap;gap:8px"></div>');
         function geste(lib, fn){ var b = bouton(lib, function(){ fermerCouche(fn); }); box.appendChild(b); }
         geste("Modifier", function(){ dialogueModifierMatiere(m); });
-        if (m.cat !== "outil") geste("Couleurs", function(){ dialogueCouleursMatiere(m); });
-        geste("Dupliquer (autre contenance)", function(){ dialogueAutreVersion(m); });
+        geste(m.cat === "outil" ? "Dupliquer" : "Autre couleur, crochet ou prix", function(){ dialogueAutreVersion(m); });
         geste("Supprimer", function(){ demanderSuppressionMatiere(m); });
         confirmer({titre: m.nom, contenu: box, bouton:"Fermer", sansAnnuler:true}, function(){});
       });
       a.appendChild(bPl);
       return a;
     }
-    if (m.cat !== "outil"){ var bC = el('<button type="button" class="btn sm ghost" aria-label="Couleurs de '+esc(m.nom)+'">Couleurs</button>'); bC.addEventListener("click", function(){ dialogueCouleursMatiere(m); }); a.appendChild(bC); }
-    var bD = el('<button type="button" class="btn sm ghost" title="Même matière, autre contenance ou autre crochet" aria-label="Dupliquer la matière '+esc(m.nom)+'">Dupliquer</button>');
+    var bD = el('<button type="button" class="btn sm ghost" title="Autre couleur, autre crochet, autre contenance ou autre prix" aria-label="Dupliquer la matière '+esc(m.nom)+'">Dupliquer</button>');
     bD.addEventListener("click", function(){ dialogueAutreVersion(m); }); a.appendChild(bD);
     var bX = el('<button type="button" class="btn ghost" aria-label="Supprimer la matière '+esc(m.nom)+'">✕</button>');
     bX.addEventListener("click", function(){ demanderSuppressionMatiere(m); }); a.appendChild(bX);
     return a;
   }
   function infos(m){
-    return [m.marque, m.cat === "outil" && m.typeOutil ? libTypeOutil(m.typeOutil) : "", m.cat === "fil" && (m.crochetMin || m.crochetMax) ? "crochet " + crochetTexte(m) : "", m.composition].filter(Boolean).join(" · ");
+    var nl = m.cat !== "outil" ? lotsDe(m).length : 1;
+    return [m.marque, m.cat === "outil" && m.typeOutil ? libTypeOutil(m.typeOutil) : "", m.cat === "fil" && (m.crochetMin || m.crochetMax) ? "crochet " + crochetTexte(m) : "", m.composition,
+            nl > 1 ? "lot à " + eur(m.prix) + " (" + nl + " lots)" : ""].filter(Boolean).join(" · ");
   }
   function stockTexte(m){ return m.cat === "outil" ? pluriel(Number(m.stock)||0, "outil") : qte(Number(m.stock)||0, m.unite); }
   if (vue === "cartes"){
@@ -6886,15 +7131,15 @@ function vueMatieresAlternative(vue, visible){
       });
     });
   } else {
-    var t = el('<table class="t-compact"><thead><tr><th>Matière</th><th class="n">Prix du lot</th><th class="n">Coût unitaire</th><th class="n">En stock</th><th>Couleurs</th><th>État</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody></tbody></table>');
+    var t = el('<table class="t-compact"><thead><tr><th>Matière</th><th class="n">Prix du lot</th><th class="n">Coût unitaire</th><th class="n">En stock</th><th>Couleur</th><th>État</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody></tbody></table>');
     var tb = t.querySelector("tbody");
     CATS.forEach(function(cat){
       trierListe(state.matieres.filter(function(m){ return m.cat === cat.id && visible(m); }), tri, defs).forEach(function(m){
         n++;
         var e = etatStock(m), resV = m.cat !== "outil" ? pastillesCouleurs(m) : "";
-        var tr = el('<tr><td class="nom" data-l="Matière"><button type="button" class="lien-nom">'+esc(m.nom)+'</button>'+(infos(m) ? '<div class="hint" style="font-size:11.5px">'+esc(infos(m))+'</div>' : '')+'</td>'+
+        var tr = el('<tr><td class="nom" data-l="Matière"><button type="button" class="lien-nom">'+esc(m.couleur ? nomBaseDe(m) : m.nom)+'</button>'+(infos(m) ? '<div class="hint" style="font-size:11.5px">'+esc(infos(m))+'</div>' : '')+'</td>'+
           '<td class="n num" data-l="Prix du lot">'+esc(eur(Number(m.prix) || 0))+'<div class="hint" style="font-size:11px">'+esc(libLotCourt(m))+'</div></td><td class="n num" data-l="Coût unitaire">'+esc(m.contenance > 0 && m.prix > 0 ? eurU(m.prix / m.contenance, m.unite) : "—")+'</td>'+
-          '<td class="n num'+((Number(m.stock)||0) < 0 ? ' bad' : '')+'" data-l="En stock">'+esc(stockTexte(m))+'</td><td data-l="Couleurs">'+(resV || '<span class="hint">—</span>')+'</td>'+
+          '<td class="n num'+((Number(m.stock)||0) < 0 ? ' bad' : '')+'" data-l="En stock">'+esc(stockTexte(m))+'</td><td data-l="Couleur">'+(resV || '<span class="hint">—</span>')+'</td>'+
           '<td data-l="État"'+(e.muet || e.lib === "En stock" ? ' class="d-cache"' : '')+'>'+(e.muet ? '<span class="hint">non suivie</span>' : badgeEtat(e, e.lib))+'</td><td data-l=""></td></tr>');
         tr.querySelector(".lien-nom").addEventListener("click", function(){ dialogueModifierMatiere(m); });
         tr.lastElementChild.appendChild(actions(m));
@@ -6903,14 +7148,6 @@ function vueMatieresAlternative(vue, visible){
     });
     t.classList.add("t-mat"); z.appendChild(densifier(t, "Matière"));
   }
-  /* Les pastilles de couleurs ouvrent le détail, comme en liste. */
-  z.addEventListener("click", function(e){
-    var b = e.target.closest && e.target.closest('button.pastilles');
-    if (!b) return;
-    var carte = b.closest(".mat-carte, tr"), nomB = carte ? carte.querySelector(".mc-nom b, .lien-nom") : null;
-    var m = nomB ? state.matieres.filter(function(x){ return x.nom === nomB.textContent; })[0] : null;
-    if (m) dialogueCouleursMatiere(m);
-  });
   if (!n) z.appendChild(el('<p class="hint" style="padding:18px 10px">Aucune matière ne correspond à ce filtre.</p>'));
   return z;
 }
@@ -6920,9 +7157,10 @@ function vueMatieresAlternative(vue, visible){
 function dialogueModifierMatiere(m){
   var F = FORM_MAT[m.cat] || FORM_MAT.fil;
   var champs = [
-    {id:"nom", lib:"Nom", requis:true, max:80, valeur:m.nom},
+    {id:"nom", lib:"Nom", requis:true, max:80, valeur:nomBaseDe(m)},
     {id:"prix", lib:F.prix, type:"number", inputmode:"decimal", valeur:Number(m.prix) || ""}
   ];
+  if (m.cat !== "outil") champs.splice(1, 0, {id:"coul", lib:"Couleur (facultatif)", max:40, valeur:m.couleur || ""});
   if (m.cat !== "outil") champs.push({id:"cont", lib:F.cont || "Contenance", type:"number", inputmode:"decimal", valeur:Number(m.contenance) || ""});
   if (m.cat !== "outil") champs.push({id:"unite", lib:"Unité", max:20, valeur:m.unite || ""});
   if (m.cat === "fil") champs.push({id:"cro", lib:"Crochet conseillé (mm, par exemple 3,5)", max:10, valeur: m.crochetMin ? nb(m.crochetMin) : ""});
@@ -6931,11 +7169,13 @@ function dialogueModifierMatiere(m){
       if (v.nom.trim().length < 2) return "Indique le nom de la matière.";
       var p = Number(lireNombre(v.prix)); if (v.prix === "" || !isFinite(p) || p < 0) return "Indique le prix payé (0 si tu ne le connais pas).";
       if (m.cat !== "outil" && !(Number(lireNombre(v.cont)) > 0)) return "Indique la contenance (plus que 0).";
-      var dbl = state.matieres.some(function(x){ return x !== m && plier(x.nom) === plier(v.nom); });
-      if (dbl) return "Une autre matière porte déjà ce nom.";
+      var nomV = nomLigne(v.nom.trim(), v.coul ? v.coul.trim() : "");
+      var dbl = state.matieres.some(function(x){ return x !== m && plier(x.nom) === plier(nomV) && Math.abs((Number(x.prix)||0) - (Number(lireNombre(v.prix))||0)) <= 0.005 && Number(x.contenance) === Number(lireNombre(v.cont || m.contenance)); });
+      if (dbl) return "Une autre ligne porte déjà ce nom, cette couleur et ce prix.";
       return "";
     }}, function(v){
-    m.nom = v.nom.trim(); m.prix = Number(lireNombre(v.prix)) || 0;
+    m.nomBase = v.nom.trim(); if (m.cat !== "outil") m.couleur = (v.coul || "").trim();
+    m.nom = nomLigne(m.nomBase, m.couleur || ""); m.prix = Number(lireNombre(v.prix)) || 0;
     if (m.cat !== "outil"){ m.contenance = Number(lireNombre(v.cont)) || m.contenance; if (v.unite.trim()) m.unite = v.unite.trim(); }
     if (m.cat === "fil"){ var cro = Number(lireNombre(v.cro)) || null; m.crochetMin = cro; m.crochetMax = cro; }
     m.prixIndicatif = false; m.maj = Date.now();
@@ -7005,7 +7245,7 @@ function renderStockMatieres(main){
     var g = document.createElement("optgroup"); g.label = cat.nom;
     state.matieres.forEach(function(m){
       if (m.cat !== cat.id) return;
-      var o = document.createElement("option"); o.value = m.id; o.textContent = m.nom; g.appendChild(o);
+      var o = document.createElement("option"); o.value = m.id; o.textContent = libelleLigne(m); g.appendChild(o);
     });
     selMid.appendChild(g);
   });
@@ -7040,9 +7280,7 @@ function renderStockMatieres(main){
        couleur il reste. Une perte ou une sortie ne crée pas de couleur. */
     var cw = cM.querySelector("#mv-cw");
     cw.innerHTML = "";
-    coulMv = (m && m.cat !== "outil" && (variantes(m).length || selType.value === "entree" || selType.value === "inventaire"))
-      ? champCouleur(m, "mv", {sansNouvelle: selType.value === "perte" || selType.value === "sortie"}) : null;
-    if (coulMv) cw.appendChild(coulMv.el);
+    coulMv = null;   /* V60 : chaque couleur est sa propre ligne */
     cM.querySelector("#mv-mw").hidden = selType.value !== "perte";
     /* Le fournisseur habituel est proposé ; le moins cher est rappelé. */
     if (m && selType.value === "entree" && !selF.value && m.fournisseur && fournisseur(m.fournisseur)) selF.value = m.fournisseur;
@@ -7101,7 +7339,9 @@ function renderStockMatieres(main){
           alerte = "Ce prix est très différent de ton prix habituel (" + eur(ref) + " le lot de " + lot + "). Vérifie la quantité et le prix, virgule comprise.";
       } else details.push("Prix non saisi : l'achat sera estimé à " + eur(q * (m.contenance ? m.prix/m.contenance : 0)) + " (prix de la fiche), et signalé comme estimé.");
       if (selF.value && fournisseur(selF.value)) details.push("Chez " + fournisseur(selF.value).nom + " : son tarif sera mis à jour");
-      if (rcMv) details.push("Couleur : " + rcMv.libelle + (rcMv.nouvelle ? " (nouvelle)" : ""));
+      var laMv = ligneAchat(m, q, p);
+      if (laMv.nouvelle) details.push("Prix différent de cette ligne (" + eur(m.prix) + ") : un nouveau lot à " + eur(laMv.m.prix) + " sera créé, avec son propre stock.");
+      else if (laMv.m !== m) details.push("Ajouté au lot existant à " + eur(laMv.m.prix) + ".");
     } else if (type === "perte"){
       if (rcMv) details.push("Couleur : " + rcMv.libelle);
       var lotsP = enLots(m, q);
@@ -7130,12 +7370,13 @@ function renderStockMatieres(main){
                bouton: "Enregistrer", annuler: "Corriger"}, function(){
       var extra = {};
       if (type === "entree"){ if (selF.value && fournisseur(selF.value)) extra.fid = selF.value; }
-      if (coulMv && rcMv) extra.vid = coulMv.appliquer(rcMv);
       if (type === "perte") extra.motif = selMotif.value;
-      mouvementMatiere(m, type, qEff, (p && p > 0) ? p : null, cM.querySelector("#mv-n").value, extra);
+      var mT = m;
+      if (type === "entree") mT = noterAchatLigne(m, qEff, (p && p > 0) ? p : null, cM.querySelector("#mv-n").value, extra).m;
+      else mouvementMatiere(m, type, qEff, null, cM.querySelector("#mv-n").value, extra);
       sauverTout(); render();
       toast((type === "entree" ? "Achat enregistré : " : type === "perte" ? "Perte enregistrée : " : type === "sortie" ? "Sortie enregistrée : " : "Inventaire enregistré : ") +
-            m.nom + ", stock " + qte(m.stock, m.unite) + ".");
+            mT.nom + (mT !== m ? " (lot à " + eur(mT.prix) + ")" : "") + ", stock " + qte(mT.stock, mT.unite) + ".");
     });
   });
   cM.querySelector(".body").appendChild(bMv);
@@ -7234,7 +7475,7 @@ function renderStockMatieres(main){
       '<th style="width:96px">Type</th><th class="n">Quantité</th><th class="n">Prix unitaire</th>'+
       '<th class="n">Total</th><th class="n">Stock après</th><th>Note</th></tr></thead><tbody></tbody></table>');
     var tb2 = t2.querySelector("tbody");
-    var LIB = {entree:"Achat", sortie:"Utilisé", perte:"Perte", correction:"Pesée", inventaire:"Inventaire", annulation:"Annulation"};
+    var LIB = {entree:"Achat", sortie:"Utilisé", perte:"Perte", correction:"Pesée", inventaire:"Inventaire", annulation:"Annulation", transfert:"Transfert"};
     var SIGNE = {entree:"+", sortie:"−", perte:"✕", correction:"±", inventaire:"=", annulation:"↺"};
     var COUL = {entree:"var(--good)", sortie:"var(--bad)", perte:"var(--bad)", correction:"var(--muted)", inventaire:"var(--muted)", annulation:"var(--muted)"};
     var nMouv = Math.min(tousMouv.length, view.mouvTout ? tousMouv.length : 25);
@@ -7373,6 +7614,9 @@ function renderMesMatieres(main){
       function(){ var n = appliquerPrixMarche(); render(); toast(n+" prix mis à jour"); }, true));
     main.appendChild(cM);
   }
+  /* V60 : la liste d'achats de la production prévue, en tête des matières. */
+  var cBes = carteBesoinsMatieres();
+  if (cBes) main.appendChild(cBes);
 
   var card = el('<div class="card"><header><h2>Mes matières</h2>'+
     '<p>Le prix payé pour une pelote, et ce qu\'elle pèse. Le coût au gramme se calcule tout seul.</p></header>'+
@@ -7420,8 +7664,12 @@ function renderMesMatieres(main){
      l'ombre (elles servent aux modèles) ; une recherche les retrouve. */
   var exemplesCaches = state.matieres.filter(function(m){ return estExemple(m) && !matiereUtilisee(m); });
   var cacherEx = !view.mfExemples && !(view.mfQ && plier(view.mfQ));
+  /* V60 : un lot vidé, quand un autre lot du même article a du stock et
+     qu'aucune création ne le cite, ne sert plus qu'à l'historique. */
+  var lotsEpuises = state.matieres.filter(lotEpuise);
   function visible(m){
     if (view.mfCat && m.cat !== view.mfCat) return false;
+    if (!view.mfEpuises && lotsEpuises.indexOf(m) !== -1) return false;
     if (view.mfQ && plier(view.mfQ) && !okQ[m.id]) return false;
     if (cacherEx && exemplesCaches.indexOf(m) !== -1) return false;
     /* Le filtre crochet ne s'applique qu'aux fils : une boîte d'yeux de
@@ -7481,7 +7729,9 @@ function renderMesMatieres(main){
       var resV = m.cat !== "outil" ? pastillesCouleurs(m) : "";
       tb.appendChild(el(
         '<tr data-mid="'+esc(m.id)+'"'+(mentionTaille(m)?' style="color:var(--muted)"':'')+'>'+
-          '<td><input type="text" data-role="nom" aria-label="Nom de la matière" value="'+esc(m.nom)+'">'+
+          '<td><input type="text" data-role="nom" aria-label="Nom de la matière" value="'+esc(nomBaseDe(m))+'">'+
+            (m.cat !== "outil" ? '<input type="text" data-role="couleur" class="in-coul" aria-label="Couleur de '+esc(nomBaseDe(m))+'" placeholder="couleur" maxlength="40" value="'+esc(m.couleur || "")+'">' : '')+
+            (lotsDe(m).length > 1 ? '<div class="hint" style="margin:2px 0 0;font-size:11px">lot à '+esc(eur(m.prix))+' · '+esc(pluriel(lotsDe(m).length, "lot"))+' de cet article</div>' : '')+
             (mentionTaille(m) ? '<div class="hint" style="margin:2px 0 0;font-size:11px">'+esc(mentionTaille(m))+'</div>' : '')+
             (infos.length ? '<div class="hint" style="margin:2px 0 0;font-size:11px">'+esc(infos.join(" · "))+'</div>' : '')+'</td>'+
           '<td data-l="Prix du lot"><input type="number" inputmode="decimal" data-role="prix" aria-label="Prix payé pour '+esc(libLotArticle(m))+'" min="0" step="0.05" value="'+m.prix+'">'+
@@ -7495,10 +7745,8 @@ function renderMesMatieres(main){
                ? '<div style="margin-top:3px"><span class="chip">prix '+esc(m.prixSource.src)+' · '+esc(m.prixSource.date)+'</span></div>'
                : m.prixIndicatif ? '<div style="margin-top:3px"><span class="hypo">INDICATIF</span></div>' : '')+'</td>'+
           '<td data-l="En stock"><div class="cel"><span class="num stk-qte'+((Number(m.stock)||0) < 0 ? ' bad' : '')+'">'+stockDeuxLignes(m)+'</span>'+
-            '<button type="button" class="lien-mini stk" data-role="achat">J\'ai acheté</button>'+
-            (m.cat !== "outil" && !resV ? '<span class="hint" aria-hidden="true"> · </span><button type="button" class="lien-mini stk" data-role="couleurs">'+(variantes(m).length ? 'Couleurs ('+variantes(m).length+')' : 'Couleurs')+'</button>' : '')+'</div>'+
-            resV+'</td>'+
-          '<td><div class="act-col"><button type="button" class="btn sm ghost" data-role="dup" title="Même matière, autre contenance ou autre crochet" aria-label="Dupliquer la matière '+esc(m.nom)+' : autre contenance ou autre crochet">Dupliquer</button>'+
+            '<button type="button" class="lien-mini stk" data-role="achat">J\'ai acheté</button></div></td>'+
+          '<td><div class="act-col"><button type="button" class="btn sm ghost" data-role="dup" title="Autre couleur, autre crochet, autre contenance ou autre prix" aria-label="Dupliquer la matière '+esc(m.nom)+' : autre couleur, crochet, contenance ou prix">Dupliquer</button>'+
             '<button type="button" class="btn ghost" data-role="del" aria-label="Supprimer la matière '+esc(m.nom)+'">✕</button></div></td>'+
         '</tr>'
       ));
@@ -7578,7 +7826,8 @@ function renderMesMatieres(main){
     /* un prix illisible (« abc ») ou vide n'écrase pas le prix gardé */
     if (role === "prix" && (e.target.validity.badInput || String(e.target.value).trim() === "")) return;
     if (role === "nom" && String(e.target.value).trim().length < 2) return;
-    if (role === "nom") m.nom = e.target.value;
+    if (role === "nom"){ m.nomBase = String(e.target.value).trim(); m.nom = nomLigne(m.nomBase, m.couleur || ""); }
+    if (role === "couleur"){ m.nomBase = nomBaseDe(m); m.couleur = String(e.target.value).trim(); m.nom = nomLigne(m.nomBase, m.couleur); m.maj = Date.now(); sauver(); return; }
     if (role === "prix"){ m.prix = Math.max(0, Number(e.target.value)||0); m.prixIndicatif = false;
                           m.prixSource = null; m.maj = Date.now(); }
     if (role === "contenance") return;   /* traité au « change » : voir ci-dessous */
@@ -7603,11 +7852,6 @@ function renderMesMatieres(main){
     if (e.target.getAttribute("data-role") === "achat"){
       var mA = matiere(e.target.closest("tr[data-mid]").getAttribute("data-mid"));
       if (mA) dialogueAchatMatiere(mA);
-      return;
-    }
-    if (e.target.getAttribute("data-role") === "couleurs"){
-      var mCo = matiere(e.target.closest("tr[data-mid]").getAttribute("data-mid"));
-      if (mCo) dialogueCouleursMatiere(mCo);
       return;
     }
     if (e.target.getAttribute("data-role") === "dup"){
@@ -7641,6 +7885,14 @@ function renderMesMatieres(main){
     bEx.addEventListener("click", function(){ view.mfExemples = !view.mfExemples; render(); });
     lEx.appendChild(bEx);
     body.appendChild(lEx);
+  }
+  if (lotsEpuises.length){
+    var lEp = el('<p class="hint" style="margin:8px 0 0"></p>');
+    lEp.appendChild(document.createTextNode(pluriel(lotsEpuises.length, "lot épuisé", "lots épuisés") + (view.mfEpuises ? " affichés (gardés pour l'historique). " : " masqués : un autre lot du même article prend le relais. ")));
+    var bEp = el('<button type="button" class="lien-mini">'+(view.mfEpuises ? "Les masquer" : "Les afficher")+'</button>');
+    bEp.addEventListener("click", function(){ view.mfEpuises = !view.mfEpuises; render(); });
+    lEp.appendChild(bEp);
+    body.appendChild(lEp);
   }
 
   main.appendChild(card);
@@ -7883,8 +8135,8 @@ function dialogueNouvelleMatiere(catInit){
       ? "Soit " + eurU(prix / cont, unite) + (cont > 1 ? " — " + (cat === "fil" ? "une pelote" : cat === "garn" ? "un sac" : "un lot") + " de " + qte(cont, unite) + " à " + eur(prix) : "") + "."
       : "";
     var dbl = zone.querySelector("#nm-doublon"), nom = val("nm-nom");
-    var d = nom.length > 1 ? state.matieres.filter(function(x){ return plier(x.nom) === plier(nom); })[0] : null;
-    if (dbl) dbl.textContent = d ? "« " + d.nom + " » existe déjà dans tes matières. Pour une autre contenance ou un autre crochet, utilise plutôt « Dupliquer » sur sa ligne." : "";
+    var d = nom.length > 1 ? state.matieres.filter(function(x){ return plier(nomBaseDe(x)) === plier(nom) || plier(x.nom) === plier(nom); })[0] : null;
+    if (dbl) dbl.textContent = d ? "« " + nomBaseDe(d) + " » existe déjà dans tes matières. Pour une autre couleur, un autre crochet, une autre contenance ou un autre prix, utilise plutôt « Dupliquer » sur sa ligne : tout le reste est repris." : "";
     var tot = 0;
     [].forEach.call(zone.querySelectorAll(".nm-ligne [data-k=lots]"), function(i){ tot += Number(lireNombre(i.value)) || 0; });
     var wA = zone.querySelector("#nm-achat-w");
@@ -7893,7 +8145,7 @@ function dialogueNouvelleMatiere(catInit){
     var t = zone.querySelector("#nm-depart-total");
     if (t) t.textContent = tot > 0 && cat !== "outil"
       ? "Stock de départ : " + texteLots({cat: cat, contenance: cont, unite: unite}, tot * cont) + (prix > 0 ? ", d'une valeur de " + eur(tot * prix) : "") + "."
-      : (F.couleur ? "Une ligne par couleur : tu pourras en ajouter d'autres ensuite avec « J'ai acheté » ou « Couleurs »." : "Ce nombre devient ton stock de départ.");
+      : (F.couleur ? "Chaque couleur devient sa propre ligne, avec son stock. Une autre couleur plus tard : « Dupliquer » sur la ligne." : "Ce nombre devient ton stock de départ.");
   }
   construire();
   /* Changer de catégorie garde ce qui vaut pour toutes : le nom et le prix. */
@@ -7956,19 +8208,25 @@ function dialogueNouvelleMatiere(catInit){
     }}, function(){
     if (!lecture || lecture.erreur) return;
     var m = lecture.m;
-    state.matieres.push(m);
-    lecture.lignes.forEach(function(l){
-      if (!(l.lots > 0)) { if (l.coul) creerVariante(m, l.coul, l.bain); return; }
-      var vid = l.coul ? creerVariante(m, l.coul, l.bain).id : undefined;
-      if (lecture.achat && m.prix > 0) mouvementMatiere(m, "entree", l.lots * lecture.cont, cts(l.lots * m.prix), "Achat noté avec la matière", {vid: vid, le: lecture.achatLe});
-      else mouvementMatiere(m, "inventaire", l.lots * lecture.cont, null, "Stock de départ (déjà chez moi)", {vid: vid});
+    /* V60 : chaque couleur saisie devient sa propre ligne, avec son stock. */
+    m.nomBase = m.nom;
+    var crees = [];
+    (lecture.lignes.length ? lecture.lignes : [{coul: "", bain: "", lots: 0}]).forEach(function(l, i){
+      var lib = l.coul ? l.coul + (l.bain ? " · bain " + l.bain : "") : "";
+      var ligne = i === 0 ? m : dupliquerLigne(m, {couleur: lib});
+      if (i === 0){ m.couleur = lib; m.nom = nomLigne(m.nomBase, lib); }
+      ligne.cree = Date.now() + i;
+      state.matieres.push(ligne); crees.push(ligne);
+      if (!(l.lots > 0)) return;
+      if (lecture.achat && m.prix > 0) mouvementMatiere(ligne, "entree", l.lots * lecture.cont, cts(l.lots * m.prix), "Achat noté avec la matière", {le: lecture.achatLe});
+      else mouvementMatiere(ligne, "inventaire", l.lots * lecture.cont, null, "Stock de départ (déjà chez moi)");
     });
     sauverTout();
     /* V59 : la matière ajoutée se voit tout de suite (filtrée par son nom),
        au lieu de se perdre au milieu de la liste. */
-    view.mfQ = m.nom; view.mfCat = ""; view.matNouvelle = m.id;
+    view.mfQ = m.nomBase; view.mfCat = ""; view.matNouvelle = m.id;
     render();
-    toast("« " + m.nom + " » ajoutée à tes matières" + (lecture.achat && m.prix > 0 && lecture.lignes.some(function(l){ return l.lots > 0; }) ? ", achat noté" : ""),
+    toast((crees.length > 1 ? crees.length + " lignes de « " + m.nomBase + " » ajoutées (une par couleur)" : "« " + m.nom + " » ajoutée à tes matières") + (lecture.achat && m.prix > 0 && lecture.lignes.some(function(l){ return l.lots > 0; }) ? ", achat noté" : ""),
       {libelle:"Voir toutes mes matières", fn:function(){ view.mfQ = ""; view.matNouvelle = null; render(); }});
   });
 }
@@ -7979,48 +8237,56 @@ function dialogueNouvelleMatiere(catInit){
    elle. On part de la matière existante, on ne ressaisit que ce qui change. */
 function dialogueAutreVersion(m0){
   var parLot = m0.cat === "fil" ? "d'une pelote" : m0.cat === "garn" ? "d'un sac" : "d'un lot";
-  var base = String(m0.nom).replace(/\s*\([^)]*\)\s*$/, "");
-  var box = el('<div class="nm-form"><p class="hint" style="margin:0 0 12px">Même matière, autre contenance'+(m0.cat === "fil" ? ' ou autre crochet' : '')+' : une nouvelle ligne, avec son propre stock et ses propres couleurs. Rien ne change sur « '+esc(m0.nom)+' ».</p>'+
+  var base = nomBaseDe(m0);
+  var aCouleur = m0.cat !== "outil";
+  var box = el('<div class="nm-form"><p class="hint" style="margin:0 0 12px">Une autre couleur, un autre crochet, une autre contenance ou un autre prix de « '+esc(base)+' » : une nouvelle ligne, avec son propre stock. Tout le reste est repris ; « '+esc(m0.nom)+' » ne change pas.</p>'+
     '<div class="grid3" style="align-items:end">'+
-      '<label class="f"><span>Nom</span><input id="av-nom" type="text" maxlength="80"></label>'+
+      '<label class="f"><span>Nom</span><input id="av-nom" type="text" maxlength="80" value="'+esc(base)+'"></label>'+
+      (aCouleur ? '<label class="f"><span>Couleur</span><input id="av-coul" type="text" maxlength="40" placeholder="jaune, écru, rose poudré…" value="'+esc(m0.couleur || "")+'"></label>' : '')+
       '<label class="f"><span>Prix '+esc(parLot)+' (€)</span><input id="av-prix" type="number" min="0" step="0.05" inputmode="decimal" value="'+esc(Number(m0.prix) || "")+'"></label>'+
       '<label class="f"><span>Contenance ('+esc(m0.unite)+')</span><input id="av-cont" type="number" min="0.01" step="1" inputmode="decimal" value="'+esc(Number(m0.contenance) || "")+'"></label>'+
       (m0.cat === "fil" ? '<label class="f"><span>Crochet conseillé (mm)</span><select id="av-cro"><option value="">—</option>'+CROCHETS.map(function(c){ return '<option value="'+c+'"'+(Number(m0.crochetMin) === c ? ' selected' : '')+'>'+nb(c)+' mm</option>'; }).join("")+'</select></label>' : '')+
       (outilADiametre(m0) ? '<label class="f"><span>Diamètre (mm)</span><select id="av-diam"><option value="">—</option>'+CROCHETS.map(function(c){ return '<option value="'+c+'"'+(Number(m0.diametre) === c ? ' selected' : '')+'>'+nb(c)+' mm</option>'; }).join("")+'</select></label>' : '')+
+      '<label class="f"><span>Déjà en stock ('+esc(m0.cat === "fil" ? "pelotes" : m0.cat === "garn" ? "sacs" : m0.unite)+', facultatif)</span><input id="av-stock" type="number" min="0" step="1" inputmode="decimal" placeholder="0"></label>'+
     '</div><p class="hint" id="av-pu" style="margin:8px 0 0"></p></div>');
   var iNom = box.querySelector("#av-nom"), iPrix = box.querySelector("#av-prix"), iCont = box.querySelector("#av-cont"), pu = box.querySelector("#av-pu");
-  var nomTouche = false;
-  function suggestion(){
-    var c = Number(lireNombre(iCont.value)) || 0, cro = box.querySelector("#av-cro"), d = box.querySelector("#av-diam");
-    var bout = [c > 0 && m0.cat !== "outil" ? qte(c, m0.unite) : "", cro && cro.value ? nb(Number(cro.value)) + " mm" : "", d && d.value ? nb(Number(d.value)) + " mm" : ""].filter(Boolean);
-    return base + (bout.length ? " (" + bout.join(", ") + ")" : "");
+  var iCoul = box.querySelector("#av-coul"), iSt = box.querySelector("#av-stock");
+  function lireLigne(){
+    var cro = box.querySelector("#av-cro"), d = box.querySelector("#av-diam");
+    var c = Number(lireNombre(iCont.value)) || 0;
+    var r = {nomBase: iNom.value.trim(), couleur: iCoul ? iCoul.value.trim() : "", prix: Number(lireNombre(iPrix.value)), contenance: c};
+    if (cro){ var cv = Number(cro.value) || null; r.crochetMin = cv; r.crochetMax = cv; }
+    if (d) r.diametre = Number(d.value) || null;
+    return r;
   }
   function maj(){
-    if (!nomTouche) iNom.value = suggestion();
     var p = Number(lireNombre(iPrix.value)) || 0, c = Number(lireNombre(iCont.value)) || 0;
     pu.textContent = p > 0 && c > 0 && m0.cat !== "outil" ? "Soit " + eurU(p / c, m0.unite) + "." : "";
   }
-  iNom.addEventListener("input", function(){ nomTouche = true; });
   box.addEventListener("input", maj); box.addEventListener("change", maj);
   maj();
-  dialogueChamps({titre:"Une autre version de « " + m0.nom + " »", large:true, contenu: box, champs:[], bouton:"Créer cette version",
+  dialogueChamps({titre:"Une autre ligne de « " + base + " »", large:true, contenu: box, champs:[], bouton:"Créer cette ligne",
     verifier: function(){
-      var nom = iNom.value.trim(), p = Number(lireNombre(iPrix.value)), c = Number(lireNombre(iCont.value));
-      if (nom.length < 2) return "Indique le nom de cette version.";
-      if (state.matieres.some(function(x){ return plier(x.nom) === plier(nom); })) return "« " + nom + " » existe déjà : précise le nom (par exemple avec la contenance).";
-      if (!isFinite(p) || p < 0 || iPrix.value === "") return "Indique le prix (0 si tu ne le connais pas).";
-      if (!(c > 0)) return "Indique la contenance (plus que 0).";
+      var r = lireLigne();
+      if (r.nomBase.length < 2) return "Indique le nom.";
+      if (!isFinite(r.prix) || r.prix < 0 || iPrix.value === "") return "Indique le prix (0 si tu ne le connais pas).";
+      if (!(r.contenance > 0)) return "Indique la contenance (plus que 0).";
+      var test = {cat: m0.cat, nomBase: r.nomBase, nom: r.nomBase, couleur: r.couleur, crochetMin: r.crochetMin !== undefined ? r.crochetMin : m0.crochetMin, contenance: r.contenance, unite: m0.unite};
+      var dbl = state.matieres.filter(function(x){ return cleArticle(x) === cleArticle(test) && Math.abs((Number(x.prix) || 0) - r.prix) <= 0.005; })[0];
+      if (dbl) return "Cette ligne existe déjà (« " + libelleLigne(dbl) + " ») : change la couleur, le crochet, la contenance ou le prix, ou note un achat sur elle.";
       return "";
     }}, function(){
-    var nom = iNom.value.trim(), p = Number(lireNombre(iPrix.value)) || 0, c = Number(lireNombre(iCont.value)) || 1;
-    var m = JSON.parse(JSON.stringify(m0));
-    m.id = uid(); m.nom = nom; m.prix = p; m.contenance = c; m.stock = 0; m.pmp = p / c; m.mouv = []; m.variantes = [];
-    m.seuil = 0; m.perso = true; m.prixIndicatif = false; m.prixSource = null; m.refCat = null; m.cree = Date.now(); m.maj = Date.now();
-    var cro = box.querySelector("#av-cro"); if (cro){ var cv = Number(cro.value) || null; m.crochetMin = cv; m.crochetMax = cv; }
-    var d = box.querySelector("#av-diam"); if (d) m.diametre = Number(d.value) || null;
+    var r = lireLigne();
+    var m = dupliquerLigne(m0, r);
+    m.seuil = 0;
     state.matieres.push(m);
+    var n = Number(lireNombre(iSt.value)) || 0;
+    if (n > 0){
+      var q = m.cat === "fil" || m.cat === "garn" ? n * (Number(m.contenance) || 1) : n;
+      mouvementMatiere(m, "inventaire", q, null, "Stock de départ de la ligne");
+    }
     sauverTout(); render();
-    toast("« " + nom + " » créée. Ajoute son stock avec « J'ai acheté ».");
+    toast("« " + libelleLigne(m) + " » créée" + (n > 0 ? " avec son stock." : ". Ajoute son stock avec « J'ai acheté »."));
   });
 }
 
@@ -8058,16 +8324,9 @@ function pastilleHtml(v){
 }
 /* Le bouton des couleurs en stock : jusqu'à huit pastilles, puis « +N », et le nombre en clair. */
 function pastillesCouleurs(m){
-  var l = variantes(m).filter(function(v){ return (Number(v.stock) || 0) > 0; }).sort(function(a, b){ return (Number(b.stock) || 0) - (Number(a.stock) || 0); });
-  /* V59 : une couleur passée en négatif ne disparaît pas : elle est signalée. */
-  var neg = variantes(m).filter(function(v){ return (Number(v.stock) || 0) < -1e-9; });
-  if (!l.length && !neg.length) return "";
-  var MAX = 8, nom = l.length + " couleur" + (l.length > 1 ? "s" : "") + (neg.length ? " · " + neg.length + " en négatif" : "");
-  var detail = l.concat(neg).map(function(v){ return libelleVariante(v) + " : " + texteLots(m, v.stock); }).join(" ; ");
-  return '<button type="button" class="pastilles" data-role="couleurs" title="'+esc(detail)+'" aria-label="'+esc(nom + " en stock : " + detail + ". Ouvrir le détail")+'">'+
-    l.slice(0, MAX).map(pastilleHtml).join("")+
-    (l.length > MAX ? '<span class="plus">+' + (l.length - MAX) + '</span>' : '')+
-    '<span class="nbc'+(neg.length ? ' bad' : '')+'">'+esc(nom)+'</span></button>';
+  /* V60 : une ligne = une couleur. */
+  if (!m || m.cat === "outil" || !m.couleur) return "";
+  return '<span class="coul-l" title="Couleur : '+esc(m.couleur)+'">'+pastilleHtml({coloris: m.couleur})+'<span>'+esc(m.couleur)+'</span></span>';
 }
 
 /* ═════ AIDES « ? » ═════
@@ -8545,6 +8804,12 @@ function renderReglages(main){
     ' Garde le fichier dans tes documents ou envoie-le toi par e-mail. Le fichier téléchargé contient aussi tes photos ; '+
     '« Copier la sauvegarde » ne copie que le texte, sans les photos.</p>'));
 
+  /* V60 : un contrôle à la demande de tout ce qui doit tenir ensemble. */
+  var nInco = incoherences().length;
+  var cCoh = el('<div class="card" style="margin-bottom:16px"><header><h2>Contrôle de cohérence</h2>'+
+    '<p>Vérifie que tes fiches, ton stock de matières, tes pièces et tes commandes sont d\'accord entre eux : matière supprimée encore citée, pièce réservée pour une commande annulée, commande livrée dont les pièces ne sont pas vendues…</p></header>'+
+    '<div class="body"><p style="margin:0 0 10px">'+(nInco ? '<b class="warn">'+esc(pluriel(nInco, "point à vérifier", "points à vérifier"))+'.</b>' : '<span class="good">Tout est cohérent.</span>')+'</p></div></div>');
+  cCoh.querySelector(".body").appendChild(bouton(nInco ? "Voir et réparer" : "Vérifier à nouveau", function(){ if (nInco) dialogueCoherence(); else { render(); toast("Tout est cohérent."); } }, !!nInco));
   var cRest = el('<div class="card" style="margin-bottom:16px"><header><h2>Restaurer une sauvegarde</h2>'+
     '<p>Choisis un fichier de sauvegarde, ou colle son contenu : il <b>remplace</b> tout ce qui est actuellement dans ton atelier.</p>'+
     '</header><div class="body"></div></div>');
@@ -8710,7 +8975,7 @@ function renderReglages(main){
       affichage:   [carteAffichage()],
       abonnement:  [carteAbonnement()],
       administration: [carteAdministration()],
-      donnees:     [cSauv, cRest, cZero]
+      donnees:     [cSauv, cCoh, cRest, cZero]
     };
     if (courante === "compte"){
       /* La zone n'est créée que quand elle est visible : le module de compte
@@ -8792,10 +9057,15 @@ function piecesDe(cid){
   }
   return (indexPieces.m[cid] || []).slice();
 }
+/* V60 : le stock de produits finis, c'est ce qui peut se vendre : les pièces
+   terminées, ni vendues ni données, et pas réservées (commande ou
+   réservation). Les réservées se comptent à part. */
+function pieceLibre(p){ return p.prod === "termine" && !horsStock(p) && !p.cmdId && p.com !== "commande" && p.com !== "reserve"; }
 function enStock(cid){
-  return piecesDe(cid).filter(function(p){
-    return p.prod === "termine" && !horsStock(p);
-  }).length;
+  return piecesDe(cid).filter(pieceLibre).length;
+}
+function reserveesDe(cid){
+  return piecesDe(cid).filter(function(p){ return p.prod === "termine" && !horsStock(p) && !pieceLibre(p); }).length;
 }
 function ajouterPieces(cid, n, prod, com, client){
   var cr = creation(cid); if (!cr) return 0;
@@ -8824,20 +9094,19 @@ function ajouterPieces(cid, n, prod, com, client){
 /* La couleur à retirer pour une ligne de fiche : celle choisie dans la
    fiche ; à défaut, la seule couleur de la matière ; sinon, il faut
    demander (null). Une matière sans couleurs n'en demande pas (""). */
-function couleurPourLigne(m, l, cr){
-  var l2 = variantes(m);
-  if (!l2.length) return "";
-  if (l && l.vid && varianteDe(m, l.vid)) return l.vid;
-  if (l2.length === 1 && stockLibre(m) <= 0) return l2[0].id;
-  /* V59 : la couleur utilisée la dernière fois pour cette création, tant
-     qu'il en reste ; sinon, la seule couleur encore en stock. Au marché,
-     on ne repose plus la question à chaque vente. */
-  var hab = cr && cr.couleursHabituelles && cr.couleursHabituelles[m.id];
-  var vh = hab ? varianteDe(m, hab) : null;
-  if (vh && (Number(vh.stock)||0) > 0) return vh.id;
-  var dispo = l2.filter(function(v){ return (Number(v.stock)||0) > 0; });
-  if (dispo.length === 1 && stockLibre(m) <= 0) return dispo[0].id;
-  return null;
+/* V60 : la ligne à utiliser pour une ligne de fiche. Celle de la fiche, ou
+   celle déjà choisie pour cette pièce ; si elle est vide (tous lots
+   compris) et qu'une seule ligne sœur (autre couleur) a assez de stock, on
+   la prend ; s'il y en a plusieurs, on demande (null). */
+function lignePourFabrication(m, l, cr, p, besoin){
+  if (p && p.couleurs && p.couleurs[m.id] && matiere(p.couleurs[m.id])) return matiere(p.couleurs[m.id]);
+  if (stockArticle(m) >= besoin - 1e-9 || m.cat === "outil" || !matiereSuivie(m)) return m;
+  var hab = cr && cr.couleursHabituelles && cr.couleursHabituelles[m.id] ? matiere(cr.couleursHabituelles[m.id]) : null;
+  if (hab && stockArticle(hab) >= besoin - 1e-9) return hab;
+  var soeurs = lignesSoeurs(m).filter(function(x){ return cleArticle(x) !== cleArticle(m) && (Number(x.stock) || 0) >= besoin - 1e-9; });
+  var vues = {}, uniques = soeurs.filter(function(x){ var k = cleArticle(x); if (vues[k]) return false; vues[k] = true; return true; });
+  if (!uniques.length) return m;
+  return p ? null : m;
 }
 function consommerPour(cr, n, p){
   var manques = [];
@@ -8847,18 +9116,17 @@ function consommerPour(cr, n, p){
        tout sauf à l'emballage, sinon le stock baisse moins que ce qu'on paie. */
     var perte = avecPerte(m) ? (Number(state.reglages.tauxPerte)||0)/100 : 0;
     var besoin = Math.round((Number(l.qte)||0) * n * (1 + perte) * 1000) / 1000;
-    var vid = couleurPourLigne(m, l, cr);
-    /* Plusieurs couleurs et aucune choisie dans la fiche : on demande
-       laquelle a servi avant de retirer quoi que ce soit du stock. */
-    if (vid === null && p){
+    var cible = lignePourFabrication(m, l, cr, p, besoin);
+    /* Sa ligne est vide et d'autres couleurs en ont : on demande laquelle a
+       servi avant de retirer quoi que ce soit du stock. */
+    if (cible === null){
       p.couleursAttente = (p.couleursAttente || []).concat([{mid: m.id, q: besoin}]);
       demanderCouleursBientot();
       return;
     }
-    var v = vid ? varianteDe(m, vid) : null;
-    if (v ? (Number(v.stock)||0) < besoin : (Number(m.stock)||0) < besoin) manques.push(m.nom + (v ? " (" + libelleVariante(v) + ")" : ""));
-    mouvementMatiere(m, "sortie", besoin, null, "Fabrication : " + cr.nom, {vid: vid || undefined, pid: p ? p.id : undefined});
-    if (p && vid){ p.couleurs = p.couleurs || {}; p.couleurs[m.id] = vid; }
+    var r = sortirLots(cible, besoin, "Fabrication : " + cr.nom, {pid: p ? p.id : undefined});
+    if (r.manque) manques.push(cible.nom);
+    if (p && r.derniere && r.derniere.id !== m.id){ p.couleurs = p.couleurs || {}; p.couleurs[m.id] = r.derniere.id; }
   });
   return manques;
 }
@@ -8887,25 +9155,28 @@ function dialogueCouleursAttente(){
     p.couleursAttente.forEach(function(a, i){
       var m = matiere(a.mid); if (!m) return;
       var habC = cr && cr.couleursHabituelles && cr.couleursHabituelles[m.id];
-      var opts = variantes(m).map(function(v){
-        return '<option value="'+esc(v.id)+'"'+(v.id === habC ? ' selected' : '')+'>'+esc(libelleVariante(v))+' — '+esc(texteLots(m, v.stock))+' en stock</option>';
+      var choix = [m].concat(lignesSoeurs(m));
+      var opts = choix.map(function(x){
+        var sel = x.id === habC || (!habC && x === m);
+        return '<option value="'+esc(x.id)+'"'+(sel ? ' selected' : '')+'>'+esc(libelleLigne(x))+' — '+esc(texteLots(x, x.stock))+' en stock</option>';
       }).join("");
-      var row = el('<label class="f" style="margin-top:10px"><span>'+esc((cr ? cr.nom + " n° " + numeroPiece(p) : "Pièce") + " · " + m.nom + " : " + qte(a.q, m.unite))+'</span>'+
-        '<select>'+opts+'<option value="">Sans couleur précisée</option></select></label>');
+      var row = el('<label class="f" style="margin-top:10px"><span>'+esc((cr ? cr.nom + " n° " + numeroPiece(p) : "Pièce") + " · " + nomBaseDe(m) + " : " + qte(a.q, m.unite))+'</span>'+
+        '<select>'+opts+'</select></label>');
       box.appendChild(row);
       lignes.push({p: p, i: i, m: m, a: a, sel: row.querySelector("select")});
     });
   });
-  dialogueChamps({titre: "Quelle couleur as-tu utilisée ?",
-    texte: "Ces fils existent en plusieurs couleurs, et la fiche ne dit pas laquelle : choisis celle qui a servi pour la retirer du bon stock. Ton choix sera retenu pour les prochaines pièces de la même création.",
+  dialogueChamps({titre: "Quelle ligne as-tu utilisée ?",
+    texte: "La matière prévue dans la fiche n'a plus assez de stock, mais d'autres lignes du même nom en ont (autre couleur, autre crochet ou autre prix). Choisis celle qui a servi pour la retirer du bon stock. Ton choix sera retenu pour les prochaines pièces de la même création.",
     contenu: box, champs: [], bouton: "Retirer du stock"}, function(){
     lignes.forEach(function(x){
-      var vid = x.sel.value || undefined;
+      var cible = matiere(x.sel.value) || x.m;
       var cr = creation(x.p.cid);
-      mouvementMatiere(x.m, "sortie", x.a.q, null, "Fabrication : " + (cr ? cr.nom : "pièce"), {vid: vid, pid: x.p.id});
-      if (vid){ x.p.couleurs = x.p.couleurs || {}; x.p.couleurs[x.m.id] = vid;
-        /* Retenue pour la prochaine pièce de cette création (V59). */
-        if (cr){ cr.couleursHabituelles = cr.couleursHabituelles || {}; cr.couleursHabituelles[x.m.id] = vid; } }
+      var r = sortirLots(cible, x.a.q, "Fabrication : " + (cr ? cr.nom : "pièce"), {pid: x.p.id});
+      if (r.manque) prevenirManques([cible.nom]);
+      if (r.derniere && r.derniere.id !== x.m.id){ x.p.couleurs = x.p.couleurs || {}; x.p.couleurs[x.m.id] = r.derniere.id; }
+      /* Retenue pour la prochaine pièce de cette création (V59). */
+      if (cr && cible.id !== x.m.id){ cr.couleursHabituelles = cr.couleursHabituelles || {}; cr.couleursHabituelles[x.m.id] = cible.id; }
     });
     var faites = {};
     lignes.forEach(function(x){ (faites[x.p.id] = faites[x.p.id] || []).push(x.a); });
@@ -8922,7 +9193,7 @@ function dialogueCouleursAttente(){
       }
     });
     sauverTout(); render();
-    toast("Stock mis à jour, couleur par couleur.");
+    toast("Stock mis à jour, ligne par ligne.");
   });
 }
 /* Un seul message, même quand plusieurs pièces sortent d'un coup : les
@@ -8985,11 +9256,118 @@ function manquesPourFabriquer(lots){
   var res = [];
   Object.keys(besoins).forEach(function(mid){
     var m = matiere(mid); if (!m || m.cat === "outil" || !matiereSuivie(m)) return;
-    var dispo = Math.max(0, (Number(m.stock) || 0) - (engage[mid] || 0));
+    var dispo = Math.max(0, stockArticle(m) - (engage[mid] || 0));
     var besoin = Math.round(besoins[mid] * 1000) / 1000;
     if (besoin > 0 && dispo < besoin - 1e-6) res.push({m: m, besoin: besoin, dispo: Math.round(dispo * 1000) / 1000, manque: Math.round((besoin - dispo) * 1000) / 1000});
   });
   return res;
+}
+/* ═════ BESOINS EN MATIÈRES (V60) ═════
+   Ce que la production prévue va consommer : les pièces à faire ou en cours
+   (pas encore sorties du stock) et les pièces encore à créer pour les
+   commandes acceptées. Comparé au stock de chaque article (tous ses lots),
+   moins rien d'autre : c'est la liste d'achats. */
+function besoinsMatieres(){
+  var besoins = {}, rep = {};
+  function ajouter(cr, n){
+    var q = consommationPrevue(cr);
+    Object.keys(q).forEach(function(mid){
+      var m = matiere(mid); if (!m || m.cat === "outil") return;
+      var k = cleArticle(m);
+      besoins[k] = (besoins[k] || 0) + q[mid] * n;
+      if (!rep[k]) rep[k] = m;
+    });
+  }
+  (state.pieces || []).forEach(function(p){
+    if (p.sortie || p.prod === "termine" || horsStock(p)) return;
+    var cr = creation(p.cid); if (cr) ajouter(cr, 1);
+  });
+  commandes().forEach(function(c){
+    if (c.brouillon || (c.statut !== "acceptee" && c.statut !== "encours")) return;
+    piecesManquantes(c).forEach(function(l){ ajouter(l.cr, l.n); });
+  });
+  return Object.keys(besoins).map(function(k){
+    var m = rep[k], b = Math.round(besoins[k] * 1000) / 1000, st = stockArticle(m);
+    return {m: m, besoin: b, stock: st, manque: Math.max(0, Math.round((b - Math.max(0, st)) * 1000) / 1000), suivie: matiereSuivie(m)};
+  }).filter(function(x){ return x.besoin > 0 && x.suivie; }).sort(function(a, b){ return b.manque - a.manque || String(a.m.nom).localeCompare(String(b.m.nom)); });
+}
+function carteBesoinsMatieres(){
+  var tous = besoinsMatieres();
+  /* Seulement ce qui manque : le reste est en stock, inutile de le lire. */
+  var l = tous.filter(function(x){ return x.manque > 1e-9; });
+  if (!l.length) return null;
+  var manquent = l;
+  var c = el('<div class="card" id="besoins-mat" style="margin-bottom:16px"><header><h2>Pour ta production</h2>'+
+    '<p>Ce que vont consommer tes pièces à faire et tes commandes acceptées, face à ton stock (tous lots compris).'+
+    ' <b>' + esc(pluriel(manquent.length, "matière manque", "matières manquent")) + '</b>' + (tous.length > l.length ? ' ; ' + esc(pluriel(tous.length - l.length, "autre est en stock", "autres sont en stock")) + '.' : '.')+'</p></header><div class="body"></div></div>');
+  var w = el('<div class="tablewrap resp"></div>');
+  var t = el('<table><thead><tr><th>Matière</th><th class="n">Il faut</th><th class="n">En stock</th><th class="n">À acheter</th><th><span class="sr-only">Action</span></th></tr></thead><tbody></tbody></table>');
+  l.forEach(function(x){
+    var tr = el('<tr><td data-l="Matière"><b>'+esc(x.m.nom)+'</b></td><td class="n num" data-l="Il faut">'+esc(texteLots(x.m, x.besoin))+'</td>'+
+      '<td class="n num'+(x.stock < 0 ? ' bad' : '')+'" data-l="En stock">'+esc(texteLots(x.m, x.stock))+'</td>'+
+      '<td class="n num" data-l="À acheter">'+(x.manque > 1e-9 ? '<b class="warn">'+esc(texteLots(x.m, x.manque))+'</b>' : '<span class="good">rien</span>')+'</td><td></td></tr>');
+    if (x.manque > 1e-9){ var b = bouton("J'ai acheté", function(){ dialogueAchatMatiere(lotCourant(x.m)); }); b.classList.add("sm"); tr.lastElementChild.appendChild(b); }
+    t.querySelector("tbody").appendChild(tr);
+  });
+  w.appendChild(densifier(t, "Matière"));
+  c.querySelector(".body").appendChild(w);
+  return c;
+}
+/* ═════ CONTRÔLE DE COHÉRENCE (V60) ═════
+   Ce qui ne devrait pas arriver entre les fiches, le stock, les pièces et
+   les commandes, avec, quand c'est sûr, le geste qui répare. */
+function incoherences(){
+  var l = [];
+  var cmdIds = {}; commandes().forEach(function(c){ cmdIds[c.id] = c; });
+  (state.creations || []).forEach(function(cr){
+    if (cr.archivee) return;
+    var casses = (cr.lignes || []).filter(function(x){ return !matiere(x.mid); });
+    if (casses.length) l.push({t: "« " + cr.nom + " » cite " + pluriel(casses.length, "matière supprimée", "matières supprimées"), d: "Son coût de revient est faux tant que la ligne n'est pas remplacée.", lib: "Ouvrir la fiche", a: function(){ ouvrirFiche(cr.id); }});
+  });
+  (state.pieces || []).forEach(function(p){
+    var cr = creation(p.cid);
+    var nomP = (cr ? cr.nom : "Pièce") + " n° " + numeroPiece(p);
+    if (p.cmdId && !cmdIds[p.cmdId] && p.com !== "vendu")
+      l.push({t: nomP + " est réservée pour une commande qui n'existe plus", d: "Elle ne peut pas être vendue tant qu'elle reste réservée.", lib: "La libérer", a: function(){ delete p.cmdId; p.com = "atelier"; p.maj = Date.now(); }});
+    else if (p.cmdId && cmdIds[p.cmdId] && cmdIds[p.cmdId].statut === "annulee" && p.com !== "vendu")
+      l.push({t: nomP + " est réservée pour une commande annulée", d: "Elle peut retourner dans ton stock à vendre.", lib: "La libérer", a: function(){ delete p.cmdId; p.com = "atelier"; p.maj = Date.now(); }});
+    if (p.prod === "termine" && !p.sortie && cr && (cr.lignes || []).length && (Number(p.termineLe) || 0) > (Number(state.reglages.lignesV60) || Date.now()))
+      l.push({t: nomP + " est terminée, mais ses matières ne sont pas sorties du stock", d: "Le stock affiché est trop haut.", lib: "Sortir ses matières", a: function(){ prevenirManques(consommerPour(cr, 1, p)); p.sortie = true; }});
+    if (p.com === "vendu" && p.prod !== "termine")
+      l.push({t: nomP + " est vendue sans être terminée", d: "Elle passera en terminée (ses matières sortiront du stock).", lib: "La terminer", a: function(){ majProd(p, "termine"); }});
+  });
+  commandes().forEach(function(c){
+    if (c.brouillon) return;
+    var pcs = piecesCommande(c).filter(function(p){ return p.com !== "jete"; });
+    if (c.statut === "livree" && pcs.some(function(p){ return p.com !== "vendu"; }))
+      l.push({t: "Commande " + (c.num || "") + " livrée, mais ses pièces ne sont pas notées vendues", d: "Ses pièces restent comptées en stock.", lib: "Mettre à jour", a: function(){ synchroAtelierCommande(c, "terminee"); }});
+    if ((c.statut === "terminee") && pcs.some(function(p){ return p.prod !== "termine"; }))
+      l.push({t: "Commande " + (c.num || "") + " prête, mais des pièces ne sont pas terminées", d: "Les matières de ces pièces ne sont pas sorties du stock.", lib: "Les terminer", a: function(){ synchroAtelierCommande(c, "encours"); }});
+  });
+  var vus = {};
+  (state.matieres || []).forEach(function(m){
+    if (m.cat === "outil") return;
+    var k = cleArticle(m) + "|" + (Number(m.prix) || 0).toFixed(2);
+    if (vus[k] && !estExemple(m)) l.push({t: "« " + m.nom + " » existe deux fois au même prix", d: "Deux lignes identiques partagent mal le stock : regroupe-les (note le stock de l'une sur l'autre par un inventaire, puis supprime-la).", lib: "Voir", a: function(){ view.sub = "matieres"; view.mfQ = nomBaseDe(m); aller("stock"); }, sansReparer: true});
+    vus[k] = true;
+  });
+  return l;
+}
+function dialogueCoherence(){
+  var l = incoherences();
+  if (!l.length){ toast("Tout est cohérent : fiches, stock, pièces et commandes."); return; }
+  var box = el('<div class="coherence"></div>');
+  var ul = el('<ul class="manque-liste"></ul>');
+  l.forEach(function(x){
+    var li = el('<li><span><b>'+esc(x.t)+'</b><br><span class="hint">'+esc(x.d)+'</span></span></li>');
+    var b = el('<button type="button" class="lien-mini">'+esc(x.lib)+'</button>');
+    b.addEventListener("click", function(){
+      fermerCouche(function(){ x.a(); if (!x.sansReparer){ sauverTout(); render(); toast("C'est réparé."); } });
+    });
+    li.appendChild(b); ul.appendChild(li);
+  });
+  box.appendChild(ul);
+  confirmer({titre: "Contrôle de cohérence", texte: "Ce qui ne colle pas entre tes fiches, ton stock, tes pièces et tes commandes :", contenu: box, bouton: "Fermer", sansAnnuler: true}, function(){});
 }
 /* Appelle « suite » si tout est là (ou si on choisit de lancer quand même), « refus » sinon. */
 function avantFabrication(lots, suite, refus){
@@ -9062,9 +9440,10 @@ function appliquerPesee(p, cr, reel){
     var deja = p.reelApplique[mid] !== undefined ? p.reelApplique[mid] : (prevu[mid] || 0);
     var ecart = Math.round((deja - v) * 1000) / 1000;
     if (Math.abs(ecart) > 1e-9){
-      mouvementMatiere(m, "correction", ecart, null,
+      var mP = (p.couleurs && p.couleurs[mid] && matiere(p.couleurs[mid])) || m;
+      mouvementMatiere(mP, "correction", ecart, null,
         "Pesée « " + cr.nom + " » : " + qte(v, m.unite) + " utilisés (prévu " + qte(prevu[mid] || 0, m.unite) + ")",
-        {pid: p.id, vid: p.couleurs && p.couleurs[mid] ? p.couleurs[mid] : undefined});
+        {pid: p.id});
     }
     p.reelApplique[mid] = v;
   });
@@ -11521,8 +11900,11 @@ function ouvrirPicker(choisie){
     det.push(qte(o.contenance, o.unite) + (o.metrage ? " · environ " + nb(Number(o.metrage)) + " m" : ""));
     /* V59 : le stock et les couleurs se voient au moment de choisir. */
     if (source === "perso"){
-      var nvC = (o.variantes || []).length;
-      det.push(o.cat === "outil" ? "" : "en stock : " + texteLots(o, Number(o.stock) || 0) + (nvC ? " · " + pluriel(nvC, "couleur") : ""));
+      /* V60 : le stock de l'article, tous lots compris (les fabrications
+         puisent d'abord dans le lot le plus ancien). */
+      var nLots = o.cat === "outil" ? 1 : lotsDe(o).length;
+      if (o.crochetMin) det.push("crochet " + nb(o.crochetMin) + " mm");
+      det.push(o.cat === "outil" ? "" : "en stock : " + texteLots(o, stockArticle(o)) + (nLots > 1 ? " (" + nLots + " lots)" : ""));
     }
     var pu2 = o.contenance ? o.prix / o.contenance : 0;
     var b = el('<button type="button" class="pk-item">'+
@@ -11565,6 +11947,10 @@ function ouvrirPicker(choisie){
     var resPk = rechercheFloue(miennes, t, texteRecherche);
     miennes = resPk.liste;
     var vraies = miennes.filter(function(m){ return !estExemple(m); }), exemples = miennes.filter(estExemple);
+    /* V60 : un article = une entrée, même s'il a plusieurs lots (prix
+       d'achat différents) : on choisit l'article, le stock suit les lots. */
+    var vuArt = {};
+    vraies = vraies.filter(function(m){ var k = cleArticle(m); if (vuArt[k]) return false; vuArt[k] = true; return true; });
     if (vraies.length){
       liste.appendChild(el('<div class="pk-t">Mes matières</div>'));
       vraies.slice(0,40).forEach(function(m){ liste.appendChild(ligne(m, "perso", m.id)); n++; });
@@ -14020,6 +14406,8 @@ function dialogueNouvelleCommande(o){
     sauverTout();
     view.cmdVue = c.id; aller("commandes", {garderVue:true});
     toast("Commande " + (c.num || "") + " créée");
+    /* Déjà acceptée : les pièces prêtes en stock sont proposées tout de suite (V60). */
+    if (c.statut === "acceptee") setTimeout(function(){ reserverStockCommande(c); }, 150);
   });
 }
 /* V59 : un règlement s'enregistre en un geste, montant déjà rempli avec ce
@@ -14080,7 +14468,7 @@ function piecesManquantes(c){
 }
 /* Pièces terminées et libres (ni vendues, ni réservées, ni pour une autre commande). */
 function piecesLibresEnStock(cid){
-  return piecesDe(cid).filter(function(p){ return p.prod === "termine" && !p.cmdId && (p.com === "atelier" || p.com === "envente"); })
+  return piecesDe(cid).filter(pieceLibre)
     .sort(function(a, b){ return (a.termineLe || a.cree || 0) - (b.termineLe || b.cree || 0); });
 }
 function relierPiece(c, p){
@@ -14133,6 +14521,30 @@ function lancerFabricationCommande(c, suite){
     fabriquer();
   });
 }
+/* V60 : dès qu'une commande est acceptée, les pièces terminées et libres de
+   ses créations sont proposées et réservées : elles ne peuvent plus partir
+   ailleurs, et seul le manque part en fabrication. */
+function reserverStockCommande(c, apres){
+  var fin = function(){ if (apres) apres(); };
+  if (!c || c.statut === "devis" || c.statut === "annulee" || c.statut === "livree" || c.brouillon){ fin(); return; }
+  var dispo = piecesManquantes(c).map(function(l){ return {l: l, st: piecesLibresEnStock(l.cid).slice(0, l.n)}; }).filter(function(x){ return x.st.length; });
+  if (!dispo.length){ fin(); return; }
+  var qui = (c.client && c.client.nom) || "cette commande";
+  confirmer({titre: "Des pièces prêtes sont en stock",
+    texte: "Les réserver pour " + qui + (c.num ? " (" + c.num + ")" : "") + " ? Elles ne pourront plus être vendues ailleurs ; seul le manque partira en fabrication.",
+    details: dispo.map(function(x){ return x.l.cr.nom + " : " + pluriel(x.st.length, "pièce prête") + " pour " + x.l.n + " demandée" + (x.l.n > 1 ? "s" : ""); }),
+    bouton: "Oui, les réserver", annuler: "Non, tout fabriquer", siNon: fin, siAnnule: fin}, function(){
+    var n = 0;
+    dispo.forEach(function(x){ x.st.forEach(function(p){ relierPiece(c, p); n++; }); });
+    journaliser(c, pluriel(n, "pièce réservée", "pièces réservées") + " dans le stock de l'atelier");
+    c.maj = Date.now();
+    sauverTout(); render();
+    var tout = !piecesManquantes(c).length && (c.statut === "acceptee" || c.statut === "encours");
+    toast(pluriel(n, "pièce réservée", "pièces réservées") + " pour " + qui + (tout ? " : tout est prêt." : " : le reste est à fabriquer."),
+      tout ? {libelle: "Passer en « Prête »", fn: function(){ changerStatutCommande(c, "terminee"); render(); toast("Prête à remettre ou à envoyer"); }} : undefined);
+    fin();
+  });
+}
 /* Appelée à chaque changement de statut, quel que soit le chemin (frise,
    liste « Statut », tableau par étape). */
 function synchroAtelierCommande(c, avant){
@@ -14140,6 +14552,8 @@ function synchroAtelierCommande(c, avant){
   var rang = {devis:0, acceptee:1, encours:2, terminee:3, livree:4, annulee:-1};
   var r0 = rang[avant] === undefined ? 0 : rang[avant], r1 = rang[c.statut] === undefined ? 0 : rang[c.statut];
   if (c.statut === "annulee") return;   /* detacherPieces s'en charge */
+  /* Devis accepté : on propose tout de suite le stock prêt (V60). */
+  if (r0 <= 0 && r1 === 1) setTimeout(function(){ if (!document.querySelector(".dlg")) reserverStockCommande(c); }, 120);
   if (r1 >= 2){
     /* Pièces à créer si on est passé directement à une étape plus loin. */
     piecesManquantes(c).forEach(function(l){ creerPiecesCommande(c, l.cid, l.n, "encours"); });

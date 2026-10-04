@@ -60,39 +60,38 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     await p.fill('#nm-coul', 'jaune'); await p.fill('#nm-bain', '4821'); await p.fill('#nm-lots', '10');
     R.recap_stock_depart = /Stock de départ : 10 pelotes \(500 g\)/.test((await p.locator('.dlg').textContent()).replace(/ | /g,' '));
     await p.click('.dlg [data-oui]'); await p.waitForTimeout(400);
-    const lt = await dans(p, function(){ var m = state.matieres.filter(function(x){ return x.nom === 'Laine test 50 g'; })[0]; window.__mid = m.id; return {s:m.stock, v:m.variantes.map(function(v){ return [v.coloris, v.bain, v.stock]; })}; });
-    R.stock_par_couleur = lt.s === 500 && lt.v.length === 1 && lt.v[0][0] === 'jaune' && lt.v[0][1] === '4821' && lt.v[0][2] === 500;
-    /* 4. un achat d'une nouvelle couleur, avec récapitulatif */
-    await dans(p, function(){ dialogueAchatMatiere(matiere(window.__mid)); });
+    /* V60 : chaque couleur devient sa propre ligne, avec son stock. */
+    const lt = await dans(p, function(){ var m = state.matieres.filter(function(x){ return x.nom === 'Laine test 50 g · jaune · bain 4821'; })[0]; window.__mid = m.id; return {s:m.stock, c:m.couleur, b:m.nomBase, v:(m.variantes||[]).length}; });
+    R.stock_par_couleur = lt.s === 500 && lt.c === 'jaune · bain 4821' && lt.b === 'Laine test 50 g' && lt.v === 0;
+    /* 4. une autre couleur : une autre ligne, avec son stock (Dupliquer) */
+    await dans(p, function(){ dialogueAutreVersion(matiere(window.__mid)); });
     await p.waitForTimeout(200);
-    await p.selectOption('#am-v', '__nv'); await p.fill('#am-c', 'rose'); await p.fill('#am-n', '4'); await p.fill('#am-p', '10.8');
-    await p.click('.dlg [data-oui]'); await p.waitForTimeout(200);
-    R.recap_achat = /Couleur : rose \(nouvelle\)/.test(await p.locator('.dlg').textContent()) && /Confirmer l'achat/.test(await p.locator('.dlg [data-oui]').textContent());
+    await p.fill('#av-coul', 'rose'); await p.fill('#av-stock', '4');
+    R.recap_achat = /Une autre ligne de « Laine test 50 g »/.test(await p.locator('.dlg').textContent());
     await p.click('.dlg [data-oui]'); await p.waitForTimeout(400);
-    const la = await dans(p, function(){ var m = matiere(window.__mid); return {s:m.stock, rose:(trouverVariante(m,'rose','')||{}).stock}; });
-    R.achat_couleur = la.s === 700 && la.rose === 200;
+    const la = await dans(p, function(){ var r = state.matieres.filter(function(x){ return x.nom === 'Laine test 50 g · rose'; })[0]; window.__rose = r && r.id; return {s:matiere(window.__mid).stock, rose: r && r.stock}; });
+    R.achat_couleur = la.s === 500 && la.rose === 200;
     /* 5. « Mes fils par couleur » */
     await dans(p, function(){ view.sub = 'stock'; render(); });
     await p.waitForTimeout(300);
     const fc = (await p.locator('table.fils-coul').textContent()).replace(/ | /g,' ');
     R.fils_par_couleur = /jaune/.test(fc) && /rose/.test(fc) && /10 pelotes \(500 g\)/.test(fc) && /4 pelotes \(200 g\)/.test(fc);
-    /* 6. la fabrication retire la couleur choisie dans la fiche ; sinon elle demande */
+    /* 6. la fabrication retire la ligne de la fiche ; si elle est vide, elle demande la ligne sœur */
     await dans(p, function(){
-      var m = matiere(window.__mid), j = trouverVariante(m, 'jaune', '4821');
-      creation('c1').lignes = [{mid:m.id, qte:40, vid:j.id}];
-      creation('c2').lignes = [{mid:m.id, qte:30}];
+      creation('c1').lignes = [{mid:window.__mid, qte:40}];
+      creation('c2').lignes = [{mid:window.__mid, qte:30}];
       ajouterPieces('c1', 1, 'termine'); sauverTout();
     });
-    const j1 = await dans(p, function(){ var m = matiere(window.__mid); return trouverVariante(m,'jaune','4821').stock; });
+    const j1 = await dans(p, function(){ return matiere(window.__mid).stock; });
     R.fiche_couleur_retiree = j1 === 460;
-    await dans(p, function(){ ajouterPieces('c2', 1, 'termine'); sauverTout(); });
+    await dans(p, function(){ mouvementMatiere(matiere(window.__mid), 'inventaire', 0, null, 'vide'); ajouterPieces('c2', 1, 'termine'); sauverTout(); });
     await p.waitForTimeout(300);
-    R.couleur_demandee = await p.locator('.dlg .dlg-couleurs').count() === 1 && await dans(p, function(){ return piecesCouleurAttente().length === 1 && matiere(window.__mid).stock === 660; });
-    const vRose = await dans(p, function(){ return trouverVariante(matiere(window.__mid),'rose','').id; });
+    R.couleur_demandee = await p.locator('.dlg .dlg-couleurs').count() === 1 && await dans(p, function(){ return piecesCouleurAttente().length === 1 && matiere(window.__mid).stock === 0; });
+    const vRose = await dans(p, function(){ return window.__rose; });
     await p.selectOption('.dlg .dlg-couleurs select', vRose);
     await p.click('.dlg [data-oui]'); await p.waitForTimeout(300);
-    const r6 = await dans(p, function(){ var m = matiere(window.__mid); return {rose:trouverVariante(m,'rose','').stock, att:piecesCouleurAttente().length, tot:m.stock}; });
-    R.couleur_choisie_retiree = r6.rose === 170 && r6.att === 0 && r6.tot === 630;
+    const r6 = await dans(p, function(){ return {rose:matiere(window.__rose).stock, att:piecesCouleurAttente().length, tot:matiere(window.__mid).stock}; });
+    R.couleur_choisie_retiree = r6.rose === 170 && r6.att === 0 && r6.tot === 0;
     /* 7. recherche tolérante */
     await dans(p, function(){ state.matieres.push({id:'mx', nom:'Laine mérinos fine', cat:'fil', prix:8, contenance:50, unite:'g', stock:0, seuil:0, pmp:0.16, mouv:[], variantes:[]}); sauverTout(); view.sub = 'matieres'; view.mfQ = 'merinos'; render(); });
     await p.waitForTimeout(250);
@@ -134,6 +133,8 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     R.corriger_revient_au_formulaire = await p.locator('#dlgc-nom').isVisible() && (await p.inputValue('#dlgc-nom')) === 'Camille';
     await p.click('.dlg [data-oui]'); await p.waitForTimeout(150); await p.click('.dlg [data-oui]'); await p.waitForTimeout(400);
     R.commande_creee = await dans(p, function(){ return commandes().filter(function(c){ return !c.brouillon; }).length; }) === nAv + 1;
+    /* V60 : une pièce prête est en stock : la réservation est proposée ; ici, non. */
+    if (await p.locator('.dlg [data-non]:visible').count()){ await p.locator('.dlg [data-non]:visible').last().click(); await p.waitForTimeout(300); }
     await dans(p, function(){ nouvelleFiche('bonnet'); });
     await p.waitForTimeout(300);
     await p.fill('#f-nom', 'Bonnet test V53');
@@ -146,9 +147,10 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     const mig = await dans(p, function(){
       var s2 = clone(state); s2.matieres.push({id:'old', nom:'Vieux coton', cat:'fil', prix:3, contenance:50, unite:'g', stock:120, seuil:0, pmp:0.06, mouv:[], bain:'écru · bain 12'});
       migrer(s2); var m = s2.matieres.filter(function(x){ return x.id === 'old'; })[0];
-      return {n:m.variantes.length, c:m.variantes[0] && m.variantes[0].coloris, s:m.variantes[0] && m.variantes[0].stock, b:m.bain};
+      return {n:(m.variantes||[]).length, c:m.couleur, s:m.stock, b:m.bain, nom:m.nom};
     });
-    R.migration_coloris = mig.n === 1 && mig.c === 'écru · bain 12' && mig.s === 120 && mig.b === '';
+    /* V60 : la couleur devient celle de la ligne elle-même */
+    R.migration_coloris = mig.n === 0 && mig.c === 'écru · bain 12' && mig.s === 120 && mig.b === '' && mig.nom === 'Vieux coton · écru · bain 12';
     await p.close();
   } catch (e) { R._echec = String(e && e.stack || e); }
   console.log(JSON.stringify(R, null, 1));

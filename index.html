@@ -7,7 +7,7 @@
      seules connexions permises sont celles vers le serveur Supabase. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://upload.wikimedia.org https://www.gutenberg.org; connect-src 'self' https://jsmmajntopdozkmzrniy.supabase.co wss://jsmmajntopdozkmzrniy.supabase.co; font-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<script src="boot.js?v=59"></script>
+<script src="boot.js?v=60"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0f5f57">
 <link rel="manifest" href="manifest.webmanifest">
@@ -216,6 +216,12 @@
   .side #nav button.ong-fiche{font-style:italic;margin-left:14px;min-height:38px;font-size:13.5px;}
   .side #nav button.ong-fiche:not([aria-current="true"]){color:var(--primary-ink);}
   tr.ligne-clic{cursor:pointer;}
+  .vt-vide{margin-top:10px;padding:10px 12px;border:1.5px solid var(--warn);border-radius:10px;background:var(--warn-soft)}
+  .case-ligne{display:flex;gap:8px;align-items:flex-start;cursor:pointer;font-size:14px;line-height:1.4}
+  .case-ligne input{margin-top:3px;flex:none;width:18px;height:18px}
+  .coul-l{display:inline-flex;align-items:center;gap:6px;font-size:13px;line-height:1.3}
+  .coul-l .pastille{flex:none;width:12px;height:12px;border:1px solid var(--rule-strong)}
+  input.in-coul{margin-top:4px;font-size:13px;padding:5px 8px;min-height:32px}
   td.cmd-acts .btn{display:block;width:100%;white-space:nowrap;}
   td.cmd-acts .btn + .btn{margin-top:6px;}
   .lp-grille{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(260px,1fr);gap:20px;align-items:start;}
@@ -1039,7 +1045,7 @@
     .resp table.t-dense td.d-titre{order:-1;flex:1 1 100%;display:block;font-size:15px;font-weight:600;padding:0 0 2px}
     .resp table.t-dense td.d-titre::before{display:none}
     .resp table.t-dense td.d-titre .hint{display:block;margin-top:1px;font-weight:400}
-    .resp table.t-dense td.vide, .resp table.t-dense td.d-cache{display:none}
+    .resp table.t-dense td.d-vide, .resp table.t-dense td.d-cache{display:none}
     .resp table.t-dense td.d-acts{flex:1 1 100%;display:flex;justify-content:flex-end;gap:8px;padding:6px 0 0}
     .resp table.t-dense td.d-acts::before{display:none}
     /* un seul petit bouton : il remonte à droite du titre */
@@ -1432,14 +1438,14 @@
      Sans ce fichier (ou s'il ne se charge pas), rien ne change : l'objet
      global reste absent et l'application démarre hors ligne, comme avant. -->
 <script src="config.js"></script>
-<script src="pdf.js?v=59"></script>
-<script src="app.js?v=59"></script>
+<script src="pdf.js?v=60"></script>
+<script src="app.js?v=60"></script>
 
 <!-- Comptes et synchronisation (module facultatif) : sans config.js,
      l'application fonctionne hors ligne, tout reste dans le navigateur.
      Avec config.js, se connecter devient obligatoire. Le message de repli
      (si ce module ne se charge pas) et l'écouteur d'erreur vivent dans
      app.js, section DÉMARRAGE. -->
-<script type="module" src="sync.js?v=59" id="script-sync"></script>
+<script type="module" src="sync.js?v=60" id="script-sync"></script>
 </body>
 </html>

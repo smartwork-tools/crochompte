@@ -5,7 +5,7 @@ Il sert de référence : **toute modification du code qui change une de ces
 règles doit d'abord changer ce document**, et les tests correspondants
 (`tests/test-v37.js` à `tests/test-v56.js`, `tests/sql/`).
 
-Dernière mise à jour : V56 (1er octobre 2026). Journal des versions : `CHANGELOG.md`.
+Dernière mise à jour : V60 (4 octobre 2026). Journal des versions : `CHANGELOG.md`.
 
 ---
 
@@ -85,6 +85,49 @@ Dernière mise à jour : V56 (1er octobre 2026). Journal des versions : `CHANGEL
   temps » / « corriger » sous le chrono). Il remplace le chronomètre, vaut
   pour tous les postes (`tempsSaisi`), refige la vente. Relancer le chrono
   efface la marque.
+
+## 0.0 Gestion cohérente : lignes, lots, stock libre, réservations (V60)
+
+Remplace les règles de couleurs de la §0.5 (gardées plus bas pour l'historique).
+
+- **Une ligne de matière = un article précis** : nom (`nomBase`), couleur (`couleur`), crochet,
+  contenance, unité et UN prix d'achat, avec son propre stock. Le nom affiché est
+  `nomBase · couleur`. Il n'y a plus de couleurs à l'intérieur d'une matière (`variantes` vide).
+- **Reprise (migration, une fois)** : chaque ancienne couleur devient une ligne avec son stock
+  (mouvement « transfert » sur les deux lignes, non annulable). Le stock « sans couleur précisée »
+  reste sur la ligne d'origine ; s'il est nul, la ligne d'origine devient la première couleur.
+  Les lignes de fiche `vid` pointent sur la nouvelle ligne ; les couleurs habituelles et celles des
+  pièces deviennent des substitutions de ligne.
+- **Lots** : même article (`cleArticle` = catégorie, nom, couleur, crochet, contenance, unité) à des
+  prix différents = plusieurs lignes (lots). Un achat au prix de la ligne s'y ajoute ; à un autre
+  prix (ligne qui a du stock et un prix réel), il va au lot de ce prix, créé au besoin (`lotDe`).
+  Une ligne vide ou jamais achetée prend le nouveau prix. Le récapitulatif annonce le nouveau lot.
+- **Fabrication** : sortie « premier entré, premier sorti » sur les lots de l'article ; le manque est
+  retiré de la ligne demandée (stock négatif, signalé). Si l'article n'a pas assez de stock et
+  qu'une ligne sœur (même nom, autre couleur/crochet) en a assez, on demande laquelle a servi
+  (`p.couleursAttente`) ; le choix est retenu pour la création (`couleursHabituelles`). La pesée
+  corrige la ligne réellement utilisée (`p.couleurs[mid]`).
+- **Lots épuisés** : vides, remplacés par un autre lot en stock et cités par aucune fiche : masqués
+  de « Mes matières » (lien « Les afficher »). Le sélecteur d'une fiche montre un article une fois,
+  avec le stock de tous ses lots.
+- **Stock de produits finis** = pièces libres : terminées, ni vendues/données/jetées, sans
+  `cmdId`, ni « commande » ni « réservée » (`pieceLibre`). Les réservées se comptent à part.
+- **Vente** : « Vendre (N) » seulement si N pièces libres ; sinon « Fabriquer ». Sans pièce libre,
+  la fenêtre de vente et le stand refusent, sauf la case / le bouton « faite mais pas notée »
+  (une pièce terminée — matières sorties, manques annoncés — puis vendue). Les ventes importées
+  (Etsy) créent la pièce.
+- **Commandes** : dès l'accord (création « déjà acceptée » ou devis → accepté), les pièces libres
+  des créations demandées sont proposées et réservées (`cmdId`, « commande ») ; seul le manque
+  part en fabrication. Un devis ne réserve rien.
+- **Besoins en matières** : pièces à faire / en cours pas encore sorties + pièces encore à créer des
+  commandes acceptées ou en cours, par article, face au stock de l'article ; seules les matières
+  suivies comptent. « Pour ta production » (Matières) et « À faire » listent ce qui manque.
+- **Contrôle de cohérence** : matière supprimée citée par une fiche, pièce réservée pour une
+  commande annulée ou inexistante, pièce terminée récente dont les matières ne sont pas sorties,
+  pièce vendue non terminée, commande livrée dont les pièces ne sont pas vendues, commande prête
+  dont des pièces ne sont pas terminées, deux lignes identiques au même prix. Chaque point a son
+  geste de réparation (sauf le doublon, à regrouper soi-même).
+- **Actualiser la page** rouvre l'écran en cours (état d'historique du navigateur) et sa position.
 
 ## 0.5 Matières : formulaire par catégorie, couleurs, outils, recherche (V53)
 

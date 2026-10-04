@@ -120,7 +120,9 @@ async function seConnecter(p){
     await dans(p, function(){ var c = nouvelleCommande(); c.client = {nom:'Zoé'}; c.cid = 'c2'; c.prixConvenu = 28; c.statut = 'encours'; delete c.brouillon; sauverTout(); dialogueVente('c2'); });
     await p.waitForTimeout(300);
     R.vente_propose_commande = await p.evaluate(()=> !document.getElementById('vt-cmd-w').hidden && /Zoé/.test(document.getElementById('vt-cmd').textContent));
-    await p.selectOption('#vt-cmd', {index:1}); await p.fill('#vt-prix', '28'); await p.click('.dlg [data-oui], .dlg button.primary'); await p.waitForTimeout(400);
+    await p.selectOption('#vt-cmd', {index:1}); await p.fill('#vt-prix', '28');
+    await p.check('#vt-faite');   /* V60 : aucune pièce en stock, on dit qu'elle a été faite */
+    await p.click('.dlg [data-oui], .dlg button.primary'); await p.waitForTimeout(400);
     R.vente_reliee_commande = await dans(p, function(){ var l = piecesDe('c2'); return l.length === 1 && !!l[0].cmdId && !!commandeLiee(l[0]) && lignesVentes({d0:0, d1:Date.now()+864e5}).filter(function(x){ return x.type === 'piece'; }).length === 1; });
 
     /* ── 6. Facture : statut déclaré exigé, livraison exigée ── */

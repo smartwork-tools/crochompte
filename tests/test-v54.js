@@ -98,8 +98,8 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     await dans(p, function(){ aller('accueil'); });
     await p.waitForTimeout(300);
     /* V58.1 : plus aucun message de version à l'écran */
-    R.pas_de_message_de_version = await p.locator('#lien-nouveautes').count() === 0 && !/Nouveautés|V5\d/.test(await p.locator('#side, #main').allTextContents().then(t => t.join(' ')));
-    R.signaler_un_probleme = /mailto:bonjour@crochompte\.com\?subject=.*V5[0-9]/.test(await p.locator('a', {hasText:'Signaler un problème'}).getAttribute('href'));
+    R.pas_de_message_de_version = await p.locator('#lien-nouveautes').count() === 0 && !/Nouveautés|V[5-9]\d/.test(await p.locator('#side, #main').allTextContents().then(t => t.join(' ')));
+    R.signaler_un_probleme = /mailto:bonjour@crochompte\.com\?subject=.*V[5-9][0-9]/.test(await p.locator('a', {hasText:'Signaler un problème'}).getAttribute('href'));
     await dans(p, function(){ window.CrochomptePont.conflit(Date.now() - 3600000); });
     await p.waitForTimeout(200);
     R.conflit_visible_partout = await p.locator('#main .bandeau-global').count() === 1;

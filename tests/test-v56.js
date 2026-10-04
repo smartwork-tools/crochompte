@@ -36,6 +36,7 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     await dans(p, function(){ var c = nouvelleCommande(); c.client = {nom:'Zoé'}; c.cid = 'c2'; c.prixConvenu = 28; c.statut = 'encours'; delete c.brouillon; sauverTout(); dialogueVente('c2'); });
     await p.waitForTimeout(300);
     await p.selectOption('#vt-cmd', {index:1}); await p.fill('#vt-prix', '28'); await p.selectOption('#vt-moyen', 'carte');
+    if (await p.locator('#vt-faite').isVisible()) await p.check('#vt-faite');   /* V60 */
     await p.click('.dlg [data-oui], .dlg button.primary'); await p.waitForTimeout(400);
     const v1 = await dans(p, function(){ var c = commandes()[0], pc = piecesDe('c2')[0]; var e = encaissements().filter(function(x){ return x.montant === 28; });
       return {paiements: (c.paiements||[]).length, montant: c.paiements && c.paiements[0] && c.paiements[0].montant, moyen: c.paiements && c.paiements[0] && c.paiements[0].moyen, pieceId: c.paiements && c.paiements[0] && c.paiements[0].pieceId === pc.id, solde: soldeDu(c), enc: e.length, lie: !!commandeLiee(pc)}; });
@@ -61,7 +62,9 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
 
     /* ── 3. Commande annulée : la pièce reliée redevient une vente à part ── */
     await dans(p, function(){ var c = commandes()[0]; c.statut = 'encours'; sauverTout(); dialogueVente('c2'); });
-    await p.waitForTimeout(300); await p.selectOption('#vt-cmd', {index:1}); await p.fill('#vt-prix', '60'); await p.click('.dlg [data-oui], .dlg button.primary'); await p.waitForTimeout(400);
+    await p.waitForTimeout(300); await p.selectOption('#vt-cmd', {index:1}); await p.fill('#vt-prix', '60');
+    if (await p.locator('#vt-faite').isVisible()) await p.check('#vt-faite');   /* V60 */
+    await p.click('.dlg [data-oui], .dlg button.primary'); await p.waitForTimeout(400);
     await p.selectOption('[data-c="statut"]', 'annulee'); await p.waitForTimeout(400);
     R.commande_annulee_detache = await dans(p, function(){ var pc = piecesDe('c2').filter(function(x){ return x.com === 'vendu'; })[0]; return !!pc && !pc.cmdId && lignesVentes({d0:0, d1:Date.now()+864e5}).some(function(x){ return x.type === 'piece' && x.montant === 60; }); });
 
@@ -125,7 +128,7 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     await p.waitForTimeout(300);
     R.catalogue_sans_type = !/Tous les types|types affichés|type affiché/.test(await p.locator('#main').textContent());
     R.categories_unifiees = await dans(p, function(){ return CATS === FAMILLES_MAT && famNomMat('garn') === 'Rembourrage'; });
-    R.version_56 = await dans(p, function(){ return /^V5\d/.test(VERSION_APP) && NOUVEAUTES.some(function(n){ return n.v === 'V56'; }); });
+    R.version_56 = await dans(p, function(){ return /^V[5-9]\d/.test(VERSION_APP) && NOUVEAUTES.some(function(n){ return n.v === 'V56'; }); });
   } catch (e) { errs.push('TEST: ' + e.message); }
   R.pas_d_erreur = errs.length === 0;
   console.log(JSON.stringify(R, null, 1)); console.log('ERREURS JS: ' + (errs.length ? errs.join(' | ') : 'aucune'));

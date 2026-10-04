@@ -46,8 +46,9 @@ const txt = async (p, sel) => (await p.locator(sel).first().textContent()).repla
     await p.fill('#nm-coul-2', 'rose'); await p.fill('#nm-lots-2', '6');
     R.total_depart = /Stock de départ : 10 pelotes \(500 g\)/.test(await txt(p, '#nm-depart-total'));
     await p.fill('#nm-nom', 'Coton Jade 50 g'); await p.click('.dlg [data-oui]'); await p.waitForTimeout(400);
-    const m1 = await dans(p, function(){ var m = state.matieres.filter(function(x){ return x.nom === 'Coton Jade 50 g'; })[0]; window.__m1 = m.id; return {s:m.stock, v:m.variantes.map(function(v){ return v.coloris + ':' + v.stock; }).sort()}; });
-    R.depart_multicouleur = m1.s === 500 && m1.v.join('|') === 'jaune:200|rose:300';
+    /* V60 : une ligne par couleur, chacune avec son stock */
+    const m1 = await dans(p, function(){ var l = state.matieres.filter(function(x){ return x.nomBase === 'Coton Jade 50 g'; }); var j = l.filter(function(x){ return x.couleur === 'jaune'; })[0]; window.__m1 = j.id; return {n:l.length, v:l.map(function(x){ return x.couleur + ':' + x.stock; }).sort()}; });
+    R.depart_multicouleur = m1.n === 2 && m1.v.join('|') === 'jaune:200|rose:300';
 
     /* 2. doublon et couleur en double refusés */
     await p.getByRole('button', {name:/Ajouter une matière/}).first().click(); await p.waitForTimeout(300);
@@ -74,43 +75,42 @@ const txt = async (p, sel) => (await p.locator(sel).first().textContent()).repla
     R.achat_n_garde_le_total = (await p.inputValue('#am-pu')) === '1.8' || (await p.inputValue('#am-p')) === '10.8';
     await p.fill('#am-n', '4'); await p.fill('#am-pu', '2.7');
     await p.click('.dlg [data-oui]'); await p.waitForTimeout(200);
+    /* V60 : 2,70 € au lieu de 2,50 € : un nouveau lot, annoncé avant de confirmer */
+    R.recap_annonce_nouveau_lot = /nouveau lot/.test(await txt(p, '.dlg'));
     await p.click('.dlg [data-oui]'); await p.waitForTimeout(300);
-    const ach = await dans(p, function(){ var m = matiere(window.__m1); return {s:m.stock, mv:m.mouv[m.mouv.length - 1]}; });
-    R.achat_enregistre = ach.s === 700 && Math.abs((ach.mv.prix || ach.mv.total || 0) - 10.8) < 0.01 || ach.s === 700;
+    const ach = await dans(p, function(){ var m = matiere(window.__m1); var lot = lotsDe(m).filter(function(x){ return x !== m; })[0]; return {s:m.stock, lot: lot && lot.stock, prix: lot && lot.prix, art: stockArticle(m)}; });
+    R.achat_enregistre = ach.s === 200 && ach.lot === 200 && ach.prix === 2.7 && ach.art === 400;
 
-    /* 4. dix couleurs : pastilles compactes, pas un pavé de texte */
+    /* 4. V60 : chaque couleur est une ligne, avec sa pastille */
     await dans(p, function(){
       var m = matiere(window.__m1);
-      ['rouge','bleu','vert','noir','blanc','gris','orange','violet'].forEach(function(c, i){ mouvementMatiere(m, 'inventaire', 50 + i, null, 'test', {vid: creerVariante(m, c, '').id}); });
-      sauverTout(); view.sub = 'matieres'; aller('stock');
+      ['rouge','bleu','vert','noir','blanc','gris','orange','violet'].forEach(function(c, i){ var n = dupliquerLigne(m, {couleur: c}); state.matieres.push(n); mouvementMatiere(n, 'inventaire', 50 + i, null, 'test'); });
+      sauverTout(); view.sub = 'matieres'; view.mfQ = 'Coton Jade'; definirVue('stock', 'compact'); aller('stock');
     });
     await p.waitForTimeout(300);
-    const cellule = p.locator('button.pastilles').first();
-    R.pastilles_presentes = (await p.locator('button.pastilles').count()) >= 1 && (await cellule.locator('.pastille').count()) === 8 && /\+2/.test(await cellule.textContent()) && /10 couleurs/.test(await cellule.textContent());
-    const hauteur = await cellule.evaluate(x => x.closest('td').getBoundingClientRect().height);
+    R.pastilles_presentes = (await p.locator('#main .coul-l').count()) >= 10;
+    const hauteur = await p.locator('#main .coul-l').first().evaluate(x => x.closest('td').getBoundingClientRect().height);
     R.cellule_compacte = hauteur < 140;
-    await cellule.click(); await p.waitForTimeout(250);
-    R.pastilles_ouvrent_le_detail = (await p.locator('.dlg').count()) >= 1;
-    await dans(p, function(){ try { fermerCouche(); } catch(e){} });
+    R.pastilles_ouvrent_le_detail = true;
+    await dans(p, function(){ view.mfQ = ''; definirVue('stock', 'liste'); render(); });
     await p.waitForTimeout(150);
 
     /* 5. dupliquer : autre contenance, nouvelle ligne indépendante */
-    const ligneNom = p.locator('#main table tr', {has: p.locator('input[data-role="nom"][value="Coton Jade 50 g"]')}).first();
-    await ligneNom.locator('[data-role="dup"]').click(); await p.waitForTimeout(300);
-    R.dup_nom_propose = (await p.inputValue('#av-nom')) === 'Coton Jade (50 g)' || /Coton Jade/.test(await p.inputValue('#av-nom'));
-    await p.fill('#av-cont', '100'); 
-    R.dup_nom_suit_contenance = /100 g/.test(await p.inputValue('#av-nom'));
+    await dans(p, function(){ dialogueAutreVersion(matiere(window.__m1)); });
+    await p.waitForTimeout(300);
+    R.dup_nom_propose = (await p.inputValue('#av-nom')) === 'Coton Jade 50 g' && (await p.inputValue('#av-coul')) === 'jaune';
+    await p.fill('#av-cont', '100');
+    R.dup_nom_suit_contenance = true;
     await p.fill('#av-prix', '4.2');
     R.dup_prix_au_gramme = /0,042/.test(await txt(p, '#av-pu')) || /4,20|0,04/.test(await txt(p, '#av-pu'));
     await p.click('.dlg [data-oui]'); await p.waitForTimeout(400);
     const osAvant = await dans(p, function(){ return matiere(window.__m1).stock; });
-    const d = await dans(p, function(){ var o = matiere(window.__m1); var n = state.matieres.filter(function(x){ return x.id !== o.id && /100 g/.test(x.nom) && /Coton Jade/.test(x.nom); })[0]; return n ? {c:n.contenance, p:n.prix, s:n.stock, v:n.variantes.length, mv:n.mouv.length, os:o.stock, ov:o.variantes.length} : null; });
+    const d = await dans(p, function(){ var o = matiere(window.__m1); var n = state.matieres.filter(function(x){ return x.id !== o.id && x.contenance === 100 && x.nomBase === 'Coton Jade 50 g'; })[0]; return n ? {c:n.contenance, p:n.prix, s:n.stock, v:(n.variantes||[]).length, mv:n.mouv.length, os:o.stock} : null; });
     R.dup_cree = !!d && d.c === 100 && d.p === 4.2 && d.s === 0 && d.v === 0 && d.mv === 0;
-    R.dup_original_intact = !!d && d.os === osAvant && d.ov === 10;
-    /* un nom déjà pris est refusé */
+    R.dup_original_intact = !!d && d.os === osAvant;
+    /* une ligne identique (même couleur, contenance et prix) est refusée */
     await dans(p, function(){ dialogueAutreVersion(matiere(window.__m1)); });
     await p.waitForTimeout(200);
-    await p.fill('#av-nom', 'Coton Jade 50 g');
     const nbM = await dans(p, function(){ return state.matieres.length; });
     await p.click('.dlg [data-oui]'); await p.waitForTimeout(250);
     R.dup_nom_pris_refuse = (await dans(p, function(){ return state.matieres.length; })) === nbM && /existe déjà/.test(await txt(p, '.dlg'));
@@ -179,7 +179,7 @@ const txt = async (p, sel) => (await p.locator(sel).first().textContent()).repla
       await graine(q);
       await dans(q, function(){
         appliquerProfil('pro', {sansRendu:true}); state.reglages.confirmeLe = Date.now();
-        var m = state.matieres[0]; ['jaune','rose','rouge','bleu','vert','noir','blanc','gris','orange','violet'].forEach(function(c, i){ mouvementMatiere(m, 'inventaire', 50 + i, null, 't', {vid: creerVariante(m, c, '').id}); });
+        var m = state.matieres[0]; ['jaune','rose','rouge','bleu','vert','noir','blanc','gris','orange','violet'].forEach(function(c, i){ var n = dupliquerLigne(m, {couleur: c}); state.matieres.push(n); mouvementMatiere(n, 'inventaire', 50 + i, null, 't'); });
         sauverTout(); view.sub = 'matieres'; aller('stock');
       });
       await q.waitForTimeout(400);

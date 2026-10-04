@@ -82,9 +82,11 @@ const oui = async (p) => { await p.locator('.dlg [data-oui]:visible').last().cli
     await p.waitForTimeout(150);
     R.choix_achat_visible = await p.locator('#nm-achat-w').isVisible();
     await oui(p);
-    const ach = await dans(p, function(){ var m = state.matieres.filter(function(x){ return x.nom === 'Ricorumi'; })[0]; window.__ric = m.id;
-      return {achats: achatsMatieres().filter(function(a){ return a.mid === m.id; }).reduce(function(s, a){ return s + a.montant; }, 0), stock: m.stock, vue: view.mfQ}; });
-    R.stock_de_depart_compte_en_achat = Math.abs(ach.achats - 12.9) < 0.01 && ach.stock === 150 && ach.vue === 'Ricorumi';
+    /* V60 : une ligne par couleur ; l'achat de départ compte pour les deux */
+    const ach = await dans(p, function(){ var l = state.matieres.filter(function(x){ return x.nomBase === 'Ricorumi'; }); var m = l.filter(function(x){ return x.couleur === 'blanc'; })[0]; window.__ric = m.id;
+      var ids = l.map(function(x){ return x.id; });
+      return {achats: achatsMatieres().filter(function(a){ return ids.indexOf(a.mid) !== -1; }).reduce(function(s, a){ return s + a.montant; }, 0), stock: l.reduce(function(s, x){ return s + x.stock; }, 0), n: l.length, vue: view.mfQ}; });
+    R.stock_de_depart_compte_en_achat = Math.abs(ach.achats - 12.9) < 0.01 && ach.stock === 150 && ach.n === 2 && ach.vue === 'Ricorumi';
     R.nouvelle_matiere_mise_en_avant = /Ricorumi/.test(await txt(p, '#main')) && !/Acrylique bébé/.test(await txt(p, '#main'));
     /* 6. matières d'exemple : masquées, et « exemple » dans le sélecteur */
     await dans(p, function(){ view.mfQ = ''; render(); }); await p.waitForTimeout(200);
@@ -115,8 +117,9 @@ const oui = async (p) => { await p.locator('.dlg [data-oui]:visible').last().cli
     await p.locator('.frise-act button.primary').click(); await p.waitForTimeout(400);
     if (await p.locator('.dlg [data-oui]:visible').count()) await oui(p);   /* couleur utilisée */
     const st = await dans(p, function(){ var m = matiere(window.__ric); return {stock: m.stock, hab: (creation(window.__cr).couleursHabituelles || {})[window.__ric]}; });
-    R.pret_sort_le_stock = Math.abs(st.stock - (150 - 2 * 20 * 1.08)) < 0.01;
-    R.couleur_retenue = !!st.hab;
+    R.pret_sort_le_stock = Math.abs(st.stock - (100 - 2 * 20 * 1.08)) < 0.01;
+    /* V60 : la ligne de la fiche a du stock : aucune question, rien à retenir */
+    R.couleur_retenue = !st.hab;
     await p.locator('.frise-act button.primary').click(); await p.waitForTimeout(400);
     const e3 = await dans(p, function(){ var c = commande(window.__cmd); var pc = piecesCommande(c);
       var enc = encaissements().filter(function(x){ return x.source === 'atelier' && x.cid === window.__cr; }).length;
@@ -165,6 +168,7 @@ const oui = async (p) => { await p.locator('.dlg [data-oui]:visible').last().cli
     const csv = 'Sale Date,Item Name,Buyer,Quantity,Price,Coupon Code,Coupon Details,Discount Amount,Shipping Discount,Order Shipping,Order Sales Tax,Item Total,Currency,Transaction ID,Listing ID,Date Paid,Date Shipped,Ship Name,Order ID\n' +
       '09/14/26,"Lapin test, doudou",marion_b,1,30.00,,,0,0,4.50,0,30.00,EUR,111,9,09/14/26,09/15/26,Marion B,501\n' +
       '09/21/26,"Lapin test, doudou",julien,2,30.00,,,0,0,4.50,0,60.00,EUR,112,9,09/21/26,09/22/26,Julien,502\n';
+    await dans(p, function(){ mouvementMatiere(matiere(window.__ric), 'inventaire', 500, null, 'test'); sauverTout(); });   /* V60 : assez de blanc, pas de question de ligne */
     await dans(p, new Function('return function(){ importerEtsy(' + JSON.stringify(csv) + '); }')()); await p.waitForTimeout(300);
     R.etsy_association_proposee = (await p.locator('.etsy-assoc select').count()) === 1 && (await p.locator('.etsy-assoc select').inputValue()) !== '';
     await oui(p);

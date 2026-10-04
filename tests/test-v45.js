@@ -44,7 +44,9 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
 
     /* 2. vente d'une création sans stock : la pièce est créée */
     await dans(p, function(){ dialogueVente('c3'); }); await p.waitForTimeout(250);
-    R.sans_stock_prevenu = /Aucune pièce en stock/.test(await p.textContent('#vt-stock'));
+    /* V60 : pas de vente dans le vide : on coche « je l'ai fabriquée sans la noter ». */
+    R.sans_stock_prevenu = /Aucune pièce de « .* » en stock/.test(await p.textContent('#vt-stock')) && !(await p.locator('#vt-vide').isHidden());
+    await p.check('#vt-faite');
     await p.click('.dlg [data-oui]'); await p.waitForTimeout(300);
     const s2 = await dans(p, function(){ var v = state.pieces.filter(function(x){ return x.com === 'vendu' && x.cid === 'c3'; }); return {n:v.length, prix:v[0] && v[0].prix, prod:v[0] && v[0].prod}; });
     R.vente_cree_piece = s2.n === 1 && s2.prix === 35 && s2.prod === 'termine';
@@ -54,9 +56,12 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     R.onglet_marche_pendant = (await p.$$eval('#nav button', bs => bs.map(b => b.textContent.trim()))).indexOf('Mes ventes') >= 0;
     R.stand_lignes = (await p.locator('.stand-ligne').count()) === 3;
     await p.locator('.stand-ligne', {hasText:'Panier'}).locator('input').fill('40');
-    await p.locator('.stand-ligne', {hasText:'Panier'}).getByRole('button', {name:'Vendu'}).click(); await p.waitForTimeout(300);
+    /* V60 : sans stock, « Faite, pas notée ? » puis confirmation. */
+    await p.locator('.stand-ligne', {hasText:'Panier'}).getByRole('button', {name:'Faite, pas notée ?'}).click(); await p.waitForTimeout(250);
+    await p.click('.dlg [data-oui]'); await p.waitForTimeout(300);
     await p.getByRole('radio', {name:'Carte'}).click(); await p.waitForTimeout(300);
-    await p.locator('.stand-ligne', {hasText:'Bonnet'}).getByRole('button', {name:'Vendu'}).click(); await p.waitForTimeout(300);
+    await p.locator('.stand-ligne', {hasText:'Bonnet'}).getByRole('button', {name:'Faite, pas notée ?'}).click(); await p.waitForTimeout(250);
+    await p.click('.dlg [data-oui]'); await p.waitForTimeout(300);
     const m = (await p.textContent('#main')).replace(/ | /g, ' ');
     R.total_jour = /Vendu\s*138,00 €/.test(m) && /(Espèces 75,00 € · Carte 63,00 €|Carte 63,00 € · Espèces 75,00 €)/.test(m);
     R.ventes_listees = (await p.locator('.t-ventes tbody tr').count()) === 4;
