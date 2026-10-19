@@ -2569,7 +2569,7 @@ function renderSideBas(){
        compte des jours seulement quand il en reste peu. */
     var j = Math.max(0, Number(e.jours) || 0), total = e.local ? ESSAI_JOURS : ESSAI_COMPTE_JOURS;
     var quand = j <= 0 ? 'Dernier jour.' : (j <= RAPPEL_ESSAI_JOURS || !e.fin) ? 'Encore ' + esc(pluriel(j, "jour")) + '.' : 'Jusqu\'au ' + esc(dateLongue(e.fin)) + '.';
-    var bloc = el('<div class="essai"><b>'+(e.local ? 'Essai sans compte' : 'Essai gratuit')+'</b><span>'+quand+(e.local ? '' : ' ' + esc(PRIX_ENSUITE))+'</span>'+
+    var bloc = el('<div class="essai"><b>'+(e.local ? 'Essai sans compte' : 'Essai gratuit')+'</b><span>'+quand+(e.local ? ' Avec un compte gratuit : 6 mois d\'essai.' : ' ' + esc(PRIX_ENSUITE))+'</span>'+
       '<span class="jauge"><i style="width:'+Math.round(Math.max(4, Math.min(100, (total - j) / total * 100)))+'%"></i></span></div>');
     var bO = bouton("Voir les offres", function(){ if (modeSansCompte && !compteInfo.connecte){ var S = window.CrochompteSync; modeSansCompte = false; reprisePortailRefusee = true; if (S && S.montrerConnexion) S.montrerConnexion("inscription"); renderRacine(); } else { view.regSection = "abonnement"; aller("reglages"); } });
     bO.classList.add("sm"); bloc.appendChild(bO);
@@ -3014,7 +3014,7 @@ function bandeauAbonnement(){
   if (modeSansCompte && !compteInfo.connecte){
     var e = essaiLocal(); if (!e) return null;
     var b = el('<div class="abo-bandeau'+(e.jours <= 3 ? ' warn' : '')+'" role="status"><p><b>Essai sans compte</b> · '+
-      (e.jours > 0 ? 'encore '+esc(pluriel(e.jours, "jour")) : 'dernier jour')+'<span class="ab-long">. Crée un compte pour garder ton atelier et le retrouver sur tes autres appareils ; ce que tu as fait ici le suivra.</span></p></div>');
+      (e.jours > 0 ? 'encore '+esc(pluriel(e.jours, "jour")) : 'dernier jour')+'<span class="ab-long">. Crée un compte gratuit : 6 mois d\'essai, ton atelier sur tous tes appareils, et ce que tu as fait ici le suivra.</span></p></div>');
     b.appendChild(bouton("Créer mon compte", function(){ modeSansCompte = false; reprisePortailRefusee = true; if (S && S.montrerConnexion) S.montrerConnexion("inscription"); renderRacine(); }, true));
     return b;
   }
@@ -3556,7 +3556,7 @@ function renderPortail(){
     (eL && eL.fini ? '<span class="hint">Ton essai sans compte est terminé : crée un compte pour retrouver ce que tu as fait ici.</span>'
                    : (eL && !(marque(CLE_SANS_COMPTE) || {}).converti
                       ? '<button type="button" class="lien-mini" id="portail-sans-compte">Reprendre mon essai</button> <span class="hint">· encore ' + esc(pluriel(eL.jours, "jour")) + ', ton atelier est sur cet appareil</span>'
-                      : '<button type="button" class="lien-mini" id="portail-sans-compte">Essayer sans compte</button> <span class="hint">· 14 jours, tout reste sur cet appareil</span>'))+'</p>');
+                      : '<button type="button" class="lien-mini" id="portail-sans-compte">Essayer sans compte</button> <span class="hint">· 14 jours sur cet appareil (6 mois avec un compte gratuit)</span>'))+'</p>');
   var bE = essai.querySelector("#portail-sans-compte");
   if (bE) bE.addEventListener("click", commencerSansCompte);
   enveloppe.querySelector(".portail-form").appendChild(essai);
@@ -4032,8 +4032,11 @@ function renderAccueil(main){
 
 
 /* ═════ NOUVEAUTÉS ET SIGNALEMENT ═════ */
-var VERSION_APP = "V62";
+var VERSION_APP = "V62.1";
 var NOUVEAUTES = [
+  {v:"V62.1", d:"Octobre 2026", l:[
+    "Essai : 14 jours sans compte sur un appareil, ou 6 mois avec un compte gratuit."
+  ]},
   {v:"V62", d:"Octobre 2026", l:[
     "6 mois d'essai gratuit pour chaque compte, sans moyen de paiement.",
     "Sur téléphone, la fiche d'une création se lit en deux volets (Prix et coûts, Fabrication) et une commande en trois (Commande, Argent, Documents).",
