@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Conditions générales — Crochompte</title>
+<title>Conditions générales d'utilisation — Crochompte</title>
 <meta name="robots" content="index, follow">
 <style>
   :root{
@@ -32,9 +32,6 @@
   ul{padding-left:20px;}
   a{color:var(--primary);}
   .date{color:var(--muted);font-size:14px;margin-bottom:24px;}
-  .todo{background:var(--warn-soft);border:1px solid var(--warn);border-radius:12px;
-    padding:14px 16px;margin:20px 0;}
-  .todo b{color:var(--warn);}
   table{width:100%;border-collapse:collapse;margin:12px 0 20px;font-size:15px;table-layout:fixed;}
   th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--rule);vertical-align:top;
     overflow-wrap:anywhere;}
@@ -50,6 +47,16 @@
       text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px;}
   }
   .retour{display:inline-block;margin-bottom:20px;font-size:14px;}
+  .legal-nav{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:14px;margin:0 0 22px;padding:0 0 14px;border-bottom:1px solid var(--rule);}
+  .legal-nav a{text-decoration:none;}
+  .legal-nav a[aria-current="page"]{color:var(--ink);font-weight:600;}
+  h3{font-size:16px;margin:20px 0 8px;}
+  .encadre{background:var(--ground);border:1px solid var(--rule);border-radius:12px;padding:14px 16px;margin:14px 0 18px;}
+  .encadre p:last-child{margin-bottom:0;}
+  dl{margin:0 0 14px;} dt{font-weight:600;margin-top:10px;} dd{margin:2px 0 0;}
+  .sommaire{font-size:15px;columns:2 220px;column-gap:28px;padding-left:20px;margin:0 0 8px;}
+  .sommaire li{margin:0 0 6px;break-inside:avoid;}
+  @media print{body{background:#fff;padding:0} main{border:none;padding:0} .retour,.legal-nav{display:none}}
 </style>
 </head>
 <body>
@@ -57,117 +64,347 @@
 
 <a class="retour" href="index.html">← Retour à l'application</a>
 
+<nav class="legal-nav" aria-label="Informations légales">
+  <a href="mentions-legales.html">Mentions légales</a>
+  <a href="confidentialite.html">Politique de confidentialité</a>
+  <a href="cgv.html" aria-current="page">Conditions générales d'utilisation</a>
+</nav>
 
-<h1>Conditions générales de vente et d'utilisation</h1>
-<p class="date">Version du 1er octobre 2026. <b>Projet de conditions, à faire relire par un juriste avant l'ouverture des paiements</b> : les passages entre crochets sont à compléter.</p>
+<h1>Conditions générales d'utilisation</h1>
+<p class="date">En vigueur au 18 octobre 2026.</p>
 
-<h2>1. Qui propose le service</h2>
+<ol class="sommaire">
+  <li><a href="#a1">Objet</a></li>
+  <li><a href="#a2">Définitions</a></li>
+  <li><a href="#a3">Accès au service et compte</a></li>
+  <li><a href="#a4">Description du service</a></li>
+  <li><a href="#a5">Période d'essai gratuite</a></li>
+  <li><a href="#a6">Offres payantes</a></li>
+  <li><a href="#a7">Engagements de l'Utilisateur</a></li>
+  <li><a href="#a8">Bibliothèque partagée</a></li>
+  <li><a href="#sous-traitance">Données de la clientèle de l'Utilisateur</a></li>
+  <li><a href="#a10">Propriété intellectuelle</a></li>
+  <li><a href="#a11">Disponibilité et sauvegarde</a></li>
+  <li><a href="#a12">Responsabilité</a></li>
+  <li><a href="#a13">Durée, suspension et suppression du compte</a></li>
+  <li><a href="#a14">Modification des conditions</a></li>
+  <li><a href="#a15">Contact</a></li>
+  <li><a href="#a16">Droit applicable et litiges</a></li>
+</ol>
+
+<h2 id="a1">Article 1 — Objet</h2>
 <p>
-  Crochompte est édité par <b>Abdelkarim FARHANI</b>, entrepreneur individuel,
-  <b>[adresse]</b>, immatriculé sous le numéro SIREN <b>[numéro]</b>, TVA non applicable
-  (article 293 B du CGI) tant que la franchise s'applique. Contact :
-  <a href="mailto:bonjour@crochompte.com">bonjour@crochompte.com</a>.
+  Les présentes conditions générales d'utilisation (« CGU ») définissent les
+  conditions d'accès et d'utilisation du service Crochompte, édité par la
+  personne identifiée dans les <a href="mentions-legales.html">mentions légales</a>
+  (« l'Éditeur »). Toute utilisation du Service, avec ou sans compte, et en
+  particulier la création d'un compte, vaut acceptation pleine et entière des
+  présentes CGU.
 </p>
 
-<h2>2. Ce que tu achètes</h2>
+<h2 id="a2">Article 2 — Définitions</h2>
+<dl>
+  <dt>Service</dt>
+  <dd>L'application en ligne Crochompte, accessible à l'adresse crochompte.com,
+    sur ordinateur, tablette et téléphone.</dd>
+  <dt>Utilisateur</dt>
+  <dd>Toute personne physique âgée de 15 ans ou plus qui utilise le Service,
+    avec ou sans compte, à titre personnel ou professionnel.</dd>
+  <dt>Atelier</dt>
+  <dd>L'ensemble des données saisies par l'Utilisateur dans le Service :
+    réglages, matières, créations, pièces, commandes, ventes, clientèle,
+    factures, patrons et photos.</dd>
+  <dt>Bibliothèque partagée</dt>
+  <dd>L'espace du Service dans lequel les Utilisateurs peuvent publier des
+    patrons consultables par les autres Utilisateurs.</dd>
+</dl>
+
+<h2 id="a3">Article 3 — Accès au Service et compte</h2>
 <p>
-  Un accès en ligne à l'application Crochompte (coût de revient, prix conseillé,
-  stock, commandes, factures, ventes, chiffres), utilisable sur tous tes
-  appareils avec ton compte. Le service est fourni « tel quel » et s'améliore
-  régulièrement ; les calculs sont des aides à la décision et ne remplacent ni
-  un comptable ni un conseil juridique.
+  Le Service peut être essayé sans compte pendant 14 jours : les données restent
+  alors uniquement sur l'appareil utilisé. Au-delà, ou pour retrouver l'Atelier
+  sur plusieurs appareils, la création d'un compte est nécessaire.
+</p>
+<p>
+  La création d'un compte requiert un pseudo, une adresse électronique valide,
+  un mot de passe et l'attestation d'avoir 15 ans ou plus. Une adresse
+  électronique ne peut être associée qu'à un seul compte. Le compte est
+  personnel : l'Utilisateur préserve la confidentialité de son mot de passe et
+  signale sans délai toute utilisation qu'il n'a pas autorisée.
+</p>
+<p>
+  L'accès au Service nécessite un appareil et une connexion à internet, à la
+  charge de l'Utilisateur. Le Service reste utilisable hors connexion ; les
+  modifications sont alors enregistrées en ligne au retour de la connexion.
 </p>
 
-<h2>3. Essai gratuit</h2>
+<h2 id="a4">Article 4 — Description du Service</h2>
 <p>
-  Chaque nouveau compte dispose de <b>14 jours d'essai gratuit</b>, sans carte
-  bancaire. À la fin de l'essai, l'accès à l'atelier se ferme, mais tes données
-  sont conservées et restent exportables ; rien n'est facturé sans que tu
-  choisisses une offre.
+  Le Service permet notamment de calculer le coût de revient et un prix de vente
+  conseillé, de suivre la fabrication et le temps passé, de gérer les matières
+  et le stock, de suivre les commandes, d'établir des devis et des factures, de
+  suivre les ventes et les indicateurs d'activité, et de consulter des patrons.
+</p>
+<p>
+  Les calculs, seuils et taux proposés par défaut sont des ordres de grandeur,
+  fournis à titre d'aide à la décision. Ils ne constituent ni une comptabilité,
+  ni un conseil juridique, fiscal ou social. L'Utilisateur vérifie et adapte les
+  paramètres à sa situation et reste seul responsable de ses prix, de ses
+  déclarations et de la conformité des documents qu'il émet, notamment de ses
+  factures.
+</p>
+<p>
+  Le Service évolue régulièrement. L'Éditeur peut ajouter, modifier ou retirer
+  des fonctionnalités, sans réduire les fonctions essentielles pendant une
+  période payée.
 </p>
 
-<h2>4. Prix et offres</h2>
-<table>
-  <tr><th>Offre</th><th>Prix TTC</th><th>Renouvellement</th></tr>
-  <tr><td data-l="Offre">Mensuel</td><td data-l="Prix">7,90 €</td><td data-l="Renouvellement">tous les mois</td></tr>
-  <tr><td data-l="Offre">6 mois</td><td data-l="Prix">42 €</td><td data-l="Renouvellement">tous les 6 mois</td></tr>
-  <tr><td data-l="Offre">Annuel</td><td data-l="Prix">75 €</td><td data-l="Renouvellement">tous les ans</td></tr>
-</table>
+<h2 id="a5">Article 5 — Période d'essai gratuite</h2>
 <p>
-  Les prix sont en euros, toutes taxes comprises. Un changement de prix est
-  annoncé par e-mail au moins un mois avant et ne s'applique qu'au
-  renouvellement suivant ; tu peux résilier avant.
+  Tout nouveau compte bénéficie d'une période d'essai gratuite de six mois à
+  compter de son inscription, donnant accès à l'ensemble des fonctionnalités.
+  Aucun moyen de paiement n'est demandé pendant cette période et aucune somme
+  n'est due à son issue.
+</p>
+<p>
+  À la fin de la période d'essai, la poursuite de l'utilisation peut être
+  subordonnée à la souscription d'une offre payante ou à l'utilisation d'un code
+  d'accès. À défaut, l'Atelier est conservé sans limitation de durée, sous
+  réserve de l'article 13, et sa sauvegarde complète peut être téléchargée à
+  tout moment depuis Réglages › Mes données ; il ne peut plus être modifié.
+  L'Utilisateur est informé dans l'application au moins trente jours avant la
+  fin de sa période d'essai.
+</p>
+<p>
+  L'Éditeur peut attribuer des codes ou des accès offerts, pour une durée
+  limitée ou non. Un code d'accès est personnel, non cessible et ne peut être
+  échangé contre de l'argent.
 </p>
 
-<h2>5. Paiement</h2>
+<h2 id="a6">Article 6 — Offres payantes</h2>
 <p>
-  Le paiement se fait par carte bancaire via <b>Stripe</b>, prestataire de
-  paiement agréé ; Crochompte ne voit ni ne conserve ton numéro de carte. Le
-  prélèvement a lieu à la souscription puis à chaque renouvellement. En cas
-  d'échec de paiement, l'accès est suspendu après notification par e-mail et
-  reprend dès régularisation.
+  Aucune offre payante n'est commercialisée à la date d'entrée en vigueur des
+  présentes CGU. Les tarifs indiqués à titre d'information dans l'application
+  (7,90 € par mois, 42 € pour six mois, 75 € par an) sont susceptibles d'évoluer
+  avant leur commercialisation.
+</p>
+<p>
+  Toute souscription sera soumise à des conditions générales de vente
+  distinctes, portées à la connaissance de l'Utilisateur et acceptées par lui
+  avant tout paiement. Elles préciseront notamment le prix, les modalités de
+  paiement, de renouvellement et de résiliation, le droit de rétractation et le
+  médiateur de la consommation compétent. Aucun abonnement ne peut être
+  souscrit ni prélevé sans action expresse de l'Utilisateur.
 </p>
 
-<h2>6. Durée, renouvellement, résiliation</h2>
+<h2 id="a7">Article 7 — Engagements de l'Utilisateur</h2>
+<p>L'Utilisateur s'engage à :</p>
+<ul>
+  <li>fournir des informations exactes lors de l'inscription et les maintenir
+    à jour ;</li>
+  <li>utiliser le Service conformément à sa destination, aux lois en vigueur et
+    aux présentes CGU ;</li>
+  <li>ne saisir des données relatives à des tiers que dans le respect de la
+    réglementation sur les données personnelles ;</li>
+  <li>ne pas tenter d'accéder aux données d'autres comptes, de perturber le
+    fonctionnement du Service, d'en contourner les protections ou d'en extraire
+    le contenu de manière automatisée ;</li>
+  <li>ne pas revendre, louer ou partager l'accès à son compte ;</li>
+  <li>ne publier dans la Bibliothèque partagée que des contenus dont il détient
+    les droits.</li>
+</ul>
+
+<h2 id="a8">Article 8 — Bibliothèque partagée</h2>
+<h3>8.1 Publication</h3>
 <p>
-  L'abonnement est <b>reconduit tacitement</b> pour la même durée. Conformément
-  à l'article L215-1 du code de la consommation, tu es prévenue par e-mail
-  entre trois mois et un mois avant chaque échéance d'un abonnement de six mois
-  ou d'un an. Tu peux <b>résilier à tout moment, en trois clics</b>, depuis
-  Réglages › Mon abonnement › « Gérer mon abonnement » : l'accès reste ouvert
-  jusqu'à la fin de la période déjà payée, et rien n'est prélevé ensuite.
+  L'Utilisateur peut publier un patron dans la Bibliothèque partagée, patron par
+  patron, en choisissant une signature et une licence. Seul le texte du patron
+  peut être publié ; les pages photographiées ou importées restent privées.
+  Avant publication, l'Utilisateur déclare détenir les droits nécessaires sur le
+  contenu. Il en reste seul responsable. L'Éditeur ne relit pas les contenus
+  avant leur mise en ligne et agit en qualité d'hébergeur.
+</p>
+<p>
+  En publiant, l'Utilisateur concède à l'Éditeur, pour la durée de la
+  publication et à titre gratuit, le droit de stocker, reproduire et afficher le
+  contenu dans le Service, aux seules fins de sa mise à disposition des autres
+  Utilisateurs. L'Utilisateur peut retirer sa publication à tout moment, sauf
+  pendant l'examen d'un signalement qui la concerne.
+</p>
+<h3>8.2 Contenus interdits</h3>
+<p>Sont notamment interdits les contenus :</p>
+<ul>
+  <li>reproduisant, sans autorisation, un patron, un livre, une revue ou une
+    image protégés par le droit d'auteur ;</li>
+  <li>illicites, injurieux, diffamatoires, discriminatoires, violents ou à
+    caractère pornographique ;</li>
+  <li>publicitaires ou sans rapport avec le crochet et les travaux d'aiguille ;</li>
+  <li>contenant des données personnelles de tiers.</li>
+</ul>
+<h3>8.3 Signalement et modération</h3>
+<p>
+  Tout contenu peut être signalé au moyen du bouton « Signaler » présent sur
+  chaque patron, ou par courrier électronique à bonjour@crochompte.com, avec une
+  explication motivée et une déclaration de bonne foi quant à l'exactitude des
+  informations fournies. L'Éditeur accuse réception des signalements et les
+  examine avec diligence et objectivité. L'auteur du signalement est informé
+  de la décision prise, par courrier électronique.
+</p>
+<p>
+  Chaque signalement est examiné par une personne. Un patron qui fait l'objet
+  d'au moins trois signalements, ou d'un signalement pour contenu illicite ou
+  dangereux, est placé en cours d'examen ; s'il fait l'objet d'au moins deux
+  signalements pour contenu illicite ou dangereux, il est masqué
+  automatiquement, à titre conservatoire, jusqu'à la décision. Aucun retrait
+  définitif n'est décidé de manière automatisée. L'Éditeur peut également retirer un contenu, ou
+  restreindre l'accès d'un compte à la Bibliothèque partagée, en cas de
+  manquement aux présentes CGU.
+</p>
+<p>
+  Toute décision de maintien ou de retrait est communiquée dans l'application à
+  l'Utilisateur qui a publié le patron, avec sa date et ses motifs, conformément à l'article 17 du règlement (UE)
+  2022/2065 sur les services numériques. L'Utilisateur peut contester un
+  masquage ou un retrait au moyen du bouton « Contester » affiché sur son
+  patron, ou en écrivant à bonjour@crochompte.com ; sa contestation fait
+  l'objet d'un nouvel examen par une personne. Il conserve la faculté de saisir le juge
+  compétent.
 </p>
 
-<h2>7. Droit de rétractation</h2>
+<h2 id="sous-traitance">Article 9 — Données de la clientèle de l'Utilisateur</h2>
 <p>
-  Tu disposes de 14 jours à compter de la souscription pour te rétracter, sans
-  motif (articles L221-18 et suivants du code de la consommation), en écrivant
-  à <a href="mailto:bonjour@crochompte.com">bonjour@crochompte.com</a> ou avec
-  le formulaire ci-dessous. En souscrivant, tu demandes expressément que
-  l'accès commence immédiatement ; si tu te rétractes, les jours déjà
-  utilisés sont dus au prorata (article L221-25) et le reste est remboursé
-  sous 14 jours. L'essai gratuit te permet de décider avant de payer.
+  Lorsque l'Utilisateur enregistre dans le Service des données personnelles
+  relatives à ses propres clients, il agit en qualité de responsable de
+  traitement et l'Éditeur en qualité de sous-traitant, au sens de l'article 28
+  du RGPD.
 </p>
-<p class="hint">
-  Formulaire de rétractation : « À l'attention de Crochompte, [adresse] — Je
-  vous notifie par la présente ma rétractation du contrat d'abonnement
-  souscrit le [date] — Nom, adresse e-mail du compte, date, signature. »
+<p>
+  <b>Objet et durée.</b> Le traitement consiste à héberger, enregistrer,
+  afficher et restituer ces données, pour la durée de l'utilisation du compte.
+  <b>Données et personnes concernées :</b> identité, coordonnées, adresse de
+  livraison, détails des commandes et des règlements des clients de
+  l'Utilisateur. L'Éditeur s'engage à :
+</p>
+<ul>
+  <li>ne traiter ces données que pour fournir le Service, sur les instructions
+    de l'Utilisateur matérialisées par son utilisation du Service ;</li>
+  <li>ne pas les consulter, sauf demande de l'Utilisateur ou obligation légale,
+    ni les exploiter pour son propre compte ;</li>
+  <li>en garantir la confidentialité et la sécurité par les mesures décrites
+    dans la <a href="confidentialite.html#securite">politique de confidentialité</a>,
+    toute personne y ayant accès étant tenue au secret ;</li>
+  <li>ne recourir qu'aux sous-traitants ultérieurs qui y sont listés, informer
+    l'Utilisateur de tout projet de changement au moins trente jours à l'avance
+    et lui permettre de s'y opposer en supprimant son compte ;</li>
+  <li>l'aider à répondre aux demandes d'exercice des droits des personnes
+    concernées, notamment grâce aux fonctions d'export et de suppression, et à
+    respecter ses propres obligations de sécurité et d'analyse d'impact ;</li>
+  <li>lui notifier dans les meilleurs délais toute violation de données
+    affectant ces données ;</li>
+  <li>mettre à sa disposition les informations nécessaires pour démontrer le
+    respect du présent article et répondre à ses demandes d'information ;</li>
+  <li>supprimer ces données à la suppression du compte, après que l'Utilisateur
+    a pu les exporter.</li>
+</ul>
+
+<h2 id="a10">Article 10 — Propriété intellectuelle</h2>
+<p>
+  Le Service, son code, sa structure, ses textes, ses calculs, ses illustrations
+  et la marque « Crochompte » sont protégés et restent la propriété de
+  l'Éditeur. L'Utilisateur bénéficie d'un droit d'utilisation personnel, non
+  exclusif et non cessible, pour la durée de son accès.
+</p>
+<p>
+  L'Atelier appartient à l'Utilisateur. L'Éditeur ne revendique aucun droit sur
+  son contenu, en dehors de ce qui est nécessaire à son hébergement et à son
+  affichage dans le Service. Les modèles du catalogue issus du domaine public et
+  les photographies sous licence libre restent soumis à leur licence d'origine,
+  indiquée sur chaque fiche.
 </p>
 
-<h2>8. Tes données</h2>
+<h2 id="a11">Article 11 — Disponibilité et sauvegarde</h2>
 <p>
-  Elles restent les tiennes : tu peux les exporter à tout moment (Réglages ›
-  Mes données) et supprimer ton compte. Le détail est dans la
-  <a href="confidentialite.html">politique de confidentialité</a>. Un compte
-  sans connexion pendant deux ans est supprimé après un e-mail d'avertissement.
+  L'Éditeur met en œuvre les moyens raisonnables pour assurer l'accès au Service
+  en permanence. Le Service peut être interrompu pour maintenance, mise à jour
+  ou en raison d'un incident chez un prestataire technique ; les interruptions
+  programmées sont annoncées lorsque c'est possible.
+</p>
+<p>
+  L'Atelier est enregistré en ligne et les 30 dernières versions sont conservées.
+  Il est recommandé à l'Utilisateur de télécharger régulièrement une sauvegarde
+  depuis Réglages › Mes données, en particulier avant toute suppression de
+  compte, et de conserver lui-même ses factures pendant la durée légale.
 </p>
 
-<h2>9. Disponibilité et responsabilité</h2>
+<h2 id="a12">Article 12 — Responsabilité</h2>
 <p>
-  Nous faisons le nécessaire pour que le service soit disponible en
-  permanence ; des interruptions pour maintenance peuvent survenir, annoncées
-  quand c'est possible. L'application fonctionne aussi hors connexion et
-  synchronise ensuite. La responsabilité de l'éditeur est limitée au montant
-  de l'abonnement en cours ; elle ne couvre pas les décisions de prix ou de
-  déclaration fiscale prises à partir des calculs de l'outil.
+  L'Éditeur est tenu d'une obligation de moyens. Sa responsabilité ne saurait
+  être engagée en cas d'utilisation du Service non conforme aux présentes CGU,
+  de paramètres inexacts ou incomplets saisis par l'Utilisateur et des
+  résultats qui en découlent, de défaillance du réseau internet ou de
+  l'appareil de l'Utilisateur, ou de force majeure. Les résultats fournis par
+  le Service restent des aides à la décision, que l'Utilisateur vérifie avant
+  de fixer ses prix ou d'effectuer ses déclarations.
+</p>
+<p>
+  L'Éditeur n'est pas responsable des contenus publiés par les Utilisateurs dans
+  la Bibliothèque partagée, sauf s'il n'a pas agi promptement pour les retirer
+  après avoir eu connaissance de leur caractère manifestement illicite.
+</p>
+<p>
+  Aucune stipulation des présentes ne limite les droits que l'Utilisateur
+  consommateur tient des dispositions légales impératives.
 </p>
 
-<h2>10. Utilisation</h2>
+<h2 id="a13">Article 13 — Durée, suspension et suppression du compte</h2>
 <p>
-  Un compte est personnel. Il est interdit d'en revendre l'accès, de tenter
-  de contourner la protection des données d'autres comptes ou de publier dans
-  la bibliothèque partagée des contenus dont tu ne détiens pas les droits.
-  Un compte qui enfreint ces règles peut être suspendu après avertissement.
+  Les présentes CGU s'appliquent pour une durée indéterminée, à compter de la
+  création du compte.
+</p>
+<p>
+  L'Utilisateur peut supprimer son compte à tout moment depuis Réglages › Mon
+  compte. La suppression est immédiate et définitive : elle efface le compte,
+  l'Atelier, ses versions, les photos et les factures enregistrées. Les copies
+  de sauvegarde techniques du prestataire d'hébergement sont écrasées selon
+  leur propre cycle de rotation.
+</p>
+<p>
+  En cas de manquement grave ou répété aux présentes CGU, l'Éditeur peut
+  suspendre ou supprimer le compte, après une mise en demeure restée sans effet
+  pendant huit jours, sauf urgence ou obligation légale. La décision est motivée
+  et l'Utilisateur peut exporter son Atelier avant toute suppression, sauf
+  contenu illicite.
+</p>
+<p>
+  Un compte sans connexion pendant deux ans peut être supprimé, après un
+  avertissement adressé par courrier électronique au moins trente jours à
+  l'avance.
 </p>
 
-<h2>11. Médiation et litiges</h2>
+<h2 id="a14">Article 14 — Modification des conditions</h2>
 <p>
-  En cas de désaccord, écris-nous d'abord : la plupart des questions se
-  règlent dans la journée. Si aucune solution n'est trouvée, tu peux saisir
-  gratuitement le médiateur de la consommation <b>[nom et coordonnées du
-  médiateur — adhésion à faire avant l'ouverture des paiements]</b>, ou la
-  plateforme européenne de règlement en ligne des litiges. Le droit français
-  s'applique.
+  L'Éditeur peut modifier les présentes CGU, notamment pour tenir compte d'une
+  évolution du Service ou de la réglementation. Toute modification substantielle
+  est annoncée dans l'application au moins trente jours avant son entrée en
+  vigueur. L'Utilisateur qui la refuse peut supprimer son compte avant cette
+  date, après avoir exporté son Atelier.
+</p>
+
+<h2 id="a15">Article 15 — Contact</h2>
+<p>
+  Pour toute question, réclamation ou signalement :
+  <a href="mailto:bonjour@crochompte.com">bonjour@crochompte.com</a>. Cette adresse
+  constitue le point de contact unique prévu par le règlement (UE) 2022/2065 sur
+  les services numériques. Langue de traitement : français.
+</p>
+
+<h2 id="a16">Article 16 — Droit applicable et litiges</h2>
+<p>
+  Les présentes CGU sont régies par le droit français. En cas de différend,
+  l'Utilisateur est invité à adresser d'abord une réclamation écrite à
+  bonjour@crochompte.com afin de rechercher une solution amiable. À défaut,
+  le litige est porté devant les juridictions compétentes ; l'Utilisateur
+  consommateur peut saisir, à son choix, la juridiction du lieu où il demeurait
+  au moment de la conclusion du contrat ou de la survenance du fait dommageable.
 </p>
 
 </main>

@@ -7,7 +7,7 @@
      seules connexions permises sont celles vers le serveur Supabase. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://upload.wikimedia.org https://www.gutenberg.org; connect-src 'self' https://jsmmajntopdozkmzrniy.supabase.co wss://jsmmajntopdozkmzrniy.supabase.co; font-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<script src="boot.js?v=61"></script>
+<script src="boot.js?v=62"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0f5f57">
 <link rel="manifest" href="manifest.webmanifest">
@@ -32,6 +32,19 @@
   @font-face{font-family:"Public Sans";font-style:normal;font-weight:600;font-display:swap;src:url("polices/public-sans-latin-600-normal.woff2") format("woff2");}
   @font-face{font-family:"IBM Plex Mono";font-style:normal;font-weight:400;font-display:swap;src:url("polices/ibm-plex-mono-latin-400-normal.woff2") format("woff2");}
   @font-face{font-family:"IBM Plex Mono";font-style:normal;font-weight:500;font-display:swap;src:url("polices/ibm-plex-mono-latin-500-normal.woff2") format("woff2");}
+
+  /* V62 : fiche en deux volets sur téléphone et tablette. */
+  .volets-fiche{display:none;}
+  @media (max-width: 900px){
+    .volets-fiche{display:flex;gap:4px;padding:4px;margin:0 0 14px;background:var(--surface-2);border:1px solid var(--rule);border-radius:12px;}
+    .volets-fiche button{flex:1;min-height:42px;border:0;border-radius:9px;background:transparent;font:inherit;font-weight:600;font-size:14.5px;color:var(--muted);cursor:pointer;}
+    .volets-fiche button[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12);}
+    .fiche-corps.avec-volets[data-actif="calcul"] [data-volet]:not([data-volet="calcul"]),
+    .fiche-corps.avec-volets[data-actif="fab"] [data-volet]:not([data-volet="fab"]),
+    .fiche-corps.avec-volets[data-actif="cmd"] [data-volet]:not([data-volet="cmd"]),
+    .fiche-corps.avec-volets[data-actif="argent"] [data-volet]:not([data-volet="argent"]),
+    .fiche-corps.avec-volets[data-actif="docs"] [data-volet]:not([data-volet="docs"]){display:none !important;}
+  }
 </style>
 <style>
   :root{
@@ -353,6 +366,21 @@
   .tile{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:14px 16px;}
   .tile .k{font-size:12px;color:var(--muted);font-weight:500;}
   .tile .v{font-family:"Public Sans",system-ui,sans-serif;font-variant-numeric:tabular-nums;font-weight:600;font-size:24px;line-height:1.2;margin-top:6px;letter-spacing:-.02em;white-space:nowrap;}
+  /* V62 : sur téléphone, les familles du catalogue défilent sur une ligne. */
+  @media (max-width: 600px){
+    .filters.filtres-defile{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:4px;}
+    .filters.filtres-defile::-webkit-scrollbar{display:none;}
+    .filters.filtres-defile > *{flex:0 0 auto;}
+  }
+  /* V62 : sur téléphone, les tuiles d'argent d'une commande tiennent sur une ligne. */
+  @media (max-width: 600px){
+    .tiles.tiles-3{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;}
+    .tiles.tiles-2{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+    .tiles.tiles-3 .tile, .tiles.tiles-2 .tile{padding:10px 11px;}
+    .tiles.tiles-3 .tile .k, .tiles.tiles-2 .tile .k{font-size:11.5px;line-height:1.3;}
+    .tiles.tiles-3 .tile .v, .tiles.tiles-2 .tile .v{font-size:18px;}
+    .tiles.tiles-2 .tile .s{font-size:11.5px;}
+  }
   /* Un chiffre d'affaires à cinq chiffres ne doit pas renvoyer le « € » à la
      ligne suivante : la valeur rétrécit au lieu de se casser. */
   .tile .v.long{font-size:19px;}
@@ -462,6 +490,7 @@
   .auth-btn{width:100%;min-height:48px;font-size:15.5px;font-weight:600;margin-top:4px;}
   .auth-legal{margin:16px 0 0;line-height:1.5;}
   .auth-bas{margin:18px 0 0;padding-top:16px;border-top:1px solid var(--rule);text-align:center;font-size:14.5px;}
+  .auth-essai{display:block;margin-top:6px;font-size:13px;color:var(--muted);}
   .auth-etapes{margin:4px 0 18px;padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:14.5px;}
   .banner.auth-erreur{background:var(--bad-soft);border-color:color-mix(in srgb,var(--bad) 35%,transparent);}
   .banner.auth-erreur p, .banner.auth-erreur b{color:var(--ink);}
@@ -1458,14 +1487,14 @@
      Sans ce fichier (ou s'il ne se charge pas), rien ne change : l'objet
      global reste absent et l'application démarre hors ligne, comme avant. -->
 <script src="config.js"></script>
-<script src="pdf.js?v=61"></script>
-<script src="app.js?v=61"></script>
+<script src="pdf.js?v=62"></script>
+<script src="app.js?v=62"></script>
 
 <!-- Comptes et synchronisation (module facultatif) : sans config.js,
      l'application fonctionne hors ligne, tout reste dans le navigateur.
      Avec config.js, se connecter devient obligatoire. Le message de repli
      (si ce module ne se charge pas) et l'écouteur d'erreur vivent dans
      app.js, section DÉMARRAGE. -->
-<script type="module" src="sync.js?v=61" id="script-sync"></script>
+<script type="module" src="sync.js?v=62" id="script-sync"></script>
 </body>
 </html>

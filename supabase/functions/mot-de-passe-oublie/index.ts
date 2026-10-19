@@ -41,6 +41,13 @@ function adresseIp(req: Request): string {
   return (xff.length ? xff[xff.length - 1] : "inconnue").slice(0, 64);
 }
 
+// Une adresse à demi masquée pour les journaux (« k•••@gmail.com ») :
+// assez pour reconnaître sa propre demande, sans recopier l'adresse entière.
+function masquer(courriel: string): string {
+  const [nom, domaine] = courriel.split("@");
+  return (nom ? nom.slice(0, 1) : "") + "•••@" + (domaine || "");
+}
+
 function origineAutorisee(o: string | null): string {
   const ok = !!o && (/^https:\/\/(www\.)?crochompte\.com$/.test(o) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(o));
   return ok ? o! : "https://crochompte.com";
@@ -101,8 +108,10 @@ Deno.serve(async (req: Request) => {
     const { data: n1 } = await admin.rpc("compter_tentative", { p_cle: "mdp:" + identifiant.toLowerCase() + "|" + ip });
     const { data: n2 } = await admin.rpc("compter_tentative", { p_cle: "mdp-ip:" + ip });
     const { data: n3 } = await admin.rpc("compter_tentative", { p_cle: "mdp:" + identifiant.toLowerCase() });
-    if ((Number(n3) || 0) > 10) return repondre();
-    if ((Number(n1) || 0) > 3 || (Number(n2) || 0) > 20) return repondre();
+    if ((Number(n3) || 0) > 10 || (Number(n1) || 0) > 3 || (Number(n2) || 0) > 20) {
+      console.warn("mot-de-passe-oublie : trop de demandes en 15 minutes, aucun envoi");
+      return repondre();
+    }
   } catch (_e) { /* compteur indisponible : on continue */ }
   const colonne = identifiant.includes("@") ? "courriel" : "pseudo_cle";
   const valeur = identifiant.includes("@") ? identifiant.toLowerCase() : identifiant;
@@ -135,11 +144,22 @@ Deno.serve(async (req: Request) => {
         });
       } catch (_e) { /* sans gravité : le courriel partira sans le pseudo */ }
     }
-    const anon = createClient(url, anonKey);
-    // Erreur volontairement ignorée : la réponse au navigateur ne doit
-    // jamais varier selon que l'identifiant existe ou non, ni selon que
-    // l'envoi a réussi ou non côté fournisseur de courriel.
-    await anon.auth.resetPasswordForEmail(courriel, { redirectTo });
+    // V62 : l'envoi passe d'abord par la clé service. Une demande faite avec
+    // la clé publique est refusée sans bruit dès qu'un CAPTCHA est activé dans
+    // Supabase (la fonction ne peut pas en fournir) : aucun e-mail ne partait
+    // et rien ne le signalait. La réponse au navigateur ne change pas, mais
+    // chaque échec est maintenant écrit dans les journaux de la fonction
+    // (Supabase › Edge Functions › mot-de-passe-oublie › Logs).
+    let envoi = await admin.auth.resetPasswordForEmail(courriel, { redirectTo });
+    if (envoi.error) {
+      console.error("mot-de-passe-oublie : envoi refusé (clé service)", envoi.error.status, envoi.error.message);
+      const anon = createClient(url, anonKey);
+      envoi = await anon.auth.resetPasswordForEmail(courriel, { redirectTo });
+      if (envoi.error) console.error("mot-de-passe-oublie : envoi refusé (clé publique)", envoi.error.status, envoi.error.message);
+    }
+    if (!envoi.error) console.log("mot-de-passe-oublie : demande transmise à Supabase Auth pour " + masquer(courriel));
+  } else {
+    console.log("mot-de-passe-oublie : aucun compte pour cet identifiant");
   }
 
   return repondre();

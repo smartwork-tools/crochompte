@@ -39,7 +39,8 @@ const oui = async (p) => { await p.locator('.dlg [data-oui]:visible').last().cli
     await brancher(p);
     await p.goto('http://127.0.0.1:8934/index.html'); await p.waitForTimeout(600);
     await p.click('#portail-sans-compte'); await p.waitForTimeout(500);
-    R.bienvenue_premiere_visite = /Bienvenue/.test(await p.locator('#salut').textContent().catch(()=>''));
+    /* V62 : la première visite n'affiche plus de message flottant (l'Accueil guide déjà). */
+    R.pas_de_message_flottant_premiere_visite = (await p.locator('#salut').count()) === 0;
     await p.click('.profil-carte[data-p="pro"]'); await p.click('text=C\'est moi'); await p.waitForTimeout(300);
     if (await p.locator('.dlg [data-non]:visible').count()) await p.locator('.dlg [data-non]:visible').last().click();
     await p.waitForTimeout(300);

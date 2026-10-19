@@ -5,8 +5,9 @@
 --
 -- Ce que ce fichier met en place :
 --   1. abonnements : une ligne par compte. Un compte neuf est en ESSAI pendant
---      14 jours (créée automatiquement à l'inscription ; les comptes existants
---      reçoivent leurs 14 jours au moment où ce fichier est exécuté).
+--      6 mois (V62 ; créée automatiquement à l'inscription). Les comptes qui
+--      n'ont ni payé ni reçu d'accès offert ont 6 mois à compter de leur
+--      inscription, y compris ceux dont l'essai de 14 jours était terminé.
 --   2. codes_cadeaux : un code = une durée offerte (ou l'accès illimité),
 --      un nombre d'utilisations. Karim les crée depuis l'application
 --      (Réglages › Administration) ; n'importe qui peut en saisir un dans
@@ -33,7 +34,7 @@ create table if not exists public.abonnements (
   user_id            uuid primary key references auth.users (id) on delete cascade,
   statut             text not null default 'essai'
                      check (statut in ('essai', 'actif', 'offert', 'expire', 'resilie')),
-  essai_fin          timestamptz not null default now() + interval '14 days',
+  essai_fin          timestamptz not null default now() + interval '6 months',
   fin                timestamptz,                 -- fin de la période payée ou offerte ; null + 'offert' = illimité
   offre              text,                        -- 'mensuel' | 'semestriel' | 'annuel' | 'cadeau'
   stripe_client      text,
@@ -43,7 +44,11 @@ create table if not exists public.abonnements (
   cree               timestamptz not null default now(),
   maj                timestamptz not null default now()
 );
-comment on table public.abonnements is 'Accès de chaque compte : essai de 14 jours, abonnement payé, accès offert.';
+comment on table public.abonnements is 'Accès de chaque compte : essai de 6 mois, abonnement payé, accès offert.';
+
+-- V62 : l'essai passe de 14 jours à 6 mois. La table existait déjà avec
+-- l'ancienne valeur par défaut : on la remplace.
+alter table public.abonnements alter column essai_fin set default now() + interval '6 months';
 
 create table if not exists public.admins (
   user_id  uuid primary key references auth.users (id) on delete cascade,
@@ -120,10 +125,40 @@ create trigger abonnement_a_l_inscription
   after insert on auth.users
   for each row execute function public.abonnement_a_l_inscription();
 
--- Les comptes déjà existants : 14 jours d'essai à partir de maintenant.
+-- Les comptes déjà existants sans ligne : 6 mois d'essai à partir de maintenant.
 insert into public.abonnements (user_id)
 select id from auth.users
 on conflict (user_id) do nothing;
+
+-- V62 : les comptes en essai (ou dont l'essai de 14 jours est terminé) qui
+-- n'ont ni payé ni reçu d'accès offert passent à 6 mois depuis la création de
+-- leur ligne d'abonnement (l'inscription, ou la première installation de ce
+-- fichier pour les comptes plus anciens, ce qui leur est plus favorable).
+-- Rejouable : un essai déjà prolongé n'est plus touché.
+update public.abonnements
+   set statut = 'essai',
+       essai_fin = cree + interval '6 months',
+       maj = now()
+ where statut in ('essai', 'expire')
+   and offre is null
+   and essai_fin < cree + interval '6 months';
+
+-- Un code de durée limitée saisi pendant l'ancien essai de 14 jours ne doit
+-- pas laisser moins que les 6 mois des autres : la fin de l'accès est
+-- repoussée à 6 mois après l'inscription si elle tombe avant. Seulement pour
+-- les codes saisis par la personne elle-même (pas un accès retiré par
+-- l'administration), et seulement pour les lignes inchangées depuis la V62
+-- (un retrait fait plus tard n'est jamais annulé en rejouant ce fichier).
+update public.abonnements
+   set statut = 'offert',
+       fin = cree + interval '6 months',
+       maj = now()
+ where offre = 'cadeau'
+   and code_utilise is not null
+   and statut in ('offert', 'expire')
+   and fin is not null
+   and fin < cree + interval '6 months'
+   and maj < timestamptz '2026-11-01 00:00:00+00';
 
 -- ─── 5. Ce que l'application demande ─────────────────────────────────────
 -- L'état de l'abonnement de la personne connectée, avec le verdict « accès ».

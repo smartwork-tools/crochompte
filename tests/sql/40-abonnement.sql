@@ -7,9 +7,9 @@ insert into auth.users values ('00000000-0000-0000-0000-0000000000a1','admin@x.f
                               ('00000000-0000-0000-0000-0000000000c1','cam@x.fr') on conflict do nothing;
 insert into public.admins (user_id, note) values ('00000000-0000-0000-0000-0000000000a1', 'test') on conflict do nothing;
 
--- 1. Un compte neuf est en essai, 14 jours, accès ouvert.
+-- 1. Un compte neuf est en essai, 6 mois (V62), accès ouvert.
 set role authenticated; select set_config('test.uid','00000000-0000-0000-0000-0000000000b1',false);
-select 'B essai (statut essai, acces true, jours 14 attendus)' t,
+select 'B essai (statut essai, acces true, jours 181 à 184 attendus)' t,
        a->>'statut' statut, a->>'acces' acces, a->>'jours_restants' jours, a->>'admin' admin
   from public.mon_abonnement() a;
 
@@ -56,7 +56,7 @@ select 'C code épuisé (code_epuise attendu)' t, r->>'erreur' from public.utili
 select set_config('test.uid','00000000-0000-0000-0000-0000000000a1',false);
 create temp table t_code2 as select public.admin_creer_code(10, 5, 'dix jours') as code;
 select set_config('test.uid','00000000-0000-0000-0000-0000000000c1',false);
-select 'C essai + 10 j (jours 24 attendus)' t, r->'abonnement'->>'jours_restants' jours, r->'abonnement'->>'statut' statut
+select 'C essai + 10 j (jours 191 à 194 attendus, V62)' t, r->'abonnement'->>'jours_restants' jours, r->'abonnement'->>'statut' statut
   from public.utiliser_code((select code from t_code2)) r;
 
 -- 9. L'administrateur offre l'accès illimité à B, puis le retire.
@@ -146,3 +146,16 @@ select 'C rouvert : envoi (maj non null attendu)' t, (r->>'maj') is not null maj
 select 'C stripe_evenements (ERREUR attendue)' t;
 select count(*) from public.stripe_evenements;
 reset role;
+
+-- 11. V62 : un essai de 14 jours terminé, sans paiement ni accès offert,
+-- repasse en essai jusqu'à 6 mois après l'inscription ; rejouable.
+reset role;
+insert into auth.users values ('00000000-0000-0000-0000-0000000000d1','dan@x.fr') on conflict do nothing;
+update public.abonnements set statut = 'expire', cree = now() - interval '20 days',
+       essai_fin = now() - interval '6 days', offre = null where user_id = '00000000-0000-0000-0000-0000000000d1';
+update public.abonnements set statut = 'essai', essai_fin = cree + interval '6 months', maj = now()
+ where statut in ('essai', 'expire') and offre is null and essai_fin < cree + interval '6 months';
+set role authenticated; select set_config('test.uid','00000000-0000-0000-0000-0000000000d1',false);
+select 'D prolongé (essai, true, jours 160 à 164 attendus)' t, a->>'statut' statut, a->>'acces' acces, a->>'jours_restants' jours from public.mon_abonnement() a;
+reset role;
+select 'C payé ou offert non touché (statut différent de essai attendu)' t, statut from public.abonnements where user_id = '00000000-0000-0000-0000-0000000000c1';

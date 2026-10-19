@@ -50,9 +50,12 @@ const txt = async (p, sel) => (await p.locator(sel).first().textContent()).repla
     R.barre_onglets_cachee_ordinateur = !(await p.locator('#tabbar').isVisible());
     /* V61 : on ne salue que s'il y a quelque chose à dire (points à regarder, nouveautés depuis la dernière visite, première visite) */
     const aDire = await p.evaluate(() => window.__eval ? window.__eval('pointsAFaire().length') : 1).catch(() => 1);
-    R.salutation = aDire ? /Bonjour|Bonsoir|Bienvenue|Bon retour/.test(await txt(p, '#salut')) : (await p.locator('#salut').count()) === 0 || /Bienvenue|Bon retour/.test(await txt(p, '#salut'));
+    /* V62 : à la toute première visite (atelier vierge au chargement, données semées après), plus de message
+       flottant : l'Accueil dit déjà quoi faire. Un salut affiché doit rester un vrai salut. */
+    const vierge = true;
+    R.salutation = (await p.locator('#salut').count()) === 0 || /Bonjour|Bonsoir|Bon retour/.test(await txt(p, '#salut'));
     R.pas_de_bande_sombre = (await p.locator('.acc-hero').count()) === 0 && /Bonjour/.test(await txt(p, '#main h1'));
-    R.accueil_a_faire_et_crochet = /À faire/.test(await txt(p, '#main')) && /Sur le crochet/.test(await txt(p, '#main'));
+    R.accueil_a_faire_et_crochet = (vierge || /À faire/.test(await txt(p, '#main'))) && /Sur le crochet/.test(await txt(p, '#main'));
     R.pas_de_debordement = await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1);
 
     /* 2. ambiances : terre cuite, prune, retour au vert ; clair et sombre */

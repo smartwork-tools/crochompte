@@ -1054,7 +1054,7 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
       html = '<div class="card auth"><div class="body">';
       if (etat.mode === "inscription"){
         html += '<h2 class="auth-titre">Créer un compte</h2>'+
-          '<p class="auth-sous">Quelques secondes suffisent. Tu compléteras ton profil plus tard, si tu le souhaites.</p>'+
+          '<p class="auth-sous">Quelques secondes suffisent : 6 mois d\'essai gratuit, sans carte bancaire. Tu compléteras ton profil plus tard, si tu le souhaites.</p>'+
           bandeaux(msg)+
           '<form id="sy-form" novalidate>'+
             champ({id:"sy-i-pseudo", label:"Pseudo", auto:"username", max:24, val:etat.brouillon.pseudo,
@@ -1067,9 +1067,10 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
               '<span>J\'ai ' + AGE_MINIMUM + ' ans ou plus.</span></label>'+
             '<button type="submit" class="btn primary auth-btn" id="sy-i-valider">Créer mon compte</button>'+
           '</form>'+
-          '<p class="hint auth-legal">Ton pseudo, ton adresse e-mail et ton atelier sont enregistrés pour faire fonctionner '+
-          'le service. Ton mot de passe est chiffré. Aucune publicité, aucun suivi, aucune revente. '+
-          '<a href="confidentialite.html" target="_blank" rel="noopener">Politique de confidentialité</a></p>'+
+          '<p class="hint auth-legal">En créant un compte, tu acceptes les '+
+          '<a href="cgv.html" target="_blank" rel="noopener">conditions générales d\'utilisation</a>. Ton pseudo, ton adresse e-mail '+
+          'et ton atelier sont enregistrés pour faire fonctionner le service ; ton mot de passe n\'est jamais stocké en clair. Aucune publicité, aucun suivi, '+
+          'aucune revente : voir la <a href="confidentialite.html" target="_blank" rel="noopener">politique de confidentialité</a>.</p>'+
           '<p class="auth-bas">Déjà un compte ? <a href="#" id="sy-vers-connexion">Se connecter</a></p>';
 
       } else if (etat.mode === "oubli"){
@@ -1098,7 +1099,8 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
           'un e-mail vient d\'être envoyé à l\'adresse enregistrée, avec un lien pour choisir un nouveau mot de passe.</p>'+
           '<button type="button" class="btn primary auth-btn" id="sy-vers-connexion-btn">Retour à la connexion</button>'+
           '<p class="hint" style="margin-top:14px">Rien reçu après quelques minutes ? Regarde dans tes courriers indésirables, '+
-          'puis vérifie l\'orthographe de ton pseudo ou de ton adresse.</p>';
+          'puis vérifie l\'orthographe de ton pseudo ou de ton adresse. Toujours rien ? Écris à '+
+          '<a href="mailto:bonjour@crochompte.com?subject=' + encodeURIComponent("Mot de passe oublié") + '">bonjour@crochompte.com</a> depuis l\'adresse de ton compte.</p>';
 
       } else {
         html += '<h2 class="auth-titre">Se connecter</h2>'+
@@ -1110,7 +1112,8 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
                    lien:{id:"sy-vers-oubli", texte:"Mot de passe oublié ?"}})+
             '<button type="submit" class="btn primary auth-btn" id="sy-c-valider">Se connecter</button>'+
           '</form>'+
-          '<p class="auth-bas">Pas encore de compte ? <a href="#" id="sy-vers-inscription">Créer un compte</a></p>';
+          '<p class="auth-bas">Pas encore de compte ? <a href="#" id="sy-vers-inscription">Créer un compte</a>'+
+          '<span class="auth-essai">6 mois d\'essai gratuit, sans carte bancaire.</span></p>';
       }
       html += '</div></div>';
 

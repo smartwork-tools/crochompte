@@ -6,6 +6,18 @@ par le code, et ce qui ne peut l'être que par toi.
 
 Ce n'est pas un avis juridique : c'est une liste de contrôle honnête.
 
+> **Point au 18 octobre 2026 (V62).** La politique de confidentialité, les
+> conditions générales d'utilisation et les mentions légales ont été
+> réécrites (`confidentialite.html`, `cgv.html`, `mentions-legales.html`).
+> Stripe n'y figure plus tant qu'aucun paiement n'est proposé : à ajouter,
+> avec des conditions générales de vente et un médiateur de la consommation,
+> le jour où une offre payante ouvre. Restent à faire par Karim : le registre
+> des traitements (modèle CNIL, §2 ci-dessous) et la suppression des comptes
+> inactifs depuis deux ans (annoncée comme possible, pas encore automatisée).
+> Le nom de GitHub doit correspondre à l'identité réelle de l'éditeur : les
+> mentions légales indiquent que ses éléments d'identification sont connus
+> de l'hébergeur (article 1-1, II de la LCEN).
+
 ---
 
 ## Fait — dans le code

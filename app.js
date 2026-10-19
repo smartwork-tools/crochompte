@@ -2562,12 +2562,15 @@ function renderSideBas(){
   var z = document.getElementById("side-bas"); if (!z) return;
   z.innerHTML = "";
   var a = abonnementInfo, e = null;
-  if (modeSansCompte && !compteInfo.connecte) e = essaiLocal();
-  else if (compteInfo.connecte && a && !a.indisponible && !a.admin && a.statut === "essai" && a.jours_restants != null) e = {jours: Number(a.jours_restants)};
+  if (modeSansCompte && !compteInfo.connecte){ e = essaiLocal(); if (e) e.local = true; }
+  else if (compteInfo.connecte && a && !a.indisponible && !a.admin && a.statut === "essai" && a.jours_restants != null) e = {jours: Number(a.jours_restants), fin: a.essai_fin};
   if (e){
-    var j = Math.max(0, Number(e.jours) || 0);
-    var bloc = el('<div class="essai"><b>Essai gratuit</b><span>'+(j > 0 ? 'Encore ' + esc(pluriel(j, "jour")) + '.' : 'Dernier jour.')+' Ensuite 7,90 € par mois, ou 75 € par an.</span>'+
-      '<span class="jauge"><i style="width:'+Math.round(Math.max(4, Math.min(100, (14 - j) / 14 * 100)))+'%"></i></span></div>');
+    /* V62 : l'essai d'un compte dure 6 mois. On donne la date de fin, et le
+       compte des jours seulement quand il en reste peu. */
+    var j = Math.max(0, Number(e.jours) || 0), total = e.local ? ESSAI_JOURS : ESSAI_COMPTE_JOURS;
+    var quand = j <= 0 ? 'Dernier jour.' : (j <= RAPPEL_ESSAI_JOURS || !e.fin) ? 'Encore ' + esc(pluriel(j, "jour")) + '.' : 'Jusqu\'au ' + esc(dateLongue(e.fin)) + '.';
+    var bloc = el('<div class="essai"><b>'+(e.local ? 'Essai sans compte' : 'Essai gratuit')+'</b><span>'+quand+(e.local ? '' : ' ' + esc(PRIX_ENSUITE))+'</span>'+
+      '<span class="jauge"><i style="width:'+Math.round(Math.max(4, Math.min(100, (total - j) / total * 100)))+'%"></i></span></div>');
     var bO = bouton("Voir les offres", function(){ if (modeSansCompte && !compteInfo.connecte){ var S = window.CrochompteSync; modeSansCompte = false; reprisePortailRefusee = true; if (S && S.montrerConnexion) S.montrerConnexion("inscription"); renderRacine(); } else { view.regSection = "abonnement"; aller("reglages"); } });
     bO.classList.add("sm"); bloc.appendChild(bO);
     z.appendChild(bloc);
@@ -2961,7 +2964,7 @@ function bandeauConflit(){
 }
 /* ═════ ABONNEMENT (V55) ═════
    L'accès est décidé par le serveur (mon_abonnement, schema-abonnement.sql) :
-   14 jours d'essai à l'inscription, puis abonnement ou code cadeau. Les
+   6 mois d'essai à l'inscription (V62), puis abonnement ou code cadeau. Les
    administrateurs ont toujours accès. Tant que le serveur n'a pas répondu, ou
    si la fonction n'est pas installée, rien n'est bloqué.
    Sans compte : essai local de 14 jours sur l'appareil, puis il faut un compte. */
@@ -2973,7 +2976,11 @@ var OFFRES = [
   {id:"annuel",     nom:"Annuel",    prix:75,   par:"par an",     total:"75 € par an", eco:"soit 6,25 € par mois, 2 mois offerts", reco:false,
    d:"Le plus économique : le prix d'une pelote par mois."}
 ];
-var ESSAI_JOURS = 14;
+var ESSAI_JOURS = 14;          /* essai sans compte, sur l'appareil */
+var ESSAI_COMPTE_JOURS = 183;  /* V62 : essai d'un compte, 6 mois (fixé par le serveur) */
+var ESSAI_COMPTE_TXT = "6 mois";
+var RAPPEL_ESSAI_JOURS = 31;   /* le bandeau n'apparaît que dans le dernier mois (au moins 30 jours avant la fin) */
+var PRIX_ENSUITE = "Tarifs prévus ensuite : 7,90 € par mois, 42 € pour 6 mois ou 75 € par an.";
 var abonnementInfo = null;
 var CLE_SANS_COMPTE = KEY + ".sansCompte";
 var modeSansCompte = false;
@@ -3013,10 +3020,10 @@ function bandeauAbonnement(){
   }
   var a = abonnementInfo;
   if (!compteInfo.connecte || !a || a.indisponible || a.admin) return null;
-  if (a.statut === "essai" && a.jours_restants !== null && a.jours_restants !== undefined){
+  if (a.statut === "essai" && a.jours_restants !== null && a.jours_restants !== undefined && Number(a.jours_restants) <= RAPPEL_ESSAI_JOURS){
     var j = Number(a.jours_restants);
     var b2 = el('<div class="abo-bandeau'+(j <= 3 ? ' warn' : '')+'" role="status"><p><b>Essai gratuit</b> · '+
-      (j > 0 ? 'encore '+esc(pluriel(j, "jour")) : 'dernier jour')+'<span class="ab-long">'+(j > 0 && a.essai_fin ? ', jusqu\'au '+esc(dateLongue(a.essai_fin)) : '')+'. Ensuite, 7,90 € par mois, 42 € pour 6 mois ou 75 € par an.</span></p></div>');
+      (j > 0 ? 'encore '+esc(pluriel(j, "jour")) : 'dernier jour')+'<span class="ab-long">'+(j > 0 && a.essai_fin ? ', jusqu\'au '+esc(dateLongue(a.essai_fin)) : '')+'. ' + esc(PRIX_ENSUITE) + '</span></p></div>');
     b2.appendChild(bouton("Voir les offres", function(){ view.regSection = "abonnement"; aller("reglages"); }));
     return b2;
   }
@@ -3043,8 +3050,11 @@ function grilleOffres(){
     if (lien){
       var a = el('<a class="btn'+(o.reco ? ' primary' : '')+'" href="'+esc(lien)+'" target="_blank" rel="noopener">Choisir · '+esc(o.total)+'</a>');
       c.appendChild(a);
+    } else if (abonnementInfo && abonnementInfo.statut === "essai"){
+      /* V62 : pendant l'essai, rien à payer ni à demander. */
+      c.appendChild(el('<p class="hint offre-plus-tard" style="margin:8px 0 0"><b>Proposé à la fin de l\'essai.</b></p>'));
     } else {
-      var bq = bouton("Demander un code d'accès", function(){ toast("Le paiement en ligne ouvre bientôt. En attendant, un code cadeau donne accès à tout : écris-nous à bonjour@crochompte.com."); });
+      var bq = bouton("Demander un code d'accès", function(){ toast("Le paiement en ligne ouvre bientôt. En attendant, un code d'accès donne accès à tout : écris-nous à bonjour@crochompte.com."); });
       c.appendChild(bq);
     }
     g.appendChild(c);
@@ -3096,7 +3106,7 @@ function carteAbonnement(){
   else if (a.statut === "offert") { etatTxt = a.illimite ? "Accès offert, sans limite" : "Accès offert"; sous = a.fin ? "Jusqu'au " + dateLongue(a.fin) + "." : ""; }
   else if (a.statut === "resilie") { etatTxt = "Abonnement résilié"; sous = a.fin ? "L'accès reste ouvert jusqu'au " + dateLongue(a.fin) + "." : ""; }
   else { etatTxt = "Accès terminé"; sous = "Ton atelier est conservé. Choisis une offre ou saisis un code pour continuer."; }
-  var c = el('<div class="card"><header><h2>Mon abonnement</h2><p>14 jours d\'essai à l\'inscription, puis l\'offre de ton choix. Tu arrêtes quand tu veux ; ton atelier reste à toi.</p></header>'+
+  var c = el('<div class="card"><header><h2>Ton accès</h2><p>'+esc(ESSAI_COMPTE_TXT)+' d\'essai gratuit à l\'inscription, sans moyen de paiement, puis l\'offre de ton choix. Tu arrêtes quand tu veux ; ton atelier reste à toi.</p></header>'+
     '<div class="body"><p style="margin:0 0 4px"><b id="abo-etat">'+esc(etatTxt)+'</b></p><p class="hint" style="margin:0 0 12px" id="abo-sous">'+esc(sous)+'</p></div></div>');
   var body = c.querySelector(".body");
   if (a && !a.admin && !a.indisponible && (a.statut === "essai" || a.statut === "expire" || a.statut === "resilie" || (a.statut === "offert" && !a.illimite))) body.appendChild(grilleOffres());
@@ -3107,9 +3117,10 @@ function carteAbonnement(){
     else zp.appendChild(el('<p class="hint" style="margin:0">Pour changer de moyen de paiement ou résilier, écris-nous à bonjour@crochompte.com : c\'est fait dans la journée.</p>'));
     body.appendChild(zp);
   }
-  body.appendChild(el('<p class="hint" style="margin:12px 0 0">Prix TTC. Paiement sécurisé par Stripe ; aucune donnée bancaire ne passe par Crochompte. '+
-    ((S && S.lienPortail && S.lienPortail()) ? 'Résiliation en trois clics depuis « Gérer mon abonnement ». ' : 'Résiliation à tout moment, sans frais. ')+'Droit de rétractation de 14 jours : l\'essai gratuit permet de décider sans payer. '+
-    '<a href="cgv.html" target="_blank" rel="noopener">Conditions générales</a> · <a href="confidentialite.html" target="_blank" rel="noopener">Confidentialité</a></p>'));
+  var payable = !!(S && S.paiementConfigure && S.paiementConfigure());
+  body.appendChild(el('<p class="hint" style="margin:12px 0 0">Prix TTC. '+(payable ? 'Paiement par un prestataire spécialisé : aucune donnée bancaire ne passe par Crochompte. ' : 'Aucun paiement n\'est demandé pendant l\'essai ; le paiement en ligne sera proposé avant sa fin. ')+
+    ((S && S.lienPortail && S.lienPortail()) ? 'Résiliation en trois clics depuis « Gérer mon abonnement ». ' : 'Résiliation à tout moment, sans frais. ')+'L\'essai gratuit permet de décider sans payer. '+
+    '<a href="cgv.html" target="_blank" rel="noopener">Conditions générales</a> · <a href="confidentialite.html" target="_blank" rel="noopener">Confidentialité</a> · <a href="mentions-legales.html" target="_blank" rel="noopener">Mentions légales</a></p>'));
   w.appendChild(c);
   if (!(a && (a.admin || a.illimite))) w.appendChild(champCode());
   return w;
@@ -3123,7 +3134,7 @@ function renderBloque(main){
   var titre = sansCompte ? "Ton essai sans compte est terminé" : a.statut === "essai" || a.statut === "expire" && !a.offre ? "Ton essai gratuit est terminé" : "Ton accès est terminé";
   var c = el('<section class="card abo-plein"><div class="body"><h2 style="margin:0 0 6px">'+esc(titre)+'</h2>'+
     '<p style="margin:0 0 14px">'+(sansCompte
-      ? 'Tout ce que tu as fait sur cet appareil est conservé. Crée un compte (gratuit, avec 14 jours d\'essai) : ton atelier le suivra et tu le retrouveras sur tes autres appareils.'
+      ? 'Tout ce que tu as fait sur cet appareil est conservé. Crée un compte (gratuit, avec '+esc(ESSAI_COMPTE_TXT)+' d\'essai) : ton atelier le suivra et tu le retrouveras sur tes autres appareils.'
       : 'Ton atelier est conservé tel quel : rien n\'est perdu. Pour continuer à l\'utiliser, choisis une offre ou saisis un code cadeau. Tu peux aussi télécharger ta sauvegarde à tout moment.')+'</p></div></section>');
   var body = c.querySelector(".body");
   if (sansCompte){
@@ -3362,12 +3373,11 @@ function saluer(){
   var titre, texte;
   /* V59 : la toute première visite n'est pas un « bonjour, rien d'urgent ». */
   var vierge = !state.creations.length && !commandes().length && !(state.pieces || []).length;
-  if (!t && vierge){
-    titre = "Bienvenue" + (qui ? ", " + qui : "") + " !";
-    /* V61 : la question du profil a peut-être déjà sa réponse. */
-    texte = state.reglages.profil ? "Calcule ta première création : pars d'un modèle du catalogue, tout le reste se remplit à partir d'elle."
-                                  : "Commence par la question du haut, puis calcule ta première création : tout le reste se remplit à partir d'elle.";
-  } else if (morceaux.length){
+  /* V62 : à la toute première visite, l'Accueil dit déjà quoi faire (la
+     question du profil, puis « Pour bien démarrer ») : un message flottant
+     par-dessus cachait le bouton de la question sur téléphone. */
+  if (!t && vierge) return;
+  if (morceaux.length){
     titre = "Bon retour" + (qui ? ", " + qui : "") + " !";
     texte = "Depuis ta dernière visite : " + morceaux.join(", ") + ".";
   } else {
@@ -3531,7 +3541,9 @@ function renderPortail(){
           '<li><b>Ton atelier sur tous tes appareils</b><span>Sur ton téléphone au marché, sur ton ordinateur à la maison.</span></li>'+
         '</ul>'+
         '<p class="portail-note">Sans publicité, sans revente de données. '+
-        '<a href="confidentialite.html" target="_blank" rel="noopener">Politique de confidentialité</a></p>'+
+        '<a href="confidentialite.html" target="_blank" rel="noopener">Politique de confidentialité</a> · '+
+        '<a href="cgv.html" target="_blank" rel="noopener">Conditions générales</a> · '+
+        '<a href="mentions-legales.html" target="_blank" rel="noopener">Mentions légales</a></p>'+
       '</section>'+
       '<div class="portail-form"></div>'+
     '</div>'
@@ -3675,7 +3687,7 @@ function pointsAFaire(){
     "Voir le stock", function(){ view.sub = "matieres"; aller("stock"); });
   var attCoul = piecesCouleurAttente();
   if (attCoul.length) ajout("warn", pluriel(attCoul.length, "pièce attend la ligne de matière utilisée", "pièces attendent la ligne de matière utilisée"),
-    "Leur matière prévue est vide : choisis la ligne qui a servi (autre couleur ou autre lot), elle sera retirée du bon stock.", "Choisir", function(){ dialogueCouleursAttente(); });
+    "Leur matière prévue est vide : choisis la ligne qui a servi (autre couleur ou autre prix d'achat), elle sera retirée du bon stock.", "Choisir", function(){ dialogueCouleursAttente(); });
   /* V60 : ce qu'il faut acheter pour les pièces prévues et les commandes
      acceptées, face au stock (tous lots compris). */
   var aAcheter = besoinsMatieres().filter(function(b){ return b.manque > 1e-9; });
@@ -3961,7 +3973,11 @@ function renderAccueil(main){
     cTodo.querySelector(".body").appendChild(el('<p class="hint" style="margin:0">Commandes, échéances, stock et seuils sont surveillés en continu. '+
       'Dès que quelque chose demande une action, tu le verras ici.</p>'));
   }
-  col1.appendChild(cTodo);
+  /* V62 : au tout début (rien de créé ni de vendu), une carte « rien à
+     faire » et des compteurs à zéro n'apprennent rien : « Pour bien
+     démarrer » suffit. */
+  var vierge0 = !state.creations.length && !commandes().some(function(c){ return !c.brouillon; }) && !(state.pieces || []).length;
+  if (points.length || !vierge0) col1.appendChild(cTodo);
 
   /* Sur le crochet : reprendre là où on en était (V58 : dans une carte claire). */
   if (vitrine){
@@ -3996,7 +4012,7 @@ function renderAccueil(main){
   var lienInd = el('<p style="margin:14px 0 0"><a href="#">Voir tous mes chiffres →</a></p>');
   lienInd.querySelector("a").addEventListener("click", function(e){ e.preventDefault(); aller("indicateurs"); });
   cMois.querySelector(".body").appendChild(lienInd);
-  col2.appendChild(cMois);
+  if (!vierge0) col2.appendChild(cMois);
 
   /* Les dernières créations sont déjà dans la bande verte (« Reprendre ») :
      pas de seconde liste ici. */
@@ -4006,8 +4022,9 @@ function renderAccueil(main){
   main.appendChild(el('<footer class="foot"><p style="margin:0;max-width:80ch">Les prix de matières, les frais des plateformes '+
     'et les taux proposés par défaut sont des ordres de grandeur, à remplacer par les tiens. Vérifie les frais sur le site de ta '+
     'plateforme' + (estPro() ? ' et ton taux de cotisations auprès de l\'URSSAF' : '') + '. Crochompte t\'aide à décider ; il ne remplace ni une comptabilité, ni un conseil.</p>'+
-    '<p style="margin:10px 0 0" class="foot-liens"><a href="confidentialite.html" target="_blank" rel="noopener">Politique de confidentialité</a> · '+
-    '<a href="cgv.html" target="_blank" rel="noopener">Conditions générales</a> · '+
+    '<p style="margin:10px 0 0" class="foot-liens"><a href="mentions-legales.html" target="_blank" rel="noopener">Mentions légales</a> · '+
+    '<a href="confidentialite.html" target="_blank" rel="noopener">Politique de confidentialité</a> · '+
+    '<a href="cgv.html" target="_blank" rel="noopener">Conditions générales d\'utilisation</a> · '+
     '<a href="mailto:bonjour@crochompte.com">Nous écrire</a> · '+
     '<a href="' + esc(lienSignalement()) + '">Signaler un problème</a></p>'+
     '<p style="margin:10px 0 0;font-size:12px">© 2026 Crochompte. Tous droits réservés.</p></footer>'));
@@ -4015,8 +4032,14 @@ function renderAccueil(main){
 
 
 /* ═════ NOUVEAUTÉS ET SIGNALEMENT ═════ */
-var VERSION_APP = "V61";
+var VERSION_APP = "V62";
 var NOUVEAUTES = [
+  {v:"V62", d:"Octobre 2026", l:[
+    "6 mois d'essai gratuit pour chaque compte, sans moyen de paiement.",
+    "Sur téléphone, la fiche d'une création se lit en deux volets (Prix et coûts, Fabrication) et une commande en trois (Commande, Argent, Documents).",
+    "« Mot de passe oublié » fiabilisé ; mentions légales, confidentialité et conditions d'utilisation réécrites.",
+    "Le catalogue commence par la recherche ; l'Accueil du premier jour va à l'essentiel."
+  ]},
   {v:"V61", d:"Octobre 2026", l:[
     "Il manque de la matière au lancement ? « J'ai acheté » note l'achat puis te ramène au lancement, qui se fait avec les mêmes réglages.",
     "Le chronomètre affiche tes étapes en petites tuiles : le temps passé face au temps prévu ; touche une étape pour lancer, changer ou mettre en pause.",
@@ -4027,7 +4050,7 @@ var NOUVEAUTES = [
   {v:"V60", d:"Octobre 2026", l:[
     "Actualiser la page te laisse là où tu étais : même rubrique, même fiche, même commande.",
     "Une ligne de matière par couleur, crochet, contenance et prix d'achat : tes couleurs sont devenues des lignes, avec leur propre stock. « Dupliquer » crée une autre couleur en un geste.",
-    "Un achat à un autre prix ouvre un nouveau lot ; les fabrications puisent d'abord dans le plus ancien.",
+    "Un achat à un autre prix crée une ligne à part ; les fabrications utilisent d'abord le stock acheté le plus tôt.",
     "« Vendre » n'apparaît que s'il y a une pièce libre en stock ; sinon « Fabriquer ». Une pièce faite mais pas notée se note terminée et vendue en un seul geste.",
     "Une commande acceptée réserve tout de suite les pièces prêtes de ton stock : elles ne peuvent plus être vendues ailleurs.",
     "Nouveau : « Pour ta production » liste les matières à acheter, et le contrôle de cohérence répare ce qui ne colle pas."
@@ -4249,7 +4272,7 @@ function renderCatalogue(main){
   });
   main.appendChild(segs);
 
-  var filtres = el('<div class="filters"></div>');
+  var filtres = el('<div class="filters filtres-defile"></div>');
   var parFamille = {}, nFiltre = 0;
   MODELES.forEach(function(m){
     if (m[0] === "vide") return;
@@ -4307,7 +4330,8 @@ function renderCatalogue(main){
   if (!view.triSens) view.triSens = 1;
   peindreSensCat();
   bSens.addEventListener("click", function(){ view.triSens = -view.triSens; peindreSensCat(); peindreCartes(); });
-  main.appendChild(barre);
+  /* V62 : la recherche d'abord, avant les filtres (surtout sur téléphone). */
+  main.insertBefore(barre, segs);
   var compte = el('<p class="compte" id="cat-compte"></p>');
   main.appendChild(compte);
   var noteCat = el('<div id="cat-note"></div>');
@@ -5296,8 +5320,8 @@ function dialogueAchatMatiere(m, opts){
       d.push(p > 0 ? "Prix payé : " + eur(p) + (m.contenance > 1 ? ", soit " + eur(p / n) + " " + (m.cat === "fil" ? "la pelote" : "le lot") : "")
                    : "Prix non saisi : l'achat sera estimé au prix de la fiche.");
       var la = ligneAchat(m, q, p);
-      if (la.nouvelle) d.push("Prix différent de cette ligne (" + eur(m.prix) + ") : un nouveau lot « " + m.nom + " » à " + eur(la.m.prix) + " sera créé, avec son propre stock. Les fabrications puiseront d'abord dans le plus ancien.");
-      else if (la.m !== m) d.push("Ajouté au lot existant à " + eur(la.m.prix) + " (stock après : " + texteLots(la.m, (Number(la.m.stock)||0) + q) + ").");
+      if (la.nouvelle) d.push("Prix différent de cette ligne (" + eur(m.prix) + ") : une ligne « " + m.nom + " » à " + eur(la.m.prix) + " sera créée, avec son propre stock. Les fabrications utiliseront d'abord le stock acheté le plus tôt.");
+      else if (la.m !== m) d.push("Ajouté à la ligne existante à " + eur(la.m.prix) + " (stock après : " + texteLots(la.m, (Number(la.m.stock)||0) + q) + ").");
       else d.push("Stock après : " + texteLots(m, (Number(m.stock)||0) + q));
       var alerte = "";
       if (p > 0 && Number(m.prix) > 0 && m.contenance > 0){
@@ -5310,7 +5334,7 @@ function dialogueAchatMatiere(m, opts){
     var n = Number(lireNombre(iN.value)) || 0, p = Number(lireNombre(iP.value)) || 0;
     var ra = noterAchatLigne(m, n * (Number(m.contenance) || 1), p > 0 ? p : null, "Achat");
     sauverTout(); render();
-    toast("Achat noté : " + qte(n * (Number(m.contenance) || 1), m.unite) + " de " + m.nom + (ra.nouvelle ? " · nouveau lot à " + eur(ra.m.prix) : ra.m !== m ? " · lot à " + eur(ra.m.prix) : ""));
+    toast("Achat noté : " + qte(n * (Number(m.contenance) || 1), m.unite) + " de " + m.nom + (ra.nouvelle ? " · nouvelle ligne à " + eur(ra.m.prix) : ra.m !== m ? " · ligne à " + eur(ra.m.prix) : ""));
     if (opts.apres) setTimeout(function(){ opts.apres(ra.m); }, 60);
   });
 }
@@ -5731,8 +5755,10 @@ function renderVentes(main){
   var frais = 0;
   (state.marches||[]).forEach(function(mk){ var t = dateVersTs(mk.date); if (t >= per.d0 && t < per.d1) frais += Number(mk.frais)||0; });
 
+  /* V62 : l'import Etsy ne s'affiche en amateur que si une création se vend sur Etsy. */
+  var etsyUtile = estPro() || state.creations.some(function(cr){ return !cr.archive && cr.canal === "etsy"; });
   var hd = enTete("Mes ventes", "Ce que tu as vendu, ce qui est payé, et ce qui reste à recevoir. Le stand est en haut pour vendre en un geste.",
-    [bouton("Importer mes ventes Etsy", function(){ choisirFichierEtsy(); })]);
+    etsyUtile ? [bouton("Importer mes ventes Etsy", function(){ choisirFichierEtsy(); })] : []);
   main.appendChild(hd);
 
   /* période */
@@ -5976,6 +6002,48 @@ function reprendreBrouillon(){
   if (!view.ficheId) view.draftRef = empreinteFiche(creationDepuisModele("ami_moyen","",0,"direct"));
   aller("fiche");
 }
+/* V62 : sur téléphone et tablette (≤ 900 px), un écran long se lit en
+   volets. Chaque bloc porte data-volet ; seul le volet choisi est affiché
+   (règle dans index.html). Sur ordinateur, tout reste visible. Le choix est
+   gardé dans view[cle] tant qu'on reste dans la session. */
+/* Un champ ou un bloc dans un volet masqué : on ouvre son volet avant d'y
+   aller (« Compléter », « Facturer », erreur de saisie…). */
+function devoiler(n){
+  if (!(window.matchMedia && window.matchMedia("(max-width: 900px)").matches)) return;
+  var v = n && n.closest ? n.closest("[data-volet]") : null;
+  var corps = v ? v.closest(".fiche-corps.avec-volets") : null;
+  if (!v || !corps || corps.getAttribute("data-actif") === v.getAttribute("data-volet")) return;
+  var t = corps.querySelector('.volets-fiche button[data-v="' + v.getAttribute("data-volet") + '"]');
+  if (t) t.click();
+}
+(function(){
+  if (!window.Element || !Element.prototype.scrollIntoView || Element.prototype.scrollIntoView.__volets) return;
+  var orig = Element.prototype.scrollIntoView;
+  var f = function(){ try{ devoiler(this); }catch(e){} return orig.apply(this, arguments); };
+  f.__volets = true; Element.prototype.scrollIntoView = f;
+})();
+function voletsEcran(corps, liste, cle, quoi){
+  var ids = liste.map(function(x){ return x[0]; });
+  /* Une autre création ou une autre commande s'ouvre sur son premier volet. */
+  if (quoi !== undefined && view[cle + "Pour"] !== quoi){ view[cle + "Pour"] = quoi; view[cle] = ids[0]; }
+  if (ids.indexOf(view[cle]) < 0) view[cle] = ids[0];
+  corps.classList.add("avec-volets");
+  corps.setAttribute("data-actif", view[cle]);
+  var vol = el('<div class="volets-fiche" role="tablist" aria-label="Parties de l\'écran">' + liste.map(function(x){
+    return '<button type="button" role="tab" data-v="' + x[0] + '" aria-selected="' + (x[0] === view[cle] ? 'true' : 'false') + '">' + esc(x[1]) + '</button>'; }).join("") + '</div>');
+  Array.prototype.forEach.call(vol.querySelectorAll("button"), function(bv){
+    bv.addEventListener("click", function(ev){
+      view[cle] = bv.getAttribute("data-v");
+      corps.setAttribute("data-actif", view[cle]);
+      Array.prototype.forEach.call(vol.querySelectorAll("button"), function(x){ x.setAttribute("aria-selected", x === bv ? "true" : "false"); });
+      /* Un toucher ramène en haut du volet ; une ouverture par le programme
+         (« Facturer », « Compléter ») laisse le défilement à l'appelant. */
+      if (ev && ev.isTrusted){ var y = vol.getBoundingClientRect().top + window.pageYOffset - 130; if (window.pageYOffset > y) window.scrollTo(0, Math.max(0, y)); }
+    });
+  });
+  corps.appendChild(vol);
+  return vol;
+}
 function renderFiche(main){
   var d = view.draft;
   if (!d){ nouvelleFiche(); return; }
@@ -5998,8 +6066,14 @@ function renderFiche(main){
   main.appendChild(enTete(view.ficheId ? "Création : « " + (d.nom || "sans nom") + " »" : "Nouvelle création",
     "C'est ici que tu calcules ce que cette création te coûte et ce qu'elle te rapporte : ses matières, ton temps, "+
     "son prix. Enregistre-la pour la retrouver dans « Mes créations » et y suivre chaque pièce fabriquée.", [bRet]));
+  /* V62 : sur téléphone et tablette, une fiche enregistrée se lit en deux
+     volets, « Prix et coûts » et « Fabrication », au lieu d'une page de huit
+     écrans. Sur ordinateur, tout reste visible côte à côte. */
+  var corps = el('<div class="fiche-corps"></div>');
+  if (view.ficheId) voletsEcran(corps, [["calcul", "Prix et coûts"], ["fab", "Fabrication"]], "voletFiche", view.ficheId);
+  var volet = function(n, v){ if (n) n.setAttribute("data-volet", v); return n; };
   var cmdLiees = carteCommandesLiees(view.ficheId);
-  if (cmdLiees) main.appendChild(cmdLiees);
+  if (cmdLiees) corps.appendChild(volet(cmdLiees, "fab"));
 
   var wrap = el('<div style="display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px;align-items:start" id="fiche-grid"></div>');
   var left = el('<div style="display:flex;flex-direction:column;gap:16px;min-width:0"></div>');
@@ -6039,11 +6113,11 @@ function renderFiche(main){
       '<p class="hint" id="f-patron-aide"></p>'+
     '</div></div>'
   );
-  left.appendChild(cId);
-  left.appendChild(carteChrono(d, function(){ aller("fiche"); }));
+  left.appendChild(volet(cId, "calcul"));
+  left.appendChild(volet(carteChrono(d, function(){ aller("fiche"); }), "fab"));
   /* Le patron relié s'affiche ici. On le redessine sur place quand on en
      change, sans reconstruire toute la fiche. */
-  var zonePatron = el('<div style="display:contents"></div>');
+  var zonePatron = volet(el('<div style="display:contents"></div>'), "fab");
   left.appendChild(zonePatron);
   function peindrePatronFiche(){
     zonePatron.innerHTML = "";
@@ -6051,10 +6125,10 @@ function renderFiche(main){
     if (cp){ zonePatron.appendChild(cp); hydraterPhotos(zonePatron); }
   }
   peindrePatronFiche();
-  left.appendChild(blocPhoto(d, function(){
+  left.appendChild(volet(blocPhoto(d, function(){
     sauverBrouillonPhoto();
     aller("fiche");
-  }));
+  }), "fab"));
 
   /* --- matières --- */
   var cMat = el(
@@ -6063,7 +6137,7 @@ function renderFiche(main){
   );
   var addRow = el('<button type="button" class="btn sm primary" style="margin-top:12px">+ Ajouter une matière</button>');
   cMat.querySelector(".body").appendChild(addRow);
-  left.appendChild(cMat);
+  left.appendChild(volet(cMat, "calcul"));
 
   /* --- temps --- */
   var cTps = el(
@@ -6072,7 +6146,7 @@ function renderFiche(main){
     '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--rule);display:flex;justify-content:space-between;align-items:baseline;gap:10px">'+
     '<span>Temps total sur cette création</span><b class="num" id="f-tot" style="font-size:18px;font-weight:500">—</b></div></div></div>'
   );
-  left.appendChild(cTps);
+  left.appendChild(volet(cTps, "calcul"));
 
   /* --- temps réellement mesuré --- */
   var bt = view.ficheId ? bilanTemps(view.ficheId) : null;
@@ -6133,7 +6207,7 @@ function renderFiche(main){
       bMaj.style.marginTop = "12px";
       cReel.querySelector(".body").appendChild(bMaj);
     }
-    left.appendChild(cReel);
+    left.appendChild(volet(cReel, "fab"));
   }
   /* --- prévu et réel : fil pesé, coût complet --- */
   var br = view.ficheId ? bilanReel(view.ficheId) : null;
@@ -6180,15 +6254,10 @@ function renderFiche(main){
       zMat.appendChild(el('<p class="hint" style="margin:12px 0 0">Aucune pesée pour l\'instant. Dans « Mes créations », le bouton <b>Peser</b> de chaque pièce '+
         'd\'une pièce terminée te laisse noter le fil réellement utilisé : le coût réel devient exact, et ton stock est corrigé.</p>'));
     }
-    left.appendChild(cPR);
+    left.appendChild(volet(cPR, "fab"));
   }
-  if (!(bt && bt.n > 0) && view.ficheId){
-    left.appendChild(el('<div class="card"><header><h2>Ton temps réel</h2>'+
-      '<p>Aucune pièce chronométrée pour l\'instant. Dans « Mes créations », sur chaque pièce, le bouton '+
-      '« ▶ Chrono » lance le compteur : il tourne même si tu changes d\'écran ou fermes l\'application, '+
-      'et il s\'additionne d\'une séance à l\'autre. Deux ou trois pièces suffisent à savoir si ton estimation tient.</p>'+
-      '</header><div class="body" style="padding-top:0"></div></div>'));
-  }
+  /* V62 : la carte vide « Ton temps réel » répétait la carte du
+     chronomètre ; elle n'apparaît plus. */
 
   /* --- vente --- */
   var cVente = el(
@@ -6202,7 +6271,7 @@ function renderFiche(main){
       '<input id="f-slider" type="range" min="0" step="0.5" style="margin-top:6px" aria-label="Faire varier le prix de vente">'+
     '</div></div>'
   );
-  left.appendChild(cVente);
+  left.appendChild(volet(cVente, "calcul"));
 
   /* --- besoin d'achat --- */
   var cAchat = el(
@@ -6219,7 +6288,7 @@ function renderFiche(main){
       '<div id="f-achat-tot" style="margin-top:14px"></div>'+
     '</div></div>'
   );
-  left.appendChild(cAchat);
+  left.appendChild(volet(cAchat, "fab"));
 
   /* --- production (création déjà enregistrée) --- */
   var cProd = null;
@@ -6251,7 +6320,7 @@ function renderFiche(main){
     PROD.forEach(function(x){ var o=document.createElement("option"); o.value=x.k; o.textContent=x.nom; selP.appendChild(o); });
     COM.forEach(function(x){ var o=document.createElement("option"); o.value=x.k; o.textContent=x.nom; selC.appendChild(o); });
     selP.value = "afaire"; selC.value = "atelier";
-    left.appendChild(cProd);
+    left.appendChild(volet(cProd, "fab"));
   }
 
   /* --- barre d'action --- */
@@ -6357,8 +6426,10 @@ function renderFiche(main){
     ? 'Une fois enregistrée, ta fiche est dans ton compte et sur tous tes appareils.'
     : 'Pas encore enregistrée : touche « Ajouter à mes créations » pour la garder. En attendant, ta saisie est gardée sur cet appareil.')+'</p>'));
 
+  volet(right, "calcul");
   wrap.appendChild(left); wrap.appendChild(right);
-  main.appendChild(wrap);
+  corps.appendChild(wrap);
+  main.appendChild(corps);
   adapter();
 
   /* ---------- références (AVANT tout appel à peindre) ---------- */
@@ -11211,7 +11282,7 @@ function barreEnregistrer(o){
       etat.classList.add("err");
       etat.textContent = erreurs.length === 1 ? "1 champ à corriger : " + erreurs[0].lib + "." : erreurs.length + " champs à corriger : " + erreurs.slice(0, 3).map(function(x){ return x.lib; }).join(", ") + (erreurs.length > 3 ? "…" : ".");
       toast(erreurs[0].lib + " : " + erreurs[0].msg);
-      try{ erreurs[0].champ.focus(); erreurs[0].champ.scrollIntoView({block:"center"}); }catch(e){}
+      try{ devoiler(erreurs[0].champ); erreurs[0].champ.focus(); erreurs[0].champ.scrollIntoView({block:"center"}); }catch(e){}
       return;
     }
     etat.classList.remove("err");
@@ -15775,6 +15846,11 @@ function renderCommandeDetail(main, c){
 
   /* --- la frise : où en est la commande, et le seul bouton qui compte --- */
   main.appendChild(friseCommande(c));
+  /* V62 : sur téléphone, la commande se lit en trois volets. */
+  var zone = el('<div class="fiche-corps"></div>');
+  voletsEcran(zone, [["cmd", "Commande"], ["argent", "Argent"], ["docs", "Documents"]], "voletCmd", c.id);
+  main.appendChild(zone);
+  var dv = function(n, v){ if (n) n.setAttribute("data-volet", v); return n; };
 
   /* --- la cliente et ce qui est convenu --- */
   var cId = el('<div class="card" style="margin-bottom:16px"><header><h2>Ce qui est convenu</h2>'+
@@ -16110,13 +16186,13 @@ function renderCommandeDetail(main, c){
     barAccord.appendChild(el('<p class="hint" style="margin:0">Accord validé le <b>'+
       esc(dateLongue(c.accordLe))+'</b>.</p>'));
   }
-  main.appendChild(cId);
+  zone.appendChild(dv(cId, "cmd"));
 
   /* --- l'argent --- */
   var enc = encaisse(c), solde = soldeDu(c);
   var cArgent = el('<div class="card" style="margin-bottom:16px"><header><h2>L\'argent</h2>'+
     '<p>Ce qui a déjà été reçu, ce qui reste à recevoir.</p></header><div class="body">'+
-    '<div class="tiles" style="margin-bottom:14px">'+
+    '<div class="tiles tiles-3" style="margin-bottom:14px">'+
       '<div class="tile"><div class="k">Total de la commande</div><div class="v">'+esc(eur(totalDu(c)))+'</div></div>'+
       '<div class="tile"><div class="k">Déjà reçu</div><div class="v">'+esc(eur(enc))+'</div></div>'+
       (tropPercu(c) > 0
@@ -16255,14 +16331,14 @@ function renderCommandeDetail(main, c){
     }
     cArgent.querySelector(".body").appendChild(zR);
   }
-  main.appendChild(cArgent);
+  zone.appendChild(dv(cArgent, "argent"));
 
   /* --- ce que cette commande te rapporte vraiment --- */
   var b = bilanCommande(c);
   if (b){
     var cB = el('<div class="card" style="margin-bottom:16px"><header><h2>Ce qu\'elle te rapporte</h2>'+
       '<p>Au prix convenu, une fois les matières, le temps et les frais comptés.</p></header>'+
-      '<div class="body"><div class="tiles">'+
+      '<div class="body"><div class="tiles tiles-2">'+
         '<div class="tile"><div class="k">Tes frais + ton temps</div><div class="v">'+esc(eur(b.r.coutRevient))+
           '</div><div class="s">matières, frais, cotisations et ton temps payé à ton objectif</div></div>'+
         '<div class="tile"><div class="k">Temps prévu</div><div class="v">'+esc(dureeTexte(b.heures*60))+
@@ -16279,16 +16355,16 @@ function renderCommandeDetail(main, c){
       'cette pièce (mesuré ou estimé) : il sert au calcul de ton gain à l\'heure et à ton plan de travail.</p>'+
       '</div></div>');
     brancherHeuresMinutes(cB, "cmd-h", function(h){ c.heuresEstimees = h; maj(); }, function(){ setTimeout(render, 0); });
-    main.appendChild(cB);
+    zone.appendChild(dv(cB, "argent"));
     if (b.r.prixObjectif > 0 && totalDu(c) > 10 * b.r.prixObjectif)
-      main.appendChild(el('<div class="banner" role="status" style="background:var(--warn-soft);border-color:var(--warn);margin-bottom:16px">'+
-        '<p><b>Vérifie le prix convenu.</b> Il est plus de dix fois le prix conseillé pour cette création ('+esc(eur(b.r.prixObjectif))+') : une virgule oubliée ?</p></div>'));
+      zone.appendChild(dv(el('<div class="banner" role="status" style="background:var(--warn-soft);border-color:var(--warn);margin-bottom:16px">'+
+        '<p><b>Vérifie le prix convenu.</b> Il est plus de dix fois le prix conseillé pour cette création ('+esc(eur(b.r.prixObjectif))+') : une virgule oubliée ?</p></div>'), "argent"));
     if (b.gainHoraire < (state.reglages.tauxHoraire||0) && totalDu(c) > 0){
-      main.appendChild(el('<div class="banner" style="background:var(--warn-soft);border-color:var(--warn);margin-bottom:16px">'+
+      zone.appendChild(dv(el('<div class="banner" style="background:var(--warn-soft);border-color:var(--warn);margin-bottom:16px">'+
         '<p><b>À ce prix, tu te paies '+esc(eur(b.gainHoraire))+' de l\'heure</b> au lieu des '+
         esc(eur(state.reglages.tauxHoraire))+' que tu vises. Ce n\'est pas forcément une erreur, '+
         'mais assure-toi que c\'est un choix. Prix conseillé : '+
-        '<b>'+esc(eur(b.r.prixObjectif))+'</b>.</p></div>'));
+        '<b>'+esc(eur(b.r.prixObjectif))+'</b>.</p></div>'), "argent"));
     }
   } else {
     /* Pièce libre, sans fiche : le temps reste indispensable au plan de
@@ -16298,7 +16374,7 @@ function renderCommandeDetail(main, c){
       'Sinon, indique au moins le temps qu\'elle demande : il compte dans ton plan de travail.</p></header>'+
       '<div class="body"><div class="f" style="max-width:340px"><span>Temps de travail pour cette commande</span>'+champsHeuresMinutes("cmd-h", c.heuresEstimees, 0)+'</div></div></div>');
     brancherHeuresMinutes(cH, "cmd-h", function(h){ c.heuresEstimees = h; maj(); }, null);
-    main.appendChild(cH);
+    zone.appendChild(dv(cH, "argent"));
   }
 
   /* --- les pièces de la commande, dans l'atelier (V59) --- */
@@ -16337,7 +16413,8 @@ function renderCommandeDetail(main, c){
           bM.classList.add("sm"); bM.style.marginTop = "10px"; bP.appendChild(bM);
         }
       }
-      main.appendChild(cP);
+      /* V62 : les pièces de la commande juste sous la frise, avant le formulaire. */
+      zone.insertBefore(dv(cP, "cmd"), cId);
     }
   }
 
@@ -16362,12 +16439,12 @@ function renderCommandeDetail(main, c){
       });
       if (aAcheter > 0) cBes.querySelector(".body").appendChild(el('<p class="hint" style="margin:10px 0 0">À acheter : environ <b>'+esc(eur(aAcheter))+'</b> au dernier prix payé. '+
         'Ton stock sert aussi à tes autres commandes : vérifie-le si plusieurs sont en cours.</p>'));
-      main.appendChild(cBes);
+      zone.appendChild(dv(cBes, "cmd"));
     }
   }
 
   /* --- les documents : devis, bon de commande, bon de livraison (V58) --- */
-  main.appendChild(carteDocumentsCommande(c));
+  zone.appendChild(dv(carteDocumentsCommande(c), "docs"));
 
   /* --- la facture --- */
   var manques = manquesFacture(c);
@@ -16388,9 +16465,13 @@ function renderCommandeDetail(main, c){
     /* Ce qui manque est dit tout de suite, avec le moyen de le compléter. */
     var zM = el('<div class="manques"><p style="margin:0 0 6px"><b>Pour établir la facture, il manque :</b></p><ul></ul></div>');
     var ulM = zM.querySelector("ul");
+    var dejaLib = {};
     manques.forEach(function(x){
       var li = el('<li><span>'+esc(x.t)+'</span></li>');
-      if (x.a){ var b = bouton(x.lib, x.a); b.classList.add("sm"); li.appendChild(b); }
+      /* V62 : « ton nom », « ton adresse »… se complètent au même endroit :
+         un seul bouton suffit. */
+      if (x.a && dejaLib[x.lib]){ /* même bouton que plus haut */ }
+      else if (x.a){ dejaLib[x.lib] = true; var b = bouton(x.lib, x.a); b.classList.add("sm"); li.appendChild(b); }
       else if (x.champ){
         var b2 = bouton("Compléter", function(){ var ch = document.querySelector(x.champ); if (ch){ ch.scrollIntoView({block:"center"}); ch.focus(); } });
         b2.classList.add("sm"); li.appendChild(b2);
@@ -16464,8 +16545,8 @@ function renderCommandeDetail(main, c){
   }
   bodyF.appendChild(el('<p class="hint" style="margin-top:10px">La numérotation doit être continue, sans numéro manquant. '+
     'Conserve tes factures et avoirs 10 ans : tu les retrouves dans le registre, en bas de la liste des commandes.</p>'));
-  if (estPro()) main.appendChild(cF);
-  else main.appendChild(el('<p class="hint" style="margin:0 0 16px">Pas de facture en profil amateur : une facture demande une activité déclarée (Réglages › Mon activité).</p>'));
+  if (estPro()) zone.appendChild(dv(cF, "docs"));
+  else zone.appendChild(dv(el('<p class="hint" style="margin:0 0 16px">Pas de facture en profil amateur : une facture demande une activité déclarée (Réglages › Mon activité).</p>'), "docs"));
 
   /* --- historique de la commande --- */
   if ((c.journal || []).length){
@@ -16475,7 +16556,7 @@ function renderCommandeDetail(main, c){
     c.journal.slice().reverse().forEach(function(x){
       olJ.appendChild(el('<li><time>'+esc(new Date(x.t).toLocaleString("fr-FR", {day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit"}))+'</time> '+esc(x.txt)+'</li>'));
     });
-    main.appendChild(cJ);
+    zone.appendChild(dv(cJ, "docs"));
   }
 
   var sup = el('<div class="savebar"></div>');
@@ -16516,7 +16597,7 @@ function renderCommandeDetail(main, c){
     });
   });
   sup.appendChild(bSup);
-  main.appendChild(sup);
+  zone.appendChild(dv(sup, "docs"));
 }
 
 /* La facture est le seul document de l'application qui sorte de l'atelier :
@@ -16966,7 +17047,7 @@ function renderBibliotheque(main){
         /* L'autrice voit où en est son patron, et peut contester. */
         var etatP = p2.retire && p2.decision === "retire"
           ? "Retiré de la bibliothèque le " + dateCourte(p2.decision_le) + " après examen. Motif : " + (p2.decision_motif || "non précisé") + "."
-          : p2.masque ? "Masqué provisoirement : des signalements graves sont en cours d'examen. Les autres membres ne le voient plus pour l'instant."
+          : p2.masque ? "Masqué automatiquement, à titre provisoire, après plusieurs signalements graves, en attendant l'examen par une personne. Les autres membres ne le voient plus pour l'instant. Tu peux contester avec le bouton ci-dessous."
           : p2.en_revue ? "Des signalements sont en cours d'examen. Ton patron reste visible en attendant."
           : p2.decision === "maintenu" ? "Examiné après des signalements et maintenu." : "";
         if (etatP) det.querySelector(".body").insertBefore(el('<div class="manques" style="margin-bottom:12px"><p style="margin:0">'+esc(etatP)+'</p></div>'), det.querySelector(".body").firstChild);
@@ -16991,7 +17072,7 @@ function renderBibliotheque(main){
       } else {
         bar.appendChild(bouton("Signaler", function(){
           dialogueTexte({titre:"Signaler ce patron",
-            texte:"Ton signalement est examiné par une personne. Un signalement abusif ne fait rien retirer.",
+            texte:"Ton signalement est examiné par une personne, et la décision te sera communiquée par e-mail. Un signalement abusif ne fait rien retirer. En l'envoyant, tu déclares de bonne foi que les informations données sont exactes.",
             choix:{lib:"Ce qui pose problème", options:[["droits","Il reproduit le patron de quelqu'un d'autre sans son accord"],
                    ["illicite","Contenu illégal ou haineux"],["dangereux","Instructions dangereuses (jouet pour bébé, par exemple)"],
                    ["trompeur","Titre ou contenu trompeur"],["autre","Autre raison"]]},

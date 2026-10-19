@@ -32,9 +32,6 @@
   ul{padding-left:20px;}
   a{color:var(--primary);}
   .date{color:var(--muted);font-size:14px;margin-bottom:24px;}
-  .todo{background:var(--warn-soft);border:1px solid var(--warn);border-radius:12px;
-    padding:14px 16px;margin:20px 0;}
-  .todo b{color:var(--warn);}
   table{width:100%;border-collapse:collapse;margin:12px 0 20px;font-size:15px;table-layout:fixed;}
   th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--rule);vertical-align:top;
     overflow-wrap:anywhere;}
@@ -50,6 +47,16 @@
       text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px;}
   }
   .retour{display:inline-block;margin-bottom:20px;font-size:14px;}
+  .legal-nav{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:14px;margin:0 0 22px;padding:0 0 14px;border-bottom:1px solid var(--rule);}
+  .legal-nav a{text-decoration:none;}
+  .legal-nav a[aria-current="page"]{color:var(--ink);font-weight:600;}
+  h3{font-size:16px;margin:20px 0 8px;}
+  .encadre{background:var(--ground);border:1px solid var(--rule);border-radius:12px;padding:14px 16px;margin:14px 0 18px;}
+  .encadre p:last-child{margin-bottom:0;}
+  dl{margin:0 0 14px;} dt{font-weight:600;margin-top:10px;} dd{margin:2px 0 0;}
+  .sommaire{font-size:15px;columns:2 220px;column-gap:28px;padding-left:20px;margin:0 0 8px;}
+  .sommaire li{margin:0 0 6px;break-inside:avoid;}
+  @media print{body{background:#fff;padding:0} main{border:none;padding:0} .retour,.legal-nav{display:none}}
 </style>
 </head>
 <body>
@@ -57,235 +64,303 @@
 
 <a class="retour" href="index.html">← Retour à l'application</a>
 
+<nav class="legal-nav" aria-label="Informations légales">
+  <a href="mentions-legales.html">Mentions légales</a>
+  <a href="confidentialite.html" aria-current="page">Politique de confidentialité</a>
+  <a href="cgv.html">Conditions générales d'utilisation</a>
+</nav>
+
 <h1>Politique de confidentialité</h1>
-<p class="date">Dernière mise à jour : 1er octobre 2026.</p>
+<p class="date">En vigueur au 18 octobre 2026.</p>
 
+<div class="encadre">
+  <p><b>En bref.</b> Crochompte ne collecte que ce qui est nécessaire pour faire
+  fonctionner le compte et retrouver l'atelier sur chaque appareil. Aucune
+  publicité, aucune mesure d'audience, aucun profilage, aucune revente de
+  données. L'Utilisateur peut exporter ou supprimer ses données à tout moment
+  depuis l'application.</p>
+</div>
 
+<ol class="sommaire">
+  <li><a href="#responsable">Responsable du traitement</a></li>
+  <li><a href="#donnees">Données traitées, finalités et durées</a></li>
+  <li><a href="#bases">Bases légales</a></li>
+  <li><a href="#clientele">Données de la clientèle de l'Utilisateur</a></li>
+  <li><a href="#bibliotheque">Bibliothèque partagée</a></li>
+  <li><a href="#destinataires">Destinataires et sous-traitants</a></li>
+  <li><a href="#transferts">Transferts hors de l'Union européenne</a></li>
+  <li><a href="#local">Stockage sur l'appareil et cookies</a></li>
+  <li><a href="#securite">Sécurité</a></li>
+  <li><a href="#droits">Droits de l'Utilisateur</a></li>
+  <li><a href="#mineurs">Mineurs</a></li>
+  <li><a href="#modifications">Modifications</a></li>
+</ol>
 
-<h2>Qui est responsable de tes données</h2>
+<h2 id="responsable">1. Responsable du traitement</h2>
 <p>
-  <b>Abdelkarim FARHANI</b>, exerçant sous le nom commercial <b>Crochompte</b>,
-  personne physique.<!-- À ajouter dès l'immatriculation : adresse et numéro SIRET. --><br>
-  Pour toute question sur tes données : <b><a href="mailto:bonjour@crochompte.com">bonjour@crochompte.com</a></b>.
+  Le responsable du traitement est <b>Abdelkarim Farhani</b>, éditeur du
+  service Crochompte (voir les <a href="mentions-legales.html">mentions légales</a>).
+</p>
+<p>
+  Toute question relative aux données personnelles ou demande d'exercice des
+  droits est à adresser à
+  <a href="mailto:bonjour@crochompte.com?subject=Donn%C3%A9es%20personnelles">bonjour@crochompte.com</a>.
+  Le service étant édité par une personne seule, aucun délégué à la protection
+  des données n'est désigné ; les demandes sont traitées directement par le
+  responsable du traitement.
 </p>
 
-<h2>Ce que l'application enregistre</h2>
+<h2 id="donnees">2. Données traitées, finalités et durées de conservation</h2>
 <p>
-  Crochompte existe en deux versions : une version publique, sans compte, où
-  rien ne quitte ton appareil ; et <b>cette installation-ci, qui te demande de
-  créer un compte pour l'utiliser</b> — c'est ce qui te permet de retrouver
-  ton atelier sur ton téléphone comme sur ton ordinateur. Voici ce qui est
-  enregistré sur le serveur une fois ton compte créé, et rien d'autre.
+  Le service peut être essayé 14 jours sans compte : dans ce cas, aucune donnée
+  n'est envoyée au serveur et tout reste dans le navigateur de l'appareil
+  utilisé. Au-delà, un compte est nécessaire ; les données ci-dessous sont
+  alors traitées.
 </p>
-
 <table>
-  <tr><th>Donnée</th><th>Pourquoi</th><th>Combien de temps</th></tr>
-  <tr>
-    <td data-l="Donnée">Ton pseudo</td>
-    <td data-l="Pourquoi">Te reconnaître à la connexion. Jamais montré à personne d'autre, sauf si tu choisis toi-même de l'écrire comme signature d'un patron partagé.</td>
-    <td data-l="Combien de temps">Jusqu'à l'effacement de ton compte</td>
-  </tr>
-  <tr>
-    <td data-l="Donnée">Ton adresse e-mail</td>
-    <td data-l="Pourquoi">Confirmer que le compte est le tien à l'inscription, te reconnecter si
-        tu préfères l'utiliser plutôt que ton pseudo, et t'envoyer un lien si tu oublies ton
-        mot de passe.</td>
-    <td data-l="Combien de temps">Jusqu'à l'effacement de ton compte</td>
-  </tr>
-  <tr>
-    <td data-l="Donnée">Ton mot de passe, chiffré</td>
-    <td data-l="Pourquoi">Te reconnaître à la connexion. Jamais lisible, même par nous.</td>
-    <td data-l="Combien de temps">Jusqu'à l'effacement de ton compte</td>
-  </tr>
-  <tr>
-    <td data-l="Donnée">Ton attestation « J'ai 15 ans ou plus », datée</td>
-    <td data-l="Pourquoi">Le service ne s'adresse pas aux personnes de moins de 15 ans. On garde
-        la trace de ta déclaration, pas ta date de naissance.</td>
-    <td data-l="Combien de temps">Jusqu'à l'effacement de ton compte</td>
-  </tr>
-  <tr>
-    <td data-l="Donnée">Facultatif : ton prénom, ton nom, ta ville, ton pays, ton type d'activité
-        — seulement si tu choisis de les renseigner</td>
-    <td data-l="Pourquoi">Le prénom sert à te saluer dans nos e-mails. Le reste nous aide à
-        comprendre qui utilise Crochompte. Rien de tout cela n'est nécessaire pour utiliser l'outil.</td>
-    <td data-l="Combien de temps">Jusqu'à ce que tu les effaces, ou jusqu'à l'effacement de ton compte</td>
-  </tr>
-  <tr>
-    <td data-l="Donnée">Ton atelier : réglages, matières, créations, pièces, patrons</td>
-    <td data-l="Pourquoi">Te les restituer sur tes différents appareils</td>
-    <td data-l="Combien de temps">Jusqu'à l'effacement de ton compte</td>
-  </tr>
-  <tr>
-    <td data-l="Donnée">Tes photos et les pages de patrons que tu as importées</td>
-    <td data-l="Pourquoi">Les afficher dans ton atelier</td>
-    <td data-l="Combien de temps">Jusqu'à l'effacement de ton compte</td>
-  </tr>
-  <tr>
-    <td data-l="Donnée">Les 30 dernières versions de ton atelier</td>
-    <td data-l="Pourquoi">Revenir en arrière après une erreur, ou si deux appareils ont modifié ton atelier en même temps</td>
-    <td data-l="Combien de temps">Les plus anciennes sont effacées au-delà de 30 ; toutes à l'effacement de ton compte</td>
-  </tr>
-  <tr>
-    <td data-l="Donnée">Tes factures et avoirs émis (copie figée)</td>
-    <td data-l="Pourquoi">Garantir une numérotation sans trou ni doublon, et te permettre de les retrouver</td>
-    <td data-l="Combien de temps">Jusqu'à l'effacement de ton compte. Tu dois toi-même conserver tes factures 10 ans : télécharge ton registre avant d'effacer ton compte</td>
-  </tr>
-  <tr>
-    <td data-l="Donnée">Tentatives de connexion : identifiant tapé et adresse IP</td>
-    <td data-l="Pourquoi">Bloquer les essais de mots de passe à répétition</td>
-    <td data-l="Combien de temps">Environ 24 heures (effacées automatiquement)</td>
-  </tr>
-  <tr>
-    <td data-l="Donnée">Si tu signales un patron : le motif et ton explication</td>
-    <td data-l="Pourquoi">Examiner le signalement et motiver la décision</td>
-    <td data-l="Combien de temps">Tant que le patron existe ; à l'effacement de ton compte</td>
-  </tr>
+  <thead><tr><th>Données</th><th>Finalité</th><th>Durée de conservation</th></tr></thead>
+  <tbody>
+    <tr>
+      <td data-l="Données">Pseudo, adresse électronique, mot de passe (jamais stocké en clair : seule une empreinte irréversible est conservée)</td>
+      <td data-l="Finalité">Création du compte, connexion, confirmation de l'adresse, réinitialisation du mot de passe</td>
+      <td data-l="Durée">Jusqu'à la suppression du compte</td>
+    </tr>
+    <tr>
+      <td data-l="Données">Attestation datée « 15 ans ou plus »</td>
+      <td data-l="Finalité">Preuve du respect de l'âge minimum ; la date de naissance n'est pas conservée</td>
+      <td data-l="Durée">Jusqu'à la suppression du compte</td>
+    </tr>
+    <tr>
+      <td data-l="Données">Facultatif : prénom, nom, ville, pays, type d'activité, renseignés librement par l'Utilisateur</td>
+      <td data-l="Finalité">Personnalisation des messages, connaissance générale des utilisateurs du service ; aucune conséquence en cas de non-renseignement</td>
+      <td data-l="Durée">Jusqu'à leur effacement par l'Utilisateur ou la suppression du compte</td>
+    </tr>
+    <tr>
+      <td data-l="Données">Contenu de l'atelier : réglages, matières, créations, pièces, commandes, ventes, patrons, photos et pages importées</td>
+      <td data-l="Finalité">Sauvegarde et restitution de l'atelier sur les appareils de l'Utilisateur</td>
+      <td data-l="Durée">Jusqu'à la suppression du compte</td>
+    </tr>
+    <tr>
+      <td data-l="Données">Les 30 dernières versions de l'atelier</td>
+      <td data-l="Finalité">Retour en arrière après une erreur ou une modification simultanée sur deux appareils</td>
+      <td data-l="Durée">Remplacement au-delà de 30 versions ; suppression avec le compte</td>
+    </tr>
+    <tr>
+      <td data-l="Données">Factures et avoirs émis par l'Utilisateur (copie figée)</td>
+      <td data-l="Finalité">Numérotation continue, sans doublon, et consultation des documents émis</td>
+      <td data-l="Durée">Jusqu'à la suppression du compte. L'obligation de conservation de dix ans incombe à l'Utilisateur, qui doit télécharger son registre avant toute suppression</td>
+    </tr>
+    <tr>
+      <td data-l="Données">État de l'accès : période d'essai, abonnement, accès offert, dates de fin, code d'accès utilisé</td>
+      <td data-l="Finalité">Ouverture et fermeture de l'accès au service</td>
+      <td data-l="Durée">Jusqu'à la suppression du compte</td>
+    </tr>
+    <tr>
+      <td data-l="Données">Tentatives de connexion et de réinitialisation : identifiant saisi, adresse IP</td>
+      <td data-l="Finalité">Protection contre les tentatives répétées et les abus</td>
+      <td data-l="Durée">24 heures environ, puis effacement automatique</td>
+    </tr>
+    <tr>
+      <td data-l="Données">Signalement d'un patron : motif et explication</td>
+      <td data-l="Finalité">Examen du signalement et motivation de la décision</td>
+      <td data-l="Durée">Tant que le patron existe, et au plus jusqu'à la suppression du compte de l'auteur du signalement</td>
+    </tr>
+    <tr>
+      <td data-l="Données">Journaux techniques des serveurs (adresse IP, date, opération ; adresse électronique partiellement masquée lors d'une demande de réinitialisation de mot de passe)</td>
+      <td data-l="Finalité">Sécurité, diagnostic des incidents</td>
+      <td data-l="Durée">Quelques jours, selon le cycle de rotation des prestataires</td>
+    </tr>
+    <tr>
+      <td data-l="Données">Échanges par courrier électronique avec le service</td>
+      <td data-l="Finalité">Réponse aux demandes, assistance, suivi des signalements</td>
+      <td data-l="Durée">Trois ans à compter du dernier échange</td>
+    </tr>
+  </tbody>
 </table>
-<h2>Les données de ta clientèle</h2>
-<p>Si tu notes des commandes, tu y enregistres le nom, le moyen de contact et
-éventuellement l'adresse des personnes qui te commandent. Pour ces données-là, c'est
-<b>toi</b> qui en as la responsabilité : tu décides de ce que tu notes et pourquoi.
-Crochompte les conserve pour toi, dans ton compte, sans jamais les lire ni
-les utiliser (rôle de sous-traitant, article 28 du RGPD). N'y note que ce qui
-est utile à la commande et à la facture, et efface les commandes dont tu n'as
-plus besoin (les factures, elles, se gardent 10 ans).</p>
-<p>À l'inscription, on ne te demande que ton pseudo, ton adresse e-mail, un mot de passe
-et de confirmer que tu as 15 ans ou plus. Les informations facultatives s'ajoutent, se
-corrigent et s'effacent à tout moment dans Réglages, rubrique « Mon compte ».</p>
-
-<p><b>Ce qui n'est pas collecté :</b> aucun traceur publicitaire, aucune mesure
-d'audience, aucun profilage, aucune revente ni partage à des tiers commerciaux.
-L'application ne cherche pas à savoir ce que tu fais : elle t'aide à le compter.</p>
-
-<h2>Si tu partages un patron</h2>
 <p>
-  La <b>bibliothèque partagée</b> est un espace d'échange entre membres de
-  Crochompte. Rien n'y arrive tout seul : un patron n'y figure que si tu as
-  choisi de l'y mettre, patron par patron.
+  <b>Comptes inactifs.</b> Un compte sans aucune connexion pendant deux ans peut
+  être supprimé, après un avertissement envoyé par courrier électronique au
+  moins trente jours à l'avance.
 </p>
-<p>Quand tu publies, deviennent <b>visibles par les autres membres</b> :
-le texte du patron, son titre, la signature que tu as choisi d'afficher, la
-licence retenue et la date. Rien d'autre : ni ton adresse e-mail, ni ton
-pseudo de connexion s'il diffère du nom affiché, ni tes pages photographiées —
-celles-ci restent privées, dans ton compte, et ne peuvent pas être publiées.</p>
 <p>
-  Tu peux retirer un patron partagé à tout moment ; ta copie personnelle n'est
-  pas touchée. Crochompte met l'espace à disposition : les patrons y sont
-  publiés tels quels par les personnes qui les partagent, et qui en répondent, et ne sont ni relus
-  ni vérifiés. Un bouton <b>Signaler</b> figure sur chacun.
+  <b>Paiement.</b> Aucune donnée de paiement n'est collectée à ce jour. Si une
+  offre payante est proposée, la présente politique sera complétée, avant toute
+  souscription, par l'identité du prestataire de paiement et les données qui
+  lui sont confiées. Crochompte ne conservera jamais de numéro de carte bancaire.
+</p>
+<p>
+  <b>Ce qui n'est pas collecté :</b> aucun traceur publicitaire, aucune mesure
+  d'audience, aucun profilage, aucune décision automatisée produisant des
+  effets juridiques, aucune revente ni cession de données.
 </p>
 
-<h2>Sur quelle base juridique</h2>
+<h2 id="bases">3. Bases légales</h2>
 <ul>
-  <li><b>L'exécution du service</b> (article 6.1.b du RGPD) : sans ton adresse et
-      ton atelier, il n'y a pas de compte à te rendre.</li>
-  <li>Aucun traitement ne repose sur ton consentement à des fins publicitaires,
-      puisqu'il n'y en a aucune.</li>
+  <li><b>Exécution du contrat</b> (article 6.1.b du RGPD) : création et gestion
+    du compte, sauvegarde de l'atelier, envoi des courriers électroniques
+    nécessaires au compte, gestion de l'accès au service.</li>
+  <li><b>Intérêt légitime</b> (article 6.1.f du RGPD) : sécurité du service et
+    prévention des abus, traitement des signalements, réponse aux demandes
+    adressées au service, connaissance générale des utilisateurs à partir des
+    informations facultatives qu'ils choisissent de renseigner.</li>
+  <li><b>Obligation légale</b> (article 6.1.c du RGPD) : réponse aux réquisitions
+    des autorités et traitement des contenus illicites signalés.</li>
 </ul>
+<p>Aucune donnée n'est traitée à des fins de prospection commerciale.</p>
 
-<h2>Qui héberge, et où</h2>
+<h2 id="clientele">4. Données de la clientèle de l'Utilisateur</h2>
+<p>
+  Les commandes, factures et fiches de clientèle peuvent contenir des données
+  relatives aux clients de l'Utilisateur (nom, moyen de contact, adresse).
+  L'Utilisateur décide seul de leur saisie et de leur usage et en est
+  responsable. Crochompte les conserve pour son compte, sans les consulter ni
+  les exploiter, en qualité de sous-traitant au sens de l'article 28 du RGPD,
+  dans les conditions prévues à l'article 9 des
+  <a href="cgv.html#sous-traitance">conditions générales d'utilisation</a>.
+</p>
+<p>
+  Il appartient à l'Utilisateur de ne saisir que les données nécessaires à la
+  commande et à la facturation, et de supprimer celles qui ne sont plus utiles.
+</p>
+
+<h2 id="bibliotheque">5. Bibliothèque partagée</h2>
+<p>
+  La publication d'un patron dans la bibliothèque partagée est toujours un choix
+  explicite de l'Utilisateur, patron par patron. Sont alors visibles des autres
+  membres : le texte du patron, son titre, la signature choisie, la licence et
+  la date de publication. L'adresse électronique, le pseudo de connexion (s'il
+  diffère de la signature) et les pages photographiées ne sont jamais publiés.
+  L'Utilisateur peut retirer un patron à tout moment, sauf pendant l'examen d'un
+  signalement qui le concerne ; sa copie personnelle est conservée.
+</p>
+
+<h2 id="destinataires">6. Destinataires et sous-traitants</h2>
+<p>
+  Les données ne sont accessibles qu'au responsable du traitement et aux
+  prestataires techniques ci-dessous, qui agissent sur ses instructions, dans
+  la limite de ce qui est nécessaire à leur mission.
+</p>
 <table>
-  <tr><th>Prestataire</th><th>Rôle</th><th>Lieu</th></tr>
-  <tr>
-    <td data-l="Prestataire">Supabase</td>
-    <td data-l="Rôle">Base de données, comptes, stockage des photos</td>
-    <td data-l="Lieu">Union européenne — Irlande (région <i>West EU</i>)</td>
-  </tr>
-  <tr>
-    <td data-l="Prestataire">GitHub Pages (Microsoft)</td>
-    <td data-l="Rôle">Hébergement des pages du site</td>
-    <td data-l="Lieu">Diffusé par un réseau mondial de serveurs ; l'éditeur, Microsoft,
-        est basé aux États-Unis. Ce transfert est encadré par le
-        <i>Data Privacy Framework</i> UE–États-Unis.</td>
-  </tr>
-  <tr>
-    <td data-l="Prestataire">Wikimedia Commons et Project Gutenberg</td>
-    <td data-l="Rôle">Certaines photos d'illustration du catalogue sont affichées depuis leurs serveurs : ton navigateur leur transmet alors ton adresse IP, comme pour toute image d'un autre site. Aucune autre donnée.</td>
-    <td data-l="Lieu">États-Unis</td>
-  </tr>
-  <tr>
-    <td data-l="Prestataire">Stripe Payments Europe, Ltd.</td>
-    <td data-l="Rôle">Paiement de l'abonnement. Quand tu t'abonnes, tu saisis ta carte sur une page
-        Stripe : <b>aucune donnée bancaire ne passe par Crochompte</b>. Nous ne recevons que
-        l'état de ton abonnement (offre, dates) et un identifiant client Stripe. Stripe est un
-        établissement de paiement agréé, soumis à ses propres obligations.</td>
-    <td data-l="Lieu">Union européenne — Irlande (Dublin)</td>
-  </tr>
-  <tr>
-    <td data-l="Prestataire">Brevo (Sendinblue SAS)</td>
-    <td data-l="Rôle">Envoi des e-mails liés à ton compte : confirmation de ton adresse
-        et lien de changement de mot de passe. Aucun e-mail publicitaire.</td>
-    <td data-l="Lieu">Union européenne — société française, établie à Paris</td>
-  </tr>
+  <thead><tr><th>Prestataire</th><th>Mission</th><th>Localisation</th></tr></thead>
+  <tbody>
+    <tr>
+      <td data-l="Prestataire">Supabase Pte. Ltd.</td>
+      <td data-l="Mission">Base de données, authentification, stockage des photos</td>
+      <td data-l="Localisation">Union européenne (Irlande)</td>
+    </tr>
+    <tr>
+      <td data-l="Prestataire">GitHub, Inc. (GitHub Pages)</td>
+      <td data-l="Mission">Hébergement et diffusion des pages du site ; journaux techniques de connexion (adresse IP)</td>
+      <td data-l="Localisation">États-Unis et réseau mondial de diffusion</td>
+    </tr>
+    <tr>
+      <td data-l="Prestataire">Sendinblue SAS (Brevo)</td>
+      <td data-l="Mission">Envoi des courriers électroniques liés au compte (confirmation d'adresse, réinitialisation du mot de passe)</td>
+      <td data-l="Localisation">Union européenne (France)</td>
+    </tr>
+  </tbody>
 </table>
-<p>Ces prestataires agissent comme sous-traitants : ils traitent les données
-pour le compte du responsable ci-dessus, et pour rien d'autre.</p>
+<p>
+  <b>Contenus externes.</b> Certaines photographies d'illustration du catalogue
+  sont chargées depuis les serveurs de Wikimedia Commons et de Project
+  Gutenberg (États-Unis) : le navigateur leur transmet alors l'adresse IP de
+  l'appareil, comme pour toute image d'un site tiers. Aucune autre donnée ne
+  leur est communiquée.
+</p>
+<p>
+  <b>Saisie vocale.</b> Le compteur de rangs « à la voix » utilise la
+  reconnaissance vocale intégrée au navigateur. Selon le navigateur, le son
+  peut être traité par son éditeur (par exemple Google pour Chrome, Apple pour
+  Safari), selon ses propres conditions. Cette fonction n'est activée qu'à la
+  demande de l'Utilisateur ; Crochompte ne reçoit ni n'enregistre aucun son.
+</p>
 
-<h2>Tes droits</h2>
-<p>Tu peux à tout moment :</p>
+<h2 id="transferts">7. Transferts hors de l'Union européenne</h2>
+<p>
+  Les données des comptes sont hébergées dans l'Union européenne (Irlande). Des
+  transferts peuvent néanmoins avoir lieu :
+</p>
 <ul>
-  <li><b>Consulter et emporter tes données</b> — l'export de sauvegarde, dans
-      Réglages, te rend l'intégralité de ton atelier dans un fichier lisible.</li>
-  <li><b>Corriger</b> ce qui est inexact — directement dans l'application.</li>
-  <li><b>Tout effacer</b> — le bouton « Supprimer mon compte », dans Réglages › Mon compte,
-      supprime définitivement ton atelier, tes photos et ton compte.
-      C'est immédiat et irréversible.</li>
-  <li><b>T'opposer</b> ou demander une limitation : écris à l'adresse ci-dessus.</li>
+  <li><b>Supabase Pte. Ltd. (Singapour)</b> : accès technique pour l'exploitation
+    du service, encadré par les clauses contractuelles types de la Commission
+    européenne (décision 2021/914) intégrées à son accord de traitement des
+    données ;</li>
+  <li><b>GitHub, Inc. (États-Unis)</b> : journaux de connexion aux pages du site,
+    encadrés par le cadre de protection des données UE–États-Unis (décision
+    d'adéquation du 10 juillet 2023).</li>
 </ul>
 <p>
-  Si une demande reste sans réponse, tu peux saisir la
-  <a href="https://www.cnil.fr/fr/plaintes" target="_blank" rel="noopener">CNIL</a>.
+  Une copie de ces garanties peut être obtenue sur demande à
+  bonjour@crochompte.com.
 </p>
 
-<h2>Sécurité</h2>
+<h2 id="local">8. Stockage sur l'appareil et cookies</h2>
+<p>
+  Le service n'utilise aucun cookie publicitaire ni de mesure d'audience. Il
+  enregistre dans le navigateur (stockage local et base IndexedDB) l'atelier,
+  les photos, les préférences d'affichage et, lorsqu'une session est ouverte,
+  un jeton de connexion. Ces éléments sont strictement nécessaires au
+  fonctionnement du service demandé par l'Utilisateur, y compris hors
+  connexion ; ils ne requièrent donc pas de consentement préalable
+  (article 82 de la loi Informatique et Libertés).
+</p>
+<p>
+  À la déconnexion, l'atelier et les photos sont retirés de l'appareil après
+  leur enregistrement en ligne.
+</p>
+
+<h2 id="securite">9. Sécurité</h2>
 <ul>
-  <li>Ton mot de passe n'est <b>jamais stocké en clair</b> : il est chiffré
-      dès qu'il arrive sur le serveur, par la brique d'authentification de
-      Supabase. Personne — pas même nous — ne peut le consulter.</li>
-  <li>Ton pseudo n'est <b>jamais montré à personne d'autre</b> qu'à toi : il
-      sert uniquement à te reconnecter. Quand tu partages un patron, c'est toi
-      qui écris la signature affichée ; ton pseudo n'est jamais mis à sa
-      place sans toi.</li>
-  <li>Ton adresse e-mail sert à confirmer que le compte est le tien, à
-      t'envoyer un lien en cas de mot de passe oublié, et — si tu le
-      préfères à ton pseudo — à te reconnecter. Elle n'est jamais montrée à
-      aux autres membres.</li>
-  <li>La base applique une <b>séparation par compte au niveau du serveur</b>
-      (row level security) : une requête ne peut renvoyer que les lignes de la
-      personne connectée, quelle que soit la façon dont elle est formulée.</li>
-  <li>Le stockage des photos est <b>privé</b> et cloisonné par compte.</li>
-  <li>Les échanges se font en HTTPS.</li>
+  <li>Échanges chiffrés (HTTPS) entre l'appareil et les serveurs.</li>
+  <li>Mot de passe jamais stocké en clair : seule une empreinte irréversible
+    (hachage) est conservée, illisible y compris par l'éditeur.</li>
+  <li>Cloisonnement des données par compte au niveau du serveur : une requête
+    ne peut renvoyer que les données du compte connecté.</li>
+  <li>Stockage privé des photos, réservé à chaque compte.</li>
+  <li>Limitation des tentatives de connexion et de réinitialisation.</li>
 </ul>
-
-<h2>Cookies</h2>
 <p>
-  Aucun cookie publicitaire ni de mesure d'audience. L'application conserve
-  seulement, dans ton navigateur, ton atelier et — si ta session est ouverte — un jeton
-  de session pour ne pas te redemander de te connecter à chaque visite. Ces
-  éléments sont nécessaires au fonctionnement : ils ne demandent pas de
-  consentement préalable. Quand tu te déconnectes, ton atelier et tes photos
-  sont retirés de cet appareil : ils restent seulement dans ton compte.
+  En cas de violation de données présentant un risque, la CNIL est notifiée
+  dans les 72 heures et les personnes concernées sont informées lorsque la
+  réglementation l'exige.
 </p>
 
-<h2>Ton abonnement</h2>
+<h2 id="droits">10. Droits de l'Utilisateur</h2>
 <p>
-  Crochompte se paie par abonnement après 14 jours d'essai gratuit. Nous
-  enregistrons l'état de ton accès (essai, abonnement, accès offert, dates de
-  fin) et, si tu utilises un code cadeau, le code utilisé. Ces données servent
-  uniquement à ouvrir ou fermer l'accès et à établir tes factures d'abonnement.
-  Quand ton accès se termine, ton atelier est conservé, consultable et
-  exportable ; il n'est effacé que si tu supprimes ton compte, ou après deux
-  ans sans connexion (tu es prévenue par e-mail avant).
+  Conformément au RGPD et à la loi Informatique et Libertés, l'Utilisateur
+  dispose des droits d'accès, de rectification, d'effacement, de limitation, de
+  portabilité et d'opposition, ainsi que du droit de définir des directives
+  relatives au sort de ses données après son décès.
+</p>
+<ul>
+  <li><b>Accès et portabilité :</b> Réglages › Mes données › télécharger une
+    sauvegarde complète, dans un format lisible et réutilisable.</li>
+  <li><b>Rectification :</b> directement dans l'application.</li>
+  <li><b>Effacement :</b> Réglages › Mon compte › « Supprimer mon compte ».
+    La suppression est immédiate et définitive : compte, atelier, versions,
+    photos et factures. Les copies de sauvegarde techniques du prestataire
+    d'hébergement sont écrasées selon leur propre cycle de rotation.</li>
+  <li><b>Autres demandes :</b> par courrier électronique à
+    <a href="mailto:bonjour@crochompte.com?subject=Donn%C3%A9es%20personnelles">bonjour@crochompte.com</a>,
+    depuis l'adresse du compte. Réponse dans un délai d'un mois.</li>
+</ul>
+<p>
+  L'Utilisateur peut introduire une réclamation auprès de la Commission
+  nationale de l'informatique et des libertés (CNIL), 3 place de Fontenoy,
+  TSA 80715, 75334 Paris Cedex 07, <a href="https://www.cnil.fr" rel="noopener">www.cnil.fr</a>.
 </p>
 
-<h2>Mineurs</h2>
-<p>Le service ne s'adresse pas aux personnes de moins de 15 ans.</p>
-
-<h2>Modifications</h2>
+<h2 id="mineurs">11. Mineurs</h2>
 <p>
-  Toute modification de cette politique sera datée en haut de cette page. Un
-  changement qui élargirait l'usage des données te serait annoncé dans
-  l'application avant d'entrer en vigueur.
+  Le service est réservé aux personnes âgées de 15 ans ou plus. Le compte
+  d'une personne plus jeune, porté à la connaissance de l'éditeur, est supprimé.
+</p>
+
+<h2 id="modifications">12. Modifications</h2>
+<p>
+  La présente politique peut évoluer. La date d'entrée en vigueur figure en tête
+  de page. Toute modification qui étendrait l'usage des données est annoncée
+  dans l'application avant son entrée en vigueur.
 </p>
 
 </main>

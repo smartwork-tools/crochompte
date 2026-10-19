@@ -76,7 +76,7 @@ const txt = async (p, sel) => (await p.locator(sel).first().textContent()).repla
     await p.fill('#am-n', '4'); await p.fill('#am-pu', '2.7');
     await p.click('.dlg [data-oui]'); await p.waitForTimeout(200);
     /* V60 : 2,70 € au lieu de 2,50 € : un nouveau lot, annoncé avant de confirmer */
-    R.recap_annonce_nouveau_lot = /nouveau lot/.test(await txt(p, '.dlg'));
+    R.recap_annonce_nouveau_lot = /une ligne .* sera créée/.test(await txt(p, '.dlg'));
     await p.click('.dlg [data-oui]'); await p.waitForTimeout(300);
     const ach = await dans(p, function(){ var m = matiere(window.__m1); var lot = lotsDe(m).filter(function(x){ return x !== m; })[0]; return {s:m.stock, lot: lot && lot.stock, prix: lot && lot.prix, art: stockArticle(m)}; });
     R.achat_enregistre = ach.s === 200 && ach.lot === 200 && ach.prix === 2.7 && ach.art === 400;
