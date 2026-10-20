@@ -1633,13 +1633,15 @@ function pelotesEnStock(){
    coupe jamais en fin de ligne, fine pour ne pas écarter les chiffres. */
 var FINE = " ";
 function grouperMilliers(s){
-  var p = s.split(","), e = p[0];
+  var p = s.split(/[,.]/), e = p[0];
   if (e.length > 3) e = e.replace(/\B(?=(\d{3})+(?!\d))/g, FINE);
-  return p.length > 1 ? e + "," + p[1] : e;
+  return p.length > 1 ? e + sepDecimal() + p[1] : e;
 }
+/* V63 : virgule décimale en français et en arabe, point en anglais et en chinois. */
+function sepDecimal(){ var I = window.CrochompteI18n; var l = I ? I.langue() : "fr"; return (l === "en" || l === "zh") ? "." : ","; }
 function eur(n){
   if (!isFinite(n) || Math.abs(n) < 0.005) n = 0;
-  return (n<0?"−":"") + grouperMilliers(Math.abs(n).toFixed(2).replace(".",",")) + " €";
+  return (n<0?"−":"") + grouperMilliers(Math.abs(n).toFixed(2).replace(".", sepDecimal())) + " €";
 }
 /* Pour les montants ronds par nature — un plafond légal, un seuil. « 85 000 € »
    se lit d'un coup d'œil ; « 85 000,00 € » fait croire à un calcul. */
@@ -1654,11 +1656,13 @@ function unitePlur(n, unite){
   if (!unite) return "";
   var u = String(unite).trim();
   if (Math.abs(n) < 2 || UNITES_SANS_PLURIEL[u.toLowerCase()] || u.length < 3 || !/^[a-zà-ÿ]+$/i.test(u) || /[sxz]$/i.test(u)) return u;
+  /* V63 : « jeu » → « jeux », « écheveau » → « écheveaux » (pas « jeus »). */
+  if (/(eau|eu|au)$/i.test(u) && !/(pneu|bleu|landau)$/i.test(u)) return u + "x";
   return u + "s";
 }
 function qte(n, unite){
   if (!isFinite(n)) n = 0;
-  var s = (Math.round(n*100)/100).toString().replace(".",",");
+  var s = (Math.round(n*100)/100).toString().replace(".", sepDecimal());
   return s + (unite ? " " + unitePlur(n, unite) : "");
 }
 function dureeTexte(min){
@@ -1668,19 +1672,19 @@ function dureeTexte(min){
   if (m===0) return h + " h";
   return h + " h " + (m<10?"0":"") + m;
 }
-function pct(x){ return (Math.round(x*1000)/10).toString().replace(".",",") + " %"; }
+function pct(x){ return (Math.round(x*1000)/10).toString().replace(".", sepDecimal()) + " %"; }
 /* Dates : un seul endroit pour les écrire. dateCourte → « 12/03/2026 »,
    dateLongue → « 12 mars 2026 », dateISO → « 2026-03-12 » (heure locale).
    Une date absente ou invalide donne « — », jamais « Invalid Date ». */
 function dateCourte(v){
   var t = (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v)) ? new Date(v + "T12:00:00") : new Date(v);
   if (v === null || v === undefined || v === "" || isNaN(t.getTime())) return "—";
-  return t.toLocaleDateString("fr-FR");
+  return t.toLocaleDateString(localeApp());
 }
 function dateLongue(v){
   var t = (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v)) ? new Date(v + "T12:00:00") : new Date(v);
   if (v === null || v === undefined || v === "" || isNaN(t.getTime())) return "—";
-  return t.toLocaleDateString("fr-FR", {day:"numeric", month:"long", year:"numeric"});
+  return t.toLocaleDateString(localeApp(), {day:"numeric", month:"long", year:"numeric"});
 }
 function dateISO(ts){
   var d = ts === undefined ? new Date() : new Date(ts);
@@ -1691,7 +1695,7 @@ function dateISO(ts){
    décoratif derrière (4 et non 4,00 ; 2,25 reste 2,25). */
 function nb(x){
   var v = Number(x); if (!isFinite(v)) return "";
-  return (Math.round(v*100)/100).toString().replace(".",",");
+  return (Math.round(v*100)/100).toString().replace(".", sepDecimal());
 }
 
 /* ═════ RECHERCHE TOLÉRANTE ═════
@@ -1802,7 +1806,7 @@ function noteRecherche(res, q, surChoix){
 function eurU(n, unite){
   if (!isFinite(n)) n = 0;
   var d = Math.abs(n) >= 1 ? 2 : 4;
-  return n.toFixed(d).replace(".",",") + " €" + (unite ? " / " + unite : "");
+  return n.toFixed(d).replace(".", sepDecimal()) + " €" + (unite ? " / " + unite : "");
 }
 function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;"); }
 function el(html){
@@ -2617,6 +2621,8 @@ function ouvrirMonCompte(){
     aller("reglages", {garderVue:true});
   });
 }
+/* V63 : locale des dates et nombres, selon la langue choisie. */
+function localeApp(){ var I = window.CrochompteI18n; return I ? I.locale() : "fr-FR"; }
 function renderEntete(){
   var ouverte = document.body.classList.contains("app-ouverte");
   var zone = document.getElementById("compte-entete");
@@ -2952,7 +2958,7 @@ function atelierFerme(){
    l'on est, pas seulement dans « Mon compte ». Rien n'est perdu : l'autre
    version est dans l'historique. */
 function bandeauConflit(){
-  var quand = esc(new Date(view.conflit.le).toLocaleString("fr-FR", {day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"}));
+  var quand = esc(new Date(view.conflit.le).toLocaleString(localeApp(), {day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"}));
   var b = view.conflit.perdant
     ? el('<div class="bandeau-global" role="status"><p><b>Un autre appareil'+(view.conflit.appareil ? ' ('+esc(view.conflit.appareil)+')' : '')+' a remplacé la version que celui-ci avait envoyée</b> le '+quand+
         '. C\'est sa version qui est maintenant affichée ici ; celle de cet appareil est gardée dans l\'historique et peut être restaurée.</p></div>')
@@ -3521,6 +3527,24 @@ function renderErreurChargement(){
    héberge la même zone que sync.js sait déjà peindre (formulaires de
    connexion / inscription / récupération) — seul l'endroit où elle apparaît
    change par rapport à l'ancien emplacement, dans Réglages. */
+/* V63 : la vidéo de présentation (une minute, sous-titrée, avec voix), en
+   plein écran léger. Le fichier n'est chargé qu'à la demande. */
+function ouvrirPresentation(){
+  var vieux = document.getElementById("pres-video"); if (vieux) vieux.remove();
+  var z = el('<div class="pres-fond" id="pres-video" role="dialog" aria-modal="true" aria-label="Présentation de Crochompte">'+
+    '<div class="pres-boite"><video controls autoplay playsinline preload="metadata" poster="media/presentation-poster.jpg">'+
+      '<source src="media/presentation.mp4" type="video/mp4">Ton navigateur ne lit pas cette vidéo.</video>'+
+    '<button type="button" class="pres-x" aria-label="Fermer la présentation">×</button></div></div>');
+  var v = z.querySelector("video");
+  function fermer(){ try{ v.pause(); }catch(e){} z.remove(); document.removeEventListener("keydown", surTouche); }
+  function surTouche(e){ if (e.key === "Escape") fermer(); }
+  z.querySelector(".pres-x").addEventListener("click", fermer);
+  z.addEventListener("click", function(e){ if (e.target === z) fermer(); });
+  v.addEventListener("ended", function(){ setTimeout(fermer, 600); });
+  document.addEventListener("keydown", surTouche);
+  document.body.appendChild(z);
+  try{ z.querySelector(".pres-x").focus(); }catch(e){}
+}
 function renderPortail(){
   arreterVoix();
   viderEntete();
@@ -3535,12 +3559,18 @@ function renderPortail(){
         '<h1>Sache ce que chaque création te rapporte vraiment.</h1>'+
         '<p class="lede">Matières, frais de plateforme, cotisations et temps passé : Crochompte fait le calcul '+
         'et te donne ton vrai gain à l\'heure. Puis il t\'aide à suivre tes commandes, ton stock et tes ventes.</p>'+
+        '<button type="button" class="portail-video" id="portail-video" aria-label="Voir la présentation de Crochompte, une minute">'+
+          '<img src="media/presentation-poster.jpg" alt="" width="1280" height="720" loading="lazy">'+
+          '<span class="pv-play" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span>'+
+          '<span class="pv-lib">Voir la présentation <small>· 1 min</small></span>'+
+        '</button>'+
         '<ul class="portail-points">'+
           '<li><b>Ton vrai coût de revient</b><span>Le fil, les petites fournitures, les chutes, les frais de vente et les cotisations.</span></li>'+
           '<li><b>Tes commandes sous contrôle</b><span>Arrhes ou acompte, date promise, reste à recevoir, factures conformes.</span></li>'+
           '<li><b>Ton atelier sur tous tes appareils</b><span>Sur ton téléphone au marché, sur ton ordinateur à la maison.</span></li>'+
         '</ul>'+
         '<p class="portail-note">Sans publicité, sans revente de données. '+
+        '<a href="a-propos.html" target="_blank" rel="noopener">Qui sommes-nous</a> · '+
         '<a href="confidentialite.html" target="_blank" rel="noopener">Politique de confidentialité</a> · '+
         '<a href="cgv.html" target="_blank" rel="noopener">Conditions générales</a> · '+
         '<a href="mentions-legales.html" target="_blank" rel="noopener">Mentions légales</a></p>'+
@@ -3550,6 +3580,7 @@ function renderPortail(){
   );
   var zone = el('<div id="zone-compte-portail"></div>');
   enveloppe.querySelector(".portail-form").appendChild(zone);
+  enveloppe.querySelector("#portail-video").addEventListener("click", ouvrirPresentation);
   /* Essayer sans compte : la valeur avant l'inscription (V55). */
   var eL = essaiLocal();
   var essai = el('<p class="portail-essai" style="text-align:center;margin:12px 0 0">'+
@@ -3560,6 +3591,10 @@ function renderPortail(){
   var bE = essai.querySelector("#portail-sans-compte");
   if (bE) bE.addEventListener("click", commencerSansCompte);
   enveloppe.querySelector(".portail-form").appendChild(essai);
+  /* Sur téléphone, le formulaire passe en premier : un lien vers la vidéo juste dessous. */
+  var lienV = el('<p class="portail-lien-video"><button type="button" class="lien-mini">▶ Voir la présentation · 1 min</button></p>');
+  lienV.querySelector("button").addEventListener("click", ouvrirPresentation);
+  enveloppe.querySelector(".portail-form").appendChild(lienV);
   main.appendChild(enveloppe);
   if (pontCompte){
     try{ pontCompte(zone); }catch(e){}
@@ -3577,7 +3612,7 @@ function renderPortail(){
    données réelles de l'atelier ; rien n'est affiché qui n'existe pas. */
 
 function dateDuJour(){
-  var t = new Date().toLocaleDateString("fr-FR", {weekday:"long", day:"numeric", month:"long"});
+  var t = new Date().toLocaleDateString(localeApp(), {weekday:"long", day:"numeric", month:"long"});
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
 
@@ -3602,7 +3637,7 @@ function pointsAFaire(){
   /* Une fiche commencée et pas enregistrée (page rechargée, appli fermée). */
   var bg = !view.draft ? brouillonGarde() : null;
   if (bg) ajout("info", "Création pas encore enregistrée : « " + (bg.d.nom || "sans nom") + " »",
-    "Commencée le " + new Date(bg.le).toLocaleString("fr-FR", {day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"}) + ". Tu peux la reprendre là où tu l'avais laissée.",
+    "Commencée le " + new Date(bg.le).toLocaleString(localeApp(), {day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"}) + ". Tu peux la reprendre là où tu l'avais laissée.",
     "Reprendre", reprendreBrouillon);
   /* Un chronomètre oublié fausse le temps de travail. */
   var ch = chronoEnCours();
@@ -3995,7 +4030,7 @@ function renderAccueil(main){
   var achM = sommeEntre(ach, bm.debut, bm.fin);
   var termM = (state.pieces||[]).filter(function(p){ return p.termineLe && p.termineLe >= bm.debut; }).length;
   var plan2 = planDeCharge();
-  var mois = new Date().toLocaleDateString("fr-FR", {month:"long"});
+  var mois = new Date().toLocaleDateString(localeApp(), {month:"long"});
   var cMois = el('<div class="card"><header><h2>En ' + esc(mois) + '</h2><p>Du 1er à aujourd\'hui.</p></header><div class="body"><div class="tiles dash-tiles"></div></div></div>');
   var tl = cMois.querySelector(".tiles");
   /* L'encaissé et les achats sont dans les trois tuiles du haut ; ici,
@@ -4022,7 +4057,8 @@ function renderAccueil(main){
   main.appendChild(el('<footer class="foot"><p style="margin:0;max-width:80ch">Les prix de matières, les frais des plateformes '+
     'et les taux proposés par défaut sont des ordres de grandeur, à remplacer par les tiens. Vérifie les frais sur le site de ta '+
     'plateforme' + (estPro() ? ' et ton taux de cotisations auprès de l\'URSSAF' : '') + '. Crochompte t\'aide à décider ; il ne remplace ni une comptabilité, ni un conseil.</p>'+
-    '<p style="margin:10px 0 0" class="foot-liens"><a href="mentions-legales.html" target="_blank" rel="noopener">Mentions légales</a> · '+
+    '<p style="margin:10px 0 0" class="foot-liens"><a href="a-propos.html" target="_blank" rel="noopener">Qui sommes-nous</a> · '+
+    '<a href="mentions-legales.html" target="_blank" rel="noopener">Mentions légales</a> · '+
     '<a href="confidentialite.html" target="_blank" rel="noopener">Politique de confidentialité</a> · '+
     '<a href="cgv.html" target="_blank" rel="noopener">Conditions générales d\'utilisation</a> · '+
     '<a href="mailto:bonjour@crochompte.com">Nous écrire</a> · '+
@@ -4032,9 +4068,12 @@ function renderAccueil(main){
 
 
 /* ═════ NOUVEAUTÉS ET SIGNALEMENT ═════ */
-var VERSION_APP = "V62.1";
+var VERSION_APP = "V63";
 var NOUVEAUTES = [
-  {v:"V62.1", d:"Octobre 2026", l:[
+  {v:"V63", d:"Octobre 2026", l:[
+    "Une vidéo d'une minute présente Crochompte sur l'écran de connexion.",
+    "Nouvelle page « Qui sommes-nous » : l'histoire de Crochompte.",
+    "Crochompte existe aussi en anglais : choisis la langue en haut de l'écran ou dans Apparence.",
     "Essai : 14 jours sans compte sur un appareil, ou 6 mois avec un compte gratuit."
   ]},
   {v:"V62", d:"Octobre 2026", l:[
@@ -5801,7 +5840,7 @@ function renderVentes(main){
   aff.forEach(function(x){
     var d = new Date(x.t);
     var tr = el('<tr>'+
-      '<td data-l="Quand" class="num">'+esc(d.toLocaleDateString("fr-FR"))+(pk === "jour" && (d.getHours() || d.getMinutes()) ? '<div class="hint" style="font-size:11px">'+esc(d.toLocaleTimeString("fr-FR", {hour:"2-digit", minute:"2-digit"}))+'</div>' : '')+'</td>'+
+      '<td data-l="Quand" class="num">'+esc(d.toLocaleDateString(localeApp()))+(pk === "jour" && (d.getHours() || d.getMinutes()) ? '<div class="hint" style="font-size:11px">'+esc(d.toLocaleTimeString(localeApp(), {hour:"2-digit", minute:"2-digit"}))+'</div>' : '')+'</td>'+
       '<td data-l="Quoi"><b>'+esc(x.quoi)+'</b>'+(x.type === "cmd" && x.c.num ? '<div class="hint" style="font-size:11px">'+esc(x.c.num)+'</div>' : '')+'</td>'+
       '<td data-l="À qui">'+(x.qui ? esc(x.qui) : '<span class="hint">—</span>')+'</td>'+
       '<td data-l="Où">'+esc(x.ou)+'</td>'+
@@ -8531,6 +8570,17 @@ function dialogueApparence(){
   var box = el('<div><p class="hint" style="margin:0 0 12px">Choisis l\'ambiance de couleurs et le mode. C\'est enregistré sur cet appareil.</p></div>');
   function repeindre(){ var n = blocAmbiances(repeindre); box.replaceChild(n, box.lastElementChild); }
   box.appendChild(blocAmbiances(repeindre));
+  var I = window.CrochompteI18n;
+  if (I){
+    var zl = el('<div style="margin-top:16px"><div class="hint" style="font-weight:600;color:var(--ink);margin-bottom:6px">Langue</div><div class="filters" role="radiogroup" aria-label="Langue" style="margin:0"></div></div>');
+    I.proposees().forEach(function(code){
+      var on = I.langue() === code;
+      var b = el('<button type="button" class="fchip" role="radio" aria-checked="'+on+'" lang="'+code+'">'+esc(I.LANGUES[code].nom)+'</button>');
+      b.addEventListener("click", function(){ if (!on) I.choisir(code); });
+      zl.querySelector(".filters").appendChild(b);
+    });
+    box.appendChild(zl);
+  }
   confirmer({titre:"Apparence", contenu: box, bouton:"Fermer", sansAnnuler:true}, function(){});
 }
 function carteAffichage(){
@@ -10055,9 +10105,9 @@ function reculer(ts, k, n){
 }
 function libPeriode(ts, k){
   var d = new Date(ts);
-  if (k === "jour")    return d.toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit"});
-  if (k === "semaine") return "s. "+d.toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit"});
-  if (k === "mois")    return d.toLocaleDateString("fr-FR",{month:"short",year:"2-digit"});
+  if (k === "jour")    return d.toLocaleDateString(localeApp(),{day:"2-digit",month:"2-digit"});
+  if (k === "semaine") return "s. "+d.toLocaleDateString(localeApp(),{day:"2-digit",month:"2-digit"});
+  if (k === "mois")    return d.toLocaleDateString(localeApp(),{month:"short",year:"2-digit"});
   return String(d.getFullYear());
 }
 /* Construit les N derniers seaux de la période demandée. */
@@ -10523,7 +10573,7 @@ function moisDisponibles(){
   for (var i = 0; i < nMois; i++){
     var x = new Date(d.getFullYear(), d.getMonth() - i, 1);
     l.push({an: x.getFullYear(), mois: x.getMonth(), k: x.getFullYear() + "-" + String(x.getMonth() + 1).padStart(2, "0"),
-            nom: x.toLocaleDateString("fr-FR", {month:"long", year:"numeric"})});
+            nom: x.toLocaleDateString(localeApp(), {month:"long", year:"numeric"})});
   }
   return l;
 }
@@ -10551,7 +10601,7 @@ function donneesReleve(an, mois){
   if (statutDecl) mentions.push("Micro-entreprise : le chiffre d'affaires à déclarer est le total des recettes encaissées dans le mois (" + eur(tr) + "), quelle que soit la date de la vente. Les achats ne se déduisent pas (abattement forfaitaire) ; ils sont donnés pour suivre ta rentabilité.");
   else mentions.push("Activité non déclarée : ce relevé est un suivi personnel. Dès que tu vends régulièrement, une déclaration d'activité est obligatoire.");
   if (enFranchiseTVA()) mentions.push("TVA non applicable, article 293 B du code général des impôts (franchise en base).");
-  var titreMois = new Date(an, mois, 1).toLocaleDateString("fr-FR", {month:"long", year:"numeric"});
+  var titreMois = new Date(an, mois, 1).toLocaleDateString(localeApp(), {month:"long", year:"numeric"});
   return {type:"releve", numero: titreMois.charAt(0).toUpperCase() + titreMois.slice(1), titreMois: titreMois.charAt(0).toUpperCase() + titreMois.slice(1), etabliLe: aujourdhuiISO(),
           vendeur: {nom: nom, adresse: r.adresse || "", siret: r.siret || ""}, recettes: rec, achats: ach, totalRecettes: cts(tr), totalAchats: cts(ta), resultat: cts(tr - ta), mentions: mentions};
 }
@@ -15740,7 +15790,7 @@ function carteRegistre(){
         var lignes = [["Numéro","Type","Date d'émission","Commande","Destinataire","Montant (€)","Facture annulée"]];
         l.slice().reverse().forEach(function(x){
           var d = x.donnees || {};
-          lignes.push([x.num, x.type === "avoir" ? "Avoir" : "Facture", new Date(x.le).toLocaleDateString("fr-FR"), d.commandeNum || "",
+          lignes.push([x.num, x.type === "avoir" ? "Avoir" : "Facture", new Date(x.le).toLocaleDateString(localeApp()), d.commandeNum || "",
                        (d.client && d.client.nom) || "", cts(d.total).toFixed(2).replace(".", ","), d.ref || ""]);
         });
         /* Une cellule qui commence par = + - @ serait exécutée comme une formule
@@ -16557,7 +16607,7 @@ function renderCommandeDetail(main, c){
       '<ol class="journal"></ol></details>');
     var olJ = cJ.querySelector("ol");
     c.journal.slice().reverse().forEach(function(x){
-      olJ.appendChild(el('<li><time>'+esc(new Date(x.t).toLocaleString("fr-FR", {day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit"}))+'</time> '+esc(x.txt)+'</li>'));
+      olJ.appendChild(el('<li><time>'+esc(new Date(x.t).toLocaleString(localeApp(), {day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit"}))+'</time> '+esc(x.txt)+'</li>'));
     });
     zone.appendChild(dv(cJ, "docs"));
   }
@@ -17530,7 +17580,7 @@ function demarrerVoix(onPlus, onMoins, badge){
   arreterVoix();
   var R = window.SpeechRecognition || window.webkitSpeechRecognition;
   var r = new R();
-  r.lang = "fr-FR"; r.continuous = true; r.interimResults = false;
+  r.lang = localeApp(); r.continuous = true; r.interimResults = false;
   var echecsReseau = 0;
   r.onresult = function(e){
     if (vocal.rec !== r) return;   /* une ancienne écoute qui finit de parler */
@@ -17641,7 +17691,7 @@ function compteurMainsLibres(obj, apresChangement){
 /* ═════ 40. DÉMARRAGE ═════ */
 
 state = charger();
-document.documentElement.lang = "fr";
+if (!(window.CrochompteI18n && window.CrochompteI18n.langue() !== "fr")) document.documentElement.lang = "fr";
 /* Un réglage modifié juste avant de fermer l'onglet ne doit pas être perdu :
    on force l'écriture au moment où la page part ou passe en arrière-plan. */
 window.addEventListener("beforeunload", ecrireEnAttente);
@@ -17681,6 +17731,17 @@ window.addEventListener("storage", function(e){
 });
 var bApp = document.getElementById("apparence-btn");
 if (bApp) bApp.addEventListener("click", function(){ dialogueApparence(); });
+/* V63 : la langue (français par défaut ; anglais, arabe, chinois). Le choix
+   est gardé sur l'appareil et la page se recharge dans la langue choisie. */
+(function(){
+  var sel = document.getElementById("langue-sel"), I = window.CrochompteI18n;
+  if (!sel || !I) return;
+  var court = {fr:"FR", en:"EN", ar:"AR", zh:"中文"};
+  sel.innerHTML = "";
+  I.proposees().forEach(function(c){ var o = document.createElement("option"); o.value = c; o.textContent = court[c] || c; sel.appendChild(o); });
+  sel.value = I.langue();
+  sel.addEventListener("change", function(){ I.choisir(sel.value); });
+})();
 view.tab = "accueil";   /* toujours le tableau de bord en premier */
 
 /* Copie de l'application sur l'appareil, pour qu'elle s'ouvre même sans

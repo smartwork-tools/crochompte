@@ -11,9 +11,9 @@
    Les données de l'atelier ne passent jamais par ici : elles restent entre
    l'application et le serveur (Supabase), qui n'est jamais mis en cache.
    ═══════════════════════════════════════════════════════════════════════════ */
-var CACHE = "crochompte-app-v621";
+var CACHE = "crochompte-app-v63";
 var ESSENTIELS = [
-  "./", "index.html", "boot.js?v=621", "pdf.js?v=621", "app.js?v=621", "sync.js?v=621", "config.js", "confidentialite.html", "cgv.html", "mentions-legales.html", "manifest.webmanifest",
+  "./", "index.html", "boot.js?v=63", "i18n.js?v=63", "pdf.js?v=63", "app.js?v=63", "sync.js?v=63", "config.js", "confidentialite.html", "cgv.html", "mentions-legales.html", "a-propos.html", "manifest.webmanifest",
   "polices/public-sans-latin-400-normal.woff2", "polices/public-sans-latin-500-normal.woff2",
   "polices/public-sans-latin-600-normal.woff2", "polices/bricolage-grotesque-latin-600-normal.woff2",
   "polices/bricolage-grotesque-latin-700-normal.woff2", "polices/bricolage-grotesque-latin-800-normal.woff2",
@@ -60,13 +60,15 @@ self.addEventListener("fetch", function(e){
      (vendor/supabase) : plus aucun code n'est chargé d'un autre site. */
   if (!memeSite) return;   /* serveur, photos d'illustration : jamais en cache ici */
   var page = req.mode === "navigate";
+  /* V63 : la vidéo de présentation (quelques Mo) reste au réseau, jamais en copie. */
+  if (/\.(mp4|webm|m4a|mp3)$/i.test(url.pathname)) return;
   /* Le groupe index.html / boot.js / pdf.js / app.js / sync.js est servi d'un bloc,
      depuis la copie de CETTE version : plus jamais une page neuve avec un
      app.js ancien, ou l'inverse. La copie n'est écrite qu'à l'installation
      (une réponse réseau écrite au passage mélangeait deux versions, V56),
      et la version demandée (?v=) doit être celle de la copie. */
   var chemin = url.pathname.replace(/^.*\//, "");
-  var trio = page || chemin === "index.html" || chemin === "boot.js" || chemin === "app.js" || chemin === "pdf.js" || chemin === "sync.js" || chemin === "";
+  var trio = page || chemin === "index.html" || chemin === "boot.js" || chemin === "i18n.js" || chemin === "app.js" || chemin === "pdf.js" || chemin === "sync.js" || chemin === "";
 
   function depuisCopie(){
     return caches.match(req, {ignoreSearch: !trio}).then(function(r){

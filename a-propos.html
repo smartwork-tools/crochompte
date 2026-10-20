@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Qui sommes-nous — Crochompte</title>
+<meta name="robots" content="index, follow">
+<style>
+  :root{
+    --ground:#f4f3f0; --surface:#ffffff; --ink:#15181a; --muted:#5b6560;
+    --rule:#e2e0db; --primary:#0f5132; --warn-soft:#fdf3e0; --warn:#b07d1a;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ground:#121513; --surface:#1b1f1d; --ink:#eceeec; --muted:#9aa5a0;
+      --rule:#2c3330; --primary:#6fb98d; --warn-soft:#2a2313; --warn:#d9a441;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#121513; --surface:#1b1f1d; --ink:#eceeec; --muted:#9aa5a0;
+    --rule:#2c3330; --primary:#6fb98d; --warn-soft:#2a2313; --warn:#d9a441;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--ink);
+    font:400 16px/1.65 "Public Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+    padding:32px 16px 64px;}
+  main{max-width:72ch;margin:0 auto;background:var(--surface);
+    border:1px solid var(--rule);border-radius:16px;padding:28px 26px 34px;}
+  h1{font-size:28px;line-height:1.25;margin:0 0 6px;}
+  h2{font-size:19px;margin:32px 0 10px;}
+  p,li{margin:0 0 12px;}
+  ul{padding-left:20px;}
+  a{color:var(--primary);}
+  .date{color:var(--muted);font-size:14px;margin-bottom:24px;}
+  table{width:100%;border-collapse:collapse;margin:12px 0 20px;font-size:15px;table-layout:fixed;}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--rule);vertical-align:top;
+    overflow-wrap:anywhere;}
+  th{color:var(--muted);font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:.04em;}
+  /* Sur téléphone, un tableau à trois colonnes est illisible : chaque ligne
+     devient un bloc, avec son intitulé repris devant la valeur. */
+  @media (max-width: 620px){
+    table, tbody, tr, td, th{display:block;width:100%;}
+    thead{display:none;}
+    tr{border:1px solid var(--rule);border-radius:10px;padding:6px 4px;margin-bottom:12px;}
+    td{border:none;padding:6px 10px;}
+    td::before{content:attr(data-l);display:block;font-size:12px;color:var(--muted);
+      text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px;}
+  }
+  .retour{display:inline-block;margin-bottom:20px;font-size:14px;}
+  .legal-nav{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:14px;margin:0 0 22px;padding:0 0 14px;border-bottom:1px solid var(--rule);}
+  .legal-nav a{text-decoration:none;}
+  .legal-nav a[aria-current="page"]{color:var(--ink);font-weight:600;}
+  h3{font-size:16px;margin:20px 0 8px;}
+  .encadre{background:var(--ground);border:1px solid var(--rule);border-radius:12px;padding:14px 16px;margin:14px 0 18px;}
+  .encadre p:last-child{margin-bottom:0;}
+  dl{margin:0 0 14px;} dt{font-weight:600;margin-top:10px;} dd{margin:2px 0 0;}
+  .sommaire{font-size:15px;columns:2 220px;column-gap:28px;padding-left:20px;margin:0 0 8px;}
+  .sommaire li{margin:0 0 6px;break-inside:avoid;}
+  @media print{body{background:#fff;padding:0} main{border:none;padding:0} .retour,.legal-nav{display:none}}
+</style>
+</head>
+<body>
+<main>
+
+<a class="retour" href="index.html">← Retour à l'application</a>
+
+<nav class="legal-nav" aria-label="À propos et informations légales">
+  <a href="a-propos.html" aria-current="page">Qui sommes-nous</a>
+  <a href="mentions-legales.html">Mentions légales</a>
+  <a href="confidentialite.html">Politique de confidentialité</a>
+  <a href="cgv.html">Conditions générales d'utilisation</a>
+</nav>
+
+<h1>Qui sommes-nous</h1>
+<p class="date">Crochompte est né à la table d'un salon, entre une pelote de coton et un tableur.</p>
+
+<div class="encadre">
+  <p><b>En une phrase.</b> Crochompte est une application de gestion pensée pour celles et ceux qui crochètent et vendent leurs créations. Elle applique à un atelier de crochet ce que les entreprises font pour piloter leur production : connaître ses coûts, fixer un prix juste, suivre ses commandes et savoir, chaque mois, où l'on en est.</p>
+</div>
+
+<h2>Une passion, un métier, une évidence</h2>
+<p>
+  Nous sommes deux. Domitille crochète. Pas de temps en temps : tous les jours, ou presque. Des amigurumis, des bonnets, des paniers, des pièces sur commande pour des amies, puis pour des amies d'amies. Chaque création demande des heures d'attention, un fil choisi avec soin, des finitions reprises jusqu'à ce qu'elles soient parfaites.
+</p>
+<p>
+  Karim est acheteur de métier. Il a construit son parcours dans l'industrie, les achats et la chaîne logistique : négocier des matières, suivre des stocks, calculer des coûts de revient, mesurer la performance d'une production. Son quotidien, ce sont les tableaux de bord, les indicateurs et les outils qui aident une équipe à décider.
+</p>
+<p>
+  Un soir, en regardant Domitille terminer une commande, une question simple s'est posée : <b>combien cette pièce lui rapporte-t-elle vraiment, de l'heure ?</b> Le fil avait été acheté, les frais de la plateforme retenus, les cotisations réglées, et surtout, des heures passées. Personne n'avait fait le calcul. Le résultat, une fois posé sur papier, ne ressemblait pas du tout au prix affiché.
+</p>
+
+<h2>Ce que l'industrie sait faire, et que l'artisanat mérite aussi</h2>
+<p>
+  Dans une entreprise, aucune production ne démarre sans connaître son coût de revient, sa marge et son délai. Les matières sont suivies, les temps sont mesurés, les commandes sont pilotées du devis à la facture. Ces méthodes ne sont pas réservées aux grandes structures : elles sont simplement rarement accessibles à une personne seule, derrière son crochet, qui n'a ni le temps ni l'envie de tenir un tableur.
+</p>
+<p>
+  Crochompte est né de cette rencontre entre deux expertises : la pratique du crochet et de l'approvisionnement en matières, d'un côté ; la gestion des achats, de la production et le développement d'outils de productivité, de l'autre. Domitille a apporté le vocabulaire, les gestes, les vraies contraintes d'un atelier et d'un stand de marché. Karim a apporté les méthodes, les calculs et l'outil. Chaque écran a été testé avec des pelotes sur la table.
+</p>
+
+<h2>Nos principes</h2>
+<ul>
+  <li><b>Le vrai chiffre, pas un chiffre flatteur.</b> Crochompte compte tout : le fil, les fournitures, les chutes, les frais de vente, les cotisations et le temps. Le gain de l'heure qu'il affiche est celui que l'on touche réellement.</li>
+  <li><b>Simple avant tout.</b> Une création se calcule en deux minutes à partir d'un modèle du catalogue. Le reste de l'application se remplit à partir de là, au fil des commandes et des ventes.</li>
+  <li><b>Pour le plaisir ou pour en vivre.</b> Une personne qui vend quelques pièces par an et une micro-entreprise qui fait les marchés n'ont pas les mêmes besoins. L'application s'adapte au profil, sans jamais imposer de gestion inutile.</li>
+  <li><b>Les données restent à leur propriétaire.</b> Aucune publicité, aucune revente, un export complet à tout moment. L'atelier appartient à celle ou celui qui le remplit.</li>
+</ul>
+
+<h2>Où nous en sommes</h2>
+<p>
+  Crochompte est utilisé chaque jour dans notre propre atelier, et par les premières créatrices et créateurs qui l'ont rejoint. Chaque retour compte : une remarque sur un écran, une fonction qui manque, un calcul qui surprend. C'est ainsi que l'application progresse, version après version.
+</p>
+<p>
+  Pendant sa phase de lancement, Crochompte est proposé avec six mois d'essai gratuit, sans carte bancaire. Les offres payantes prévues ensuite resteront à la mesure d'un atelier : le prix d'une pelote par mois.
+</p>
+
+<h2>Nous écrire</h2>
+<p>
+  Une question, une idée, un partenariat, une envie de tester ? Une seule adresse :
+  <a href="mailto:bonjour@crochompte.com">bonjour@crochompte.com</a>. Nous répondons nous-mêmes, en général dans la journée.
+</p>
+<p class="date" style="margin-top:28px">Karim et Domitille</p>
+
+</main>
+</body>
+</html>

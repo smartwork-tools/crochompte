@@ -160,7 +160,7 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
     if (!iso) return "";
     var d = new Date(iso);
     if (isNaN(d)) return String(iso).slice(0,16);
-    return d.toLocaleString("fr-FR", {day:"numeric", month:"long", hour:"2-digit", minute:"2-digit"});
+    return d.toLocaleString(window.CrochompteI18n ? window.CrochompteI18n.locale() : "fr-FR", {day:"numeric", month:"long", hour:"2-digit", minute:"2-digit"});
   }
 
   /* Âge en années pleines à partir d'une date « AAAA-MM-JJ ». Renvoie null si

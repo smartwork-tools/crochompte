@@ -7,7 +7,8 @@
      seules connexions permises sont celles vers le serveur Supabase. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://upload.wikimedia.org https://www.gutenberg.org; connect-src 'self' https://jsmmajntopdozkmzrniy.supabase.co wss://jsmmajntopdozkmzrniy.supabase.co; font-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<script src="boot.js?v=621"></script>
+<script src="boot.js?v=63"></script>
+<script src="i18n.js?v=63"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0f5f57">
 <link rel="manifest" href="manifest.webmanifest">
@@ -256,6 +257,14 @@
   .side-bas .side-liens{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:12.5px;color:var(--muted);padding:4px 6px 0;}
   .side-bas .side-liens button{appearance:none;background:none;border:none;padding:0;font:inherit;font-size:12.5px;color:var(--muted);cursor:pointer;text-decoration:underline;text-underline-offset:3px;}
   .side-bas .side-liens button:hover{color:var(--ink);}
+  .langue-w{display:inline-flex;align-items:center;gap:5px;height:42px;padding:0 8px 0 10px;border:1px solid var(--rule);border-radius:12px;background:var(--surface);color:var(--muted);flex:none;cursor:pointer;}
+  .langue-w select{appearance:none;-webkit-appearance:none;border:0;background:transparent;font:inherit;font-weight:600;font-size:13px;color:var(--ink);cursor:pointer;padding-right:2px;}
+  .langue-w select:focus-visible{outline:2px solid var(--primary);outline-offset:2px;border-radius:6px;}
+  html[dir="rtl"] body{direction:rtl;}
+  html[dir="rtl"] .num,html[dir="rtl"] input[type="number"],html[dir="rtl"] .tile .v,html[dir="rtl"] time{direction:ltr;unicode-bidi:isolate;}
+  html[lang="ar"] body{font-family:"Public Sans","Segoe UI","Noto Naskh Arabic","Noto Sans Arabic","Geeza Pro",system-ui,sans-serif;}
+  html[lang="zh"] body{font-family:"Public Sans","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC","Noto Sans SC",system-ui,sans-serif;}
+  html[lang="ar"] h1,html[lang="ar"] h2,html[lang="ar"] h3,html[lang="zh"] h1,html[lang="zh"] h2,html[lang="zh"] h3{letter-spacing:0;}
   .ico-btn{appearance:none;width:42px;height:42px;border-radius:12px;border:1px solid var(--rule);background:var(--surface);display:inline-grid;place-items:center;color:var(--muted);cursor:pointer;flex:none;}
   .ico-btn:hover{color:var(--ink);border-color:var(--rule-strong);}
   @media (max-width:1100px){
@@ -461,6 +470,22 @@
   .portail-points b{font-size:15px;}
   .portail-points span{font-size:14px;color:var(--muted);}
   .portail-note{margin:26px 0 0;font-size:13px;color:var(--muted);}
+  /* V63 : vidéo de présentation sur le portail. */
+  .portail-video{display:block;position:relative;width:100%;max-width:520px;margin:22px 0 0;padding:0;border:1px solid var(--rule);border-radius:16px;overflow:hidden;background:#0b3f35;cursor:pointer;text-align:left;font:inherit;color:#fff;}
+  .portail-video img{display:block;width:100%;height:auto;opacity:.92;transition:transform .35s ease,opacity .2s;}
+  .portail-video:hover img,.portail-video:focus-visible img{transform:scale(1.02);opacity:1;}
+  .portail-video:focus-visible{outline:3px solid var(--primary);outline-offset:3px;}
+  .portail-video .pv-play{position:absolute;left:50%;top:50%;width:64px;height:64px;margin:-32px 0 0 -32px;border-radius:50%;background:#fff;color:#0f5c4d;display:grid;place-items:center;box-shadow:0 8px 24px rgba(0,0,0,.3);}
+  .portail-video .pv-play svg{margin-left:3px;}
+  .portail-video .pv-lib{position:absolute;left:14px;bottom:12px;font-weight:600;font-size:14px;background:rgba(11,63,53,.85);padding:6px 11px;border-radius:999px;}
+  .portail-video .pv-lib small{font-weight:500;opacity:.85;font-size:12.5px;}
+  .portail-lien-video{display:none;text-align:center;margin:10px 0 0;}
+  @media (max-width:900px){ .portail-lien-video{display:block;} }
+  .pres-fond{position:fixed;inset:0;z-index:200;background:rgba(10,14,13,.88);display:flex;align-items:center;justify-content:center;padding:max(16px,env(safe-area-inset-top,0px)) 16px max(16px,env(safe-area-inset-bottom,0px));}
+  .pres-boite{position:relative;width:min(1100px,100%);}
+  .pres-boite video{display:block;width:100%;aspect-ratio:16/9;background:#000;border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,.5);}
+  .pres-x{position:absolute;right:-6px;top:-46px;width:40px;height:40px;border-radius:50%;border:0;background:#fff;color:#111;font-size:26px;line-height:1;cursor:pointer;}
+  @media (max-width:700px){ .pres-x{top:-48px;right:0;} }
   @media (max-width:860px){
     .portail{grid-template-columns:minmax(0,1fr);gap:28px;padding-top:12px;}
     .portail-form{order:-1;}
@@ -1454,6 +1479,8 @@
       <button class="brand" id="brand" type="button">Croch<span>ompte</span></button>
       <div class="brandnote" id="brandnote">Combien tu gagnes vraiment, à l'heure, sur chaque création</div>
       <div class="compte-entete" id="compte-entete" hidden></div>
+      <label class="langue-w" title="Langue / Language"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/></svg><select id="langue-sel" aria-label="Langue">
+        <option value="fr">FR</option><option value="en">EN</option></select></label>
       <button class="ico-btn" id="apparence-btn" type="button" aria-label="Apparence : couleurs, clair ou sombre" title="Apparence" hidden>
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c1.2 0 1.8-.8 1.8-1.7 0-1-.8-1.4-.8-2.3 0-1 .8-1.6 1.8-1.6H17a4 4 0 0 0 4-4C21 6.6 17 3 12 3z"/><circle cx="7.5" cy="11" r="1.1"/><circle cx="10.5" cy="7" r="1.1"/><circle cx="15" cy="7.5" r="1.1"/></svg>
       </button>
@@ -1487,14 +1514,14 @@
      Sans ce fichier (ou s'il ne se charge pas), rien ne change : l'objet
      global reste absent et l'application démarre hors ligne, comme avant. -->
 <script src="config.js"></script>
-<script src="pdf.js?v=621"></script>
-<script src="app.js?v=621"></script>
+<script src="pdf.js?v=63"></script>
+<script src="app.js?v=63"></script>
 
 <!-- Comptes et synchronisation (module facultatif) : sans config.js,
      l'application fonctionne hors ligne, tout reste dans le navigateur.
      Avec config.js, se connecter devient obligatoire. Le message de repli
      (si ce module ne se charge pas) et l'écouteur d'erreur vivent dans
      app.js, section DÉMARRAGE. -->
-<script type="module" src="sync.js?v=621" id="script-sync"></script>
+<script type="module" src="sync.js?v=63" id="script-sync"></script>
 </body>
 </html>
