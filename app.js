@@ -4068,8 +4068,12 @@ function renderAccueil(main){
 
 
 /* ═════ NOUVEAUTÉS ET SIGNALEMENT ═════ */
-var VERSION_APP = "V64";
+var VERSION_APP = "V64.1";
 var NOUVEAUTES = [
+  {v:"V64.1", d:"Octobre 2026", l:[
+    "Une matière prise dans le catalogue apparaît bien dans « Mes matières », même avant ton premier achat.",
+    "« Noter une vente » sans création ouvre une fenêtre qui explique quoi faire ; la fiche ouverte depuis le catalogue y ramène."
+  ]},
   {v:"V64", d:"Octobre 2026", l:[
     "Crochompte existe maintenant aussi en arabe et en chinois : choisis la langue en haut de l'écran ou dans Apparence."
   ]},
@@ -5446,10 +5450,18 @@ function vendrePiece(cid, prix, moyen, extra){
   sauverTout();
   return p;
 }
+/* V64.1 : pas encore de création : une vraie fenêtre explique quoi faire
+   (un simple message en bas d'écran passait inaperçu). */
+function sansCreationDAbord(){
+  confirmer({titre: "D'abord, ta première création",
+             texte: "Pour noter une vente ou une pièce, il faut la fiche de ce que tu fabriques. Pars d'un modèle du catalogue : matières et temps sont déjà remplis, tu corriges avec tes chiffres.",
+             bouton: "Choisir un modèle", annuler: "Plus tard"},
+            function(){ view.modeleVu = null; view.catMode = "types"; aller("catalogue"); });
+}
 function dialogueVente(cid, opts){
   opts = opts || {};
   var actives = creationsActives();
-  if (!actives.length){ toast("Aucune création pour l'instant.", {libelle:"Nouvelle création", fn:function(){ nouvelleFiche("vide"); }}); return; }
+  if (!actives.length){ sansCreationDAbord(); return; }
   var c0 = creation(cid) || actives[0];
   var box = el('<div><div class="grid2">'+
     '<label class="f"><span>Quoi</span><select id="vt-cid"></select></label>'+
@@ -5877,7 +5889,7 @@ function renderVentes(main){
 function dialogueAjoutPieces(cid, opts){
   opts = opts || {};
   var actives = creationsActives();
-  if (!actives.length){ toast("Aucune création pour l'instant.", {libelle:"Nouvelle création", fn:function(){ nouvelleFiche("vide"); }}); return; }
+  if (!actives.length){ sansCreationDAbord(); return; }
   /* V59 : trois états suffisent ici (« à retoucher » se choisit dans le
      tableau), et « pour une commande » relie vraiment la pièce à la commande. */
   var box = el('<div><div class="grid2">'+
@@ -5998,10 +6010,27 @@ function ficheModifiee(){
 }
 /* Quitter une fiche : si rien n'a changé, on part ; sinon on demande, comme
    le fait n'importe quel éditeur, plutôt que de jeter la saisie en silence. */
+/* L'écran d'où l'on est venu ouvrir la fiche, s'il s'agit du catalogue
+   (« En faire une création ») ; sinon null. Pendant le premier dessin de
+   la fiche, l'historique pointe encore sur l'écran précédent. */
+function origineFiche(){
+  try{
+    var k = nav.i, cur = nav.pile[k] ? JSON.parse(nav.pile[k]) : null;
+    if (cur && cur.tab === "fiche") cur = (k > 0 && nav.pile[k - 1]) ? JSON.parse(nav.pile[k - 1]) : null;
+    return cur && cur.tab === "catalogue" ? cur : null;
+  }catch(e){ return null; }
+}
 function quitterFiche(){
+  /* V64.1 : venue du catalogue (« En faire une création »), la fiche y
+     ramène ; sinon, retour à « Mes créations ». */
+  var prec = origineFiche();
   function partir(){
     oublierBrouillon();
-    retourParent(function(){ view.draft = null; view.ficheId = null; view.draftRef = null; view.tab = "creations"; });
+    retourParent(function(){
+      view.draft = null; view.ficheId = null; view.draftRef = null;
+      if (prec){ view.tab = "catalogue"; view.sub = prec.sub; view.modeleVu = prec.modeleVu; view.catMode = prec.catMode; }
+      else view.tab = "creations";
+    });
   }
   if (!ficheModifiee()){ partir(); return; }
   confirmer({
@@ -6107,7 +6136,7 @@ function renderFiche(main){
      chose à savoir en ouvrant la fiche, avant même le prix de revient. */
   /* Dire où l'on est : c'est la fiche de coût d'UNE création, pas un
      écran de plus. */
-  var bRet = bouton("← Mes créations", quitterFiche); bRet.classList.add("sm");
+  var bRet = bouton(origineFiche() ? "← Catalogue" : "← Mes créations", quitterFiche); bRet.classList.add("sm");
   main.appendChild(enTete(view.ficheId ? "Création : « " + (d.nom || "sans nom") + " »" : "Nouvelle création",
     "C'est ici que tu calcules ce que cette création te coûte et ce qu'elle te rapporte : ses matières, ton temps, "+
     "son prix. Enregistre-la pour la retrouver dans « Mes créations » et y suivre chaque pièce fabriquée.", [bRet]));
@@ -12003,11 +12032,13 @@ function adopterMatiere(catId){
   var o = catObjet(c);
   var deja = null;
   state.matieres.forEach(function(m){ if (m.refCat === catId) deja = m; });
-  if (deja) return deja;
+  /* V64.1 : prise volontairement (catalogue ou fiche) : elle est « à moi »
+     et ne se cache plus parmi les matières d'exemple, même sans achat. */
+  if (deja){ deja.adoptee = true; deja.maj = Date.now(); return deja; }
   var m = {id: uid(), nom:o.nom, cat:o.cat, prix:o.prix, contenance:o.contenance, unite:o.unite,
            stock:0, seuil:0, pmp:o.contenance ? o.prix/o.contenance : 0, mouv:[],
            refCat:catId, fibre:o.fibre, composition:o.composition, grosseur:o.grosseur,
-           metrage:o.metrage, prixIndicatif:true, perso:false, maj:Date.now(), variantes:[]};
+           metrage:o.metrage, prixIndicatif:true, perso:false, adoptee:true, maj:Date.now(), variantes:[]};
   if (o.typeOutil) m.typeOutil = o.typeOutil;
   if (o.materiau) m.materiau = o.materiau;
   if (o.taille) m.taille = o.taille;
@@ -12038,7 +12069,7 @@ function matiereUtilisee(m){
   return state.creations.some(function(c){ return !c.archive && (c.lignes || []).some(function(l){ return l.mid === m.id; }); });
 }
 function estExemple(m){
-  if (!m || m.perso || !m.prixIndicatif) return false;
+  if (!m || m.perso || m.adoptee || !m.prixIndicatif) return false;
   if (Math.abs(Number(m.stock) || 0) > 1e-9) return false;
   if ((m.variantes || []).length) return false;
   return !(m.mouv || []).some(function(x){ return !x.annule && (x.t === "entree" || x.t === "inventaire"); });
@@ -12247,7 +12278,9 @@ function renderCatalogueMatieres(main){
     var q = (view.cmQ||"").trim().toLowerCase();
     var fam = view.cmFam || "tous";
     var dejaRef = {};
-    state.matieres.forEach(function(m){ if (m.refCat) dejaRef[m.refCat] = true; });
+    /* Une matière d'exemple (jamais prise ni achetée) ne compte pas comme
+       « déjà dans mes matières » : on peut la prendre (V64.1). */
+    state.matieres.forEach(function(m){ if (m.refCat && !(estExemple(m) && !matiereUtilisee(m))) dejaRef[m.refCat] = true; });
 
     var liste = CATALOGUE_MATIERES.map(catObjet).filter(function(o){
       if (fam !== "tous" && o.cat !== fam) return false;
@@ -16265,7 +16298,7 @@ function renderCommandeDetail(main, c){
           '<div class="v '+(solde>0?"warn":"good")+'">'+esc(eur(solde))+'</div></div>')+
     '</div>'+
     '<div class="grid2" style="align-items:end">'+
-      '<label class="f"><span>Versement à la commande (€)</span><input id="cmd-ac-m" type="number" min="0" step="0.5"></label>'+
+      '<label class="f"><span>Versement à la commande (€)</span><input id="cmd-ac-m" type="number" min="0" step="0.5" placeholder="0"></label>'+
       '<label class="f"><span>Type de versement</span><select id="cmd-ac-t">'+
         '<option value="acompte">Un acompte</option><option value="arrhes">Des arrhes</option></select></label>'+
       /* V59 : le moyen de paiement de l'acompte (sinon rangé en « Autre »). */
@@ -16286,7 +16319,8 @@ function renderCommandeDetail(main, c){
 
   var inM = cArgent.querySelector("#cmd-ac-m"), inT = cArgent.querySelector("#cmd-ac-t"),
       inD = cArgent.querySelector("#cmd-ac-d");
-  inM.value = (c.versement && c.versement.montant) || 0;
+  /* Champ vide plutôt que « 0 » : taper 30 donne 30, pas « 030 » (V64.1). */
+  inM.value = (c.versement && c.versement.montant) || "";
   inT.value = (c.versement && c.versement.type) || "acompte";
   inD.value = (c.versement && c.versement.date) || "";
   function majAideVersement(){

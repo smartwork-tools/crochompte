@@ -6,6 +6,7 @@ projet ; les règles de calcul sont dans `REGLES-METIER.md`.
 
 | Version | Date | Ce qui change |
 |---|---|---|
+| V64.1 | 20/10/2026 | Suite du test automatique (TestSprite) : une matière ajoutée depuis le catalogue des matières apparaît dans « Mes matières » même sans achat (elle était cachée parmi les matières d'exemple) ; « Noter une vente » (ou ajouter des pièces) sans aucune création ouvre une vraie fenêtre qui mène au catalogue des modèles, au lieu d'un message furtif ; une fiche ouverte depuis le catalogue (« En faire une création ») y ramène quand on la ferme (bouton « ← Catalogue ») ; versement à la commande : champ vide au lieu de « 0 ». |
 | V64 | 20/10/2026 | Crochompte existe maintenant aussi en arabe et en chinois (traduction complète, arabe de droite à gauche) ; le sélecteur de langue propose les quatre langues (français, anglais, arabe, chinois). |
 | V63.3 | 20/10/2026 | Vidéo de présentation : elle s'ouvre sur le logo et le nom Crochompte, bien au centre sur le fond vert (aussi en image d'attente avant lecture), puis enchaîne en fondu sur la présentation. |
 | V63.2 | 20/10/2026 | Vidéo de présentation : nouvelle version avec une voix off plus naturelle ; elle démarre directement sur le fond vert (plus d'écran blanc avant la première image), et le cadre de la vidéo est vert pendant le chargement. |
