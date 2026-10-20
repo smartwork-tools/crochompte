@@ -4068,8 +4068,11 @@ function renderAccueil(main){
 
 
 /* ═════ NOUVEAUTÉS ET SIGNALEMENT ═════ */
-var VERSION_APP = "V63.3";
+var VERSION_APP = "V64";
 var NOUVEAUTES = [
+  {v:"V64", d:"Octobre 2026", l:[
+    "Crochompte existe maintenant aussi en arabe et en chinois : choisis la langue en haut de l'écran ou dans Apparence."
+  ]},
   {v:"V63.3", d:"Octobre 2026", l:[
     "Une vidéo de présentation sur l'écran de connexion : le prix juste, les créations, le stock, les commandes et les chiffres.",
     "Nouvelle page « Qui sommes-nous » : l'histoire de Crochompte.",
@@ -8950,7 +8953,7 @@ function renderReglages(main){
       a.href = url; a.download = nom; document.body.appendChild(a); a.click(); a.remove();
       setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
       marquerSauvegarde();
-      toast("Sauvegarde téléchargée : " + nom + (photos.n ? " (avec " + photos.n + " photo" + (photos.n > 1 ? "s" : "") + ")" : ""));
+      if (!enAppli()) toast("Sauvegarde téléchargée : " + nom + (photos.n ? " (avec " + photos.n + " photo" + (photos.n > 1 ? "s" : "") + ")" : ""));
     }).catch(function(){ toast("Le téléchargement n'a pas abouti. Utilise « Copier la sauvegarde »."); })
       .then(function(){ bDl.disabled = false; bDl.textContent = "Télécharger ma sauvegarde"; });
   });
@@ -10301,6 +10304,13 @@ function imprimerRegistre(titre, annee, lignes){
     lignes.map(function(x){ return '<tr><td>'+esc(dateCourte(x.t))+'</td><td>'+esc(x.ref)+'</td><td>'+esc(x.qui)+'</td><td>'+esc(x.nature)+'</td><td class="n">'+esc(eur(x.montant))+'</td><td>'+esc(x.moyen)+'</td></tr>'; }).join("")+
     '</tbody><tfoot><tr><td colspan="4">Total</td><td class="n">'+esc(eur(total))+'</td><td></td></tr></tfoot></table>'+
     '<div class="barre"><button type="button">Imprimer ou enregistrer en PDF</button></div></body></html>';
+  /* Application installée : pas de fenêtre d'impression ; la page est
+     partagée (à ouvrir dans le navigateur ou un lecteur pour l'imprimer). */
+  if (window.CrochompteNatif && window.CrochompteNatif.actif){
+    window.CrochompteNatif.partagerFichier(new Blob([h], {type: "text/html"}), "crochompte-" + titre.toLowerCase().replace(/[^a-z0-9]+/g, "-") + "-" + annee + ".html")
+      .catch(function(){ toast("Le registre n'a pas pu être partagé. Réessaie dans un instant."); });
+    return;
+  }
   var w = window.open("", "_blank");
   if (!w){ toast("Ton navigateur a bloqué la fenêtre : autorise les pop-up pour ce site."); return; }
   ecrireFenetre(w, h);
@@ -13485,7 +13495,8 @@ function cartePatron(mid){
 
   var c = el(h);
   var bar = el('<div class="savebar" style="margin-top:14px"></div>');
-  bar.appendChild(bouton("Imprimer le patron", function(){
+  /* Application installée : la vue web ne sait pas imprimer (V64). */
+  if (!(window.CrochompteNatif && window.CrochompteNatif.actif)) bar.appendChild(bouton("Imprimer le patron", function(){
     /* Sur téléphone, print() rend la main tout de suite : on attend la fin
        réelle de l'impression (afterprint) pour remettre l'écran normal. Les
        abréviations sont dépliées pour figurer sur le papier. */
@@ -16767,6 +16778,8 @@ function carteDocumentsCommande(c){
   return card;
 }
 /* Enregistre un fichier sur l'appareil (le navigateur le range dans « Téléchargements »). */
+/* V64 : vrai dans l'application installée (Android, iPhone), faux sur le site. */
+function enAppli(){ return !!(window.CrochompteNatif && window.CrochompteNatif.actif); }
 function telechargerFichier(blob, nom){
   var url = URL.createObjectURL(blob);
   var a = document.createElement("a");
@@ -16821,7 +16834,9 @@ function ouvrirDocument(F){
       'Complète ton nom et ton adresse dans Réglages → Tes mentions de facture, puis rouvre-la.</p>'));
   }
   var act = el('<div class="fact-act"></div>');
-  act.appendChild(bouton("Télécharger le PDF", function(){ telechargerFichier(blob, nom); toast("« " + nom + " » enregistré dans tes téléchargements."); }, true));
+  /* Dans l'application installée, le partage du téléphone s'ouvre à la place
+     (Drive, e-mail, Fichiers…) : pas de message « téléchargé ». */
+  act.appendChild(bouton(enAppli() ? "Enregistrer ou envoyer le PDF" : "Télécharger le PDF", function(){ telechargerFichier(blob, nom); if (!enAppli()) toast("« " + nom + " » enregistré dans tes téléchargements."); }, true));
   act.appendChild(bouton("Imprimer", function(){
     var url = URL.createObjectURL(blob);
     var w = window.open(url, "_blank");
@@ -16834,7 +16849,7 @@ function ouvrirDocument(F){
     act.appendChild(bouton("Envoyer…", function(){
       navigator.share({files: [fichier], title: nom}).catch(function(){});
     }));
-  } else if (F.type !== "releve"){
+  } else if (F.type !== "releve" && !enAppli()){   /* appli : « Enregistrer ou envoyer » ouvre déjà le partage, e-mail compris */
     /* V59 : sur ordinateur, « Envoyer par e-mail » prépare le message
        (destinataire, objet, texte) et télécharge le PDF à joindre. */
     act.appendChild(bouton("Envoyer par e-mail", function(){
@@ -17746,7 +17761,18 @@ view.tab = "accueil";   /* toujours le tableau de bord en premier */
 
 /* Copie de l'application sur l'appareil, pour qu'elle s'ouvre même sans
    réseau (voir sw.js). Sans effet sur les navigateurs qui ne le permettent pas. */
-if ("serviceWorker" in navigator && (location.protocol === "https:" || /^(localhost|127\.0\.0\.1)$/.test(location.hostname))){
+/* V64 : dans l'application installée, natif.js a besoin de deux choses
+   d'ici : afficher un message, et revenir à l'Accueil au bout du « retour ». */
+if (window.CrochompteNatif && window.CrochompteNatif.actif){
+  window.CrochompteNatif.toast = toast;
+  window.CrochompteNatif.retour = function(){
+    if (view.tab !== "accueil"){ aller("accueil"); return true; }
+    return false;
+  };
+}
+/* Pas de copie hors ligne gérée par sw.js dans l'application installée :
+   ses fichiers sont déjà sur le téléphone. */
+if (!(window.CrochompteNatif && window.CrochompteNatif.actif) && "serviceWorker" in navigator && (location.protocol === "https:" || /^(localhost|127\.0\.0\.1)$/.test(location.hostname))){
   window.addEventListener("load", function(){ navigator.serviceWorker.register("sw.js").catch(function(){}); });
 }
 

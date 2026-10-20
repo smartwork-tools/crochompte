@@ -1,6 +1,6 @@
 /* V63 — présentation vidéo sur l'écran de connexion, page « Qui sommes-nous »,
-   et appli traduisible (français par défaut, anglais complet ; arabe et
-   chinois cachés tant que leur traduction n'est pas terminée). */
+   et appli traduisible (français par défaut ; anglais, arabe et chinois
+   complets). */
 const {chromium} = require('./outils').playwright;
 const path = require('path'); const fs = require('fs');
 const R = {}; const errs = [];
@@ -41,16 +41,43 @@ const txt = async (p, sel) => ((await p.locator(sel).first().textContent()) || '
     R.page_a_propos = /Karim/.test(ap) && /Domitille/.test(ap) && await p0.evaluate(()=>document.documentElement.scrollWidth - innerWidth <= 1);
     await p0.close();
 
-    /* 2. Français par défaut, sélecteur : seulement les langues terminées */
+    /* 2. Français par défaut, sélecteur : les quatre langues terminées */
     const p = await page(b);
     R.francais_par_defaut = await p.evaluate(()=>document.documentElement.lang === 'fr');
-    R.selecteur_fr_en = JSON.stringify(await p.$$eval('#langue-sel option', os => os.map(o => o.value))) === '["fr","en"]';
+    R.selecteur_quatre_langues = JSON.stringify(await p.$$eval('#langue-sel option', os => os.map(o => o.value))) === '["fr","en","ar","zh"]';
     await p.close();
 
-    /* 3. Une langue pas terminée, demandée quand même : on reste en français */
-    const pz = await page(b, {langue:'ar'});
-    R.arabe_pas_propose = await pz.evaluate(()=>document.documentElement.lang === 'fr' && document.documentElement.dir !== 'rtl');
-    await pz.close();
+    /* 3. Arabe : RTL, appli traduite, pas de défilement horizontal (1440 et 390) */
+    for (const w of [1440, 390]){
+      const pz = await page(b, {langue:'ar', w});
+      await pz.waitForTimeout(500);
+      const cle = 'arabe_' + w;
+      R[cle + '_lang_rtl'] = await pz.evaluate(()=>document.documentElement.lang === 'ar' && document.documentElement.dir === 'rtl');
+      for (const t of ['accueil','creations','commandes','stock','indicateurs','reglages']){
+        await dans(pz, function(t){ aller(t); }, t); await pz.waitForTimeout(350);
+      }
+      await dans(pz, function(){ aller('creations'); }); await pz.waitForTimeout(400);
+      const ma = await txt(pz, '#main');
+      R[cle + '_traduit'] = !/Mes créations|Nouvelle création/.test(ma);
+      R[cle + '_sans_defilement'] = await pz.evaluate(()=>document.documentElement.scrollWidth - innerWidth <= 1);
+      await pz.close();
+    }
+
+    /* 3bis. Chinois : traduit, pas de défilement horizontal (1440 et 390) */
+    for (const w of [1440, 390]){
+      const pc = await page(b, {langue:'zh', w});
+      await pc.waitForTimeout(500);
+      const cle = 'chinois_' + w;
+      R[cle + '_lang'] = await pc.evaluate(()=>document.documentElement.lang === 'zh');
+      for (const t of ['accueil','creations','commandes','stock','indicateurs','reglages']){
+        await dans(pc, function(t){ aller(t); }, t); await pc.waitForTimeout(350);
+      }
+      await dans(pc, function(){ aller('creations'); }); await pc.waitForTimeout(400);
+      const mc = await txt(pc, '#main');
+      R[cle + '_traduit'] = !/Mes créations|Nouvelle création/.test(mc);
+      R[cle + '_sans_defilement'] = await pc.evaluate(()=>document.documentElement.scrollWidth - innerWidth <= 1);
+      await pc.close();
+    }
 
     /* 4. Anglais : l'appli est traduite, nombres à l'anglaise */
     const pe = await page(b, {langue:'en'});

@@ -19,8 +19,8 @@
 var LANGUES = {
   fr: {nom:"Français", locale:"fr-FR", dir:"ltr"},
   en: {nom:"English",  locale:"en-GB", dir:"ltr"},
-  ar: {nom:"العربية",  locale:"ar-u-nu-latn", dir:"rtl", enCours:true},
-  zh: {nom:"中文",     locale:"zh-CN", dir:"ltr", enCours:true}
+  ar: {nom:"العربية",  locale:"ar-u-nu-latn", dir:"rtl"},
+  zh: {nom:"中文",     locale:"zh-CN", dir:"ltr"}
 };
 /* Une langue « en cours » (traduction pas encore complète) n'est pas proposée ;
    on peut la voir pour la relire avec localStorage « crochompte-langue-relecture » = 1. */

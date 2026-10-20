@@ -6,6 +6,7 @@ projet ; les règles de calcul sont dans `REGLES-METIER.md`.
 
 | Version | Date | Ce qui change |
 |---|---|---|
+| V64 | 20/10/2026 | Crochompte existe maintenant aussi en arabe et en chinois (traduction complète, arabe de droite à gauche) ; le sélecteur de langue propose les quatre langues (français, anglais, arabe, chinois). |
 | V63.3 | 20/10/2026 | Vidéo de présentation : elle s'ouvre sur le logo et le nom Crochompte, bien au centre sur le fond vert (aussi en image d'attente avant lecture), puis enchaîne en fondu sur la présentation. |
 | V63.2 | 20/10/2026 | Vidéo de présentation : nouvelle version avec une voix off plus naturelle ; elle démarre directement sur le fond vert (plus d'écran blanc avant la première image), et le cadre de la vidéo est vert pendant le chargement. |
 | V63.1 | 20/10/2026 | Vidéo de présentation refaite : voix off plus naturelle et posée, film de 1 min 45 en neuf parties qui présente aussi les créations (coût de revient, gain de l'heure, prix conseillé), les pièces et le chrono, les matières et le stock (suivi par couleur, ce qu'il reste, ce qu'il faut racheter avant une fabrication), les commandes (étapes, matière réservée, documents PDF), les chiffres du mois et ce qu'il faut mettre de côté, les patrons, le compteur de rangs et le hors connexion. |
