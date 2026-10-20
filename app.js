@@ -3527,13 +3527,13 @@ function renderErreurChargement(){
    héberge la même zone que sync.js sait déjà peindre (formulaires de
    connexion / inscription / récupération) — seul l'endroit où elle apparaît
    change par rapport à l'ancien emplacement, dans Réglages. */
-/* V63 : la vidéo de présentation (une minute, sous-titrée, avec voix), en
+/* V63 : la vidéo de présentation (1 min 45, sous-titrée, avec voix), en
    plein écran léger. Le fichier n'est chargé qu'à la demande. */
 function ouvrirPresentation(){
   var vieux = document.getElementById("pres-video"); if (vieux) vieux.remove();
   var z = el('<div class="pres-fond" id="pres-video" role="dialog" aria-modal="true" aria-label="Présentation de Crochompte">'+
-    '<div class="pres-boite"><video controls autoplay playsinline preload="metadata" poster="media/presentation-poster.jpg">'+
-      '<source src="media/presentation.mp4" type="video/mp4">Ton navigateur ne lit pas cette vidéo.</video>'+
+    '<div class="pres-boite"><video controls autoplay playsinline preload="metadata" poster="media/presentation-poster.jpg?v=633">'+
+      '<source src="media/presentation.mp4?v=633" type="video/mp4">Ton navigateur ne lit pas cette vidéo.</video>'+
     '<button type="button" class="pres-x" aria-label="Fermer la présentation">×</button></div></div>');
   var v = z.querySelector("video");
   function fermer(){ try{ v.pause(); }catch(e){} z.remove(); document.removeEventListener("keydown", surTouche); }
@@ -3559,10 +3559,10 @@ function renderPortail(){
         '<h1>Sache ce que chaque création te rapporte vraiment.</h1>'+
         '<p class="lede">Matières, frais de plateforme, cotisations et temps passé : Crochompte fait le calcul '+
         'et te donne ton vrai gain à l\'heure. Puis il t\'aide à suivre tes commandes, ton stock et tes ventes.</p>'+
-        '<button type="button" class="portail-video" id="portail-video" aria-label="Voir la présentation de Crochompte, une minute">'+
+        '<button type="button" class="portail-video" id="portail-video" aria-label="Voir la présentation de Crochompte, moins de deux minutes">'+
           '<img src="media/presentation-poster.jpg" alt="" width="1280" height="720" loading="lazy">'+
           '<span class="pv-play" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span>'+
-          '<span class="pv-lib">Voir la présentation <small>· 1 min</small></span>'+
+          '<span class="pv-lib">Voir la présentation <small>· 2 min</small></span>'+
         '</button>'+
         '<ul class="portail-points">'+
           '<li><b>Ton vrai coût de revient</b><span>Le fil, les petites fournitures, les chutes, les frais de vente et les cotisations.</span></li>'+
@@ -3592,7 +3592,7 @@ function renderPortail(){
   if (bE) bE.addEventListener("click", commencerSansCompte);
   enveloppe.querySelector(".portail-form").appendChild(essai);
   /* Sur téléphone, le formulaire passe en premier : un lien vers la vidéo juste dessous. */
-  var lienV = el('<p class="portail-lien-video"><button type="button" class="lien-mini">▶ Voir la présentation · 1 min</button></p>');
+  var lienV = el('<p class="portail-lien-video"><button type="button" class="lien-mini">▶ Voir la présentation · 2 min</button></p>');
   lienV.querySelector("button").addEventListener("click", ouvrirPresentation);
   enveloppe.querySelector(".portail-form").appendChild(lienV);
   main.appendChild(enveloppe);
@@ -4068,10 +4068,10 @@ function renderAccueil(main){
 
 
 /* ═════ NOUVEAUTÉS ET SIGNALEMENT ═════ */
-var VERSION_APP = "V63";
+var VERSION_APP = "V63.3";
 var NOUVEAUTES = [
-  {v:"V63", d:"Octobre 2026", l:[
-    "Une vidéo d'une minute présente Crochompte sur l'écran de connexion.",
+  {v:"V63.3", d:"Octobre 2026", l:[
+    "Une vidéo de présentation sur l'écran de connexion : le prix juste, les créations, le stock, les commandes et les chiffres.",
     "Nouvelle page « Qui sommes-nous » : l'histoire de Crochompte.",
     "Crochompte existe aussi en anglais : choisis la langue en haut de l'écran ou dans Apparence.",
     "Essai : 14 jours sans compte sur un appareil, ou 6 mois avec un compte gratuit."

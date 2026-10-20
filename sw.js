@@ -11,9 +11,9 @@
    Les données de l'atelier ne passent jamais par ici : elles restent entre
    l'application et le serveur (Supabase), qui n'est jamais mis en cache.
    ═══════════════════════════════════════════════════════════════════════════ */
-var CACHE = "crochompte-app-v63";
+var CACHE = "crochompte-app-v633";
 var ESSENTIELS = [
-  "./", "index.html", "boot.js?v=63", "i18n.js?v=63", "pdf.js?v=63", "app.js?v=63", "sync.js?v=63", "config.js", "confidentialite.html", "cgv.html", "mentions-legales.html", "a-propos.html", "manifest.webmanifest",
+  "./", "index.html", "boot.js?v=633", "i18n.js?v=633", "pdf.js?v=633", "app.js?v=633", "sync.js?v=633", "config.js", "confidentialite.html", "cgv.html", "mentions-legales.html", "a-propos.html", "manifest.webmanifest",
   "polices/public-sans-latin-400-normal.woff2", "polices/public-sans-latin-500-normal.woff2",
   "polices/public-sans-latin-600-normal.woff2", "polices/bricolage-grotesque-latin-600-normal.woff2",
   "polices/bricolage-grotesque-latin-700-normal.woff2", "polices/bricolage-grotesque-latin-800-normal.woff2",
