@@ -4180,8 +4180,11 @@ function renderAccueil(main){
 
 
 /* ═════ NOUVEAUTÉS ET SIGNALEMENT ═════ */
-var VERSION_APP = "V65.1";
+var VERSION_APP = "V65.2";
 var NOUVEAUTES = [
+  {v:"V65.2", d:"Octobre 2026", l:[
+    "Anglais, arabe et chinois fiabilisés : plus de phrases mélangées entre deux langues, et plus de deux cents textes traduits en plus (unités, listes, catalogue des matières)."
+  ]},
   {v:"V65.1", d:"Octobre 2026", l:[
     "L'application est beaucoup plus rapide quand l'atelier grossit : ouverture en 1 à 2 secondes et changements d'écran immédiats, même avec des centaines de créations et de commandes.",
     "Les longues listes de ventes et de commandes s'affichent par 60, avec « Afficher les suivantes »."

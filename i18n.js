@@ -66,6 +66,29 @@ function substituer(trad, valeurs){
   return trad.replace(/\{[xn]\}/g, function(){ return i < valeurs.length ? valeurs[i++] : ""; });
 }
 
+/* V65.2 : un texte a « l'aspect français » s'il contient un mot français
+   courant de l'interface. Sert à distinguer une donnée saisie (« Zoé »,
+   « Lapin Céleste » : pas besoin de traduction) d'un texte de l'application
+   resté sans traduction. Règle d'or : on ne rend JAMAIS un texte moitié
+   français moitié traduit — mieux vaut tout laisser en français et le
+   relever comme manquant. */
+var MOTS_FR = ("le la les un une des du de au aux et ou est sont sera pour avec sans sur dans chez " +
+  "pas plus tres deja encore tout toute tous toutes tes ton ta ce cette ces qui que rien aucun aucune " +
+  "jour jours semaine semaines mois annee annees heure heures reste restent retard livree livrees " +
+  "facture factures commande commandes vente ventes piece pieces pelote pelotes matiere matieres " +
+  "prix acompte devis stock votre notre leur").split(" ");
+var RE_MOT_FR = new RegExp("(^|[^a-z])(" + MOTS_FR.join("|") + ")([^a-z]|$)");
+function sansAccents(x){ return x.toLowerCase().replace(/[àâä]/g,"a").replace(/[éèêë]/g,"e").replace(/[îï]/g,"i").replace(/[ôö]/g,"o").replace(/[ùûü]/g,"u").replace(/ç/g,"c"); }
+function aspectFrancais(x){ return RE_MOT_FR.test(sansAccents(String(x || ""))); }
+/* Un mot-outil seul, ou « nombre + unité française », capturé par un gabarit
+   {x} : c'est l'interface, pas une donnée — le gabarit se trompe. */
+var RE_CAPTURE_OUTIL = /^(le|la|les|l|un|une|de|du|des|d|en|au|aux|et|ou|ce|cette|ces|son|sa|ses|ton|ta|tes)$/;
+var RE_CAPTURE_UNITE = /^\d[\d\s\u00a0.,]*\s*(jour|jours|semaine|semaines|mois|an|ans|heure|heures|pelote|pelotes|piece|pieces|sac|sacs|lot|lots)$/;
+function captureSuspecte(c){
+  var x = sansAccents(String(c).trim());
+  return RE_CAPTURE_OUTIL.test(x) || RE_CAPTURE_UNITE.test(x);
+}
+
 /* Traduit un texte brut (sans ses blancs de bord). */
 /* Découpe en phrases (sans lookbehind : Safari ancien). */
 function phrasesDe(t){
@@ -86,10 +109,10 @@ function traduireTexte(t, profondeur){
   }
   if (profondeur > 2) return null;
   /* 2b. ponctuation de bord : « . Ce jour-là… », « 3 personnes. » */
-  var mL = /^([.;:!?…»)\]]+\s*)([\s\S]+)$/.exec(t);
+  var mL = /^([.;:!?…·»)\]]+\s*)([\s\S]+)$/.exec(t);
   if (mL){ var trL = traduireTexte(mL[2], profondeur + 1); if (trL !== null) return mL[1] + trL; }
-  var mT = /^([\s\S]+?)\s*([.:…])$/.exec(t);
-  if (mT && !/[.:…]$/.test(mT[1])){ var trT = traduireTexte(mT[1], profondeur + 1); if (trT !== null) return trT + mT[2]; }
+  var mT = /^([\s\S]+?)\s*([.:…·])$/.exec(t);
+  if (mT && !/[.:…·]$/.test(mT[1])){ var trT = traduireTexte(mT[1], profondeur + 1); if (trT !== null) return trT + (mT[2] === "·" ? " ·" : mT[2]); }
   /* 3. nombre en tête : « 9 pièces terminées » = 9 + « pièces terminées » */
   var mN = /^(\d[\d\s\u00a0.,]*?)\s+(\S[\s\S]*)$/.exec(t);
   if (mN){ var tr3 = traduireTexte(mN[2], profondeur + 1); if (tr3 !== null) return mN[1] + " " + tr3; }
@@ -104,30 +127,50 @@ function traduireTexte(t, profondeur){
       if (g.fixe < 6 && t.length > 40) continue;
       var m = g.re.exec(t);
       if (!m) continue;
-      var ok = true;
-      for (var c = 1; c < m.length; c++){ if (m[c].length > 80 || /[.!?] [A-ZÀ-Ý]/.test(m[c])){ ok = false; break; } }
-      if (ok) return substituer(g.trad, m.slice(1));
+      var ok = true, caps = m.slice(1);
+      for (var c = 0; c < caps.length; c++){
+        if (caps[c].length > 80 || /[.!?] [A-ZÀ-Ý]/.test(caps[c])){ ok = false; break; }
+        /* V65.2 : une capture qui ressemble à du texte français de
+           l'application (« au mois dernier à la même date ») est traduite à
+           son tour ; si elle n'a pas de traduction, le gabarit est rejeté —
+           jamais de français réinjecté au milieu d'une phrase traduite. */
+        if (aspectFrancais(caps[c]) || captureSuspecte(caps[c])){
+          var tc = profondeur <= 2 ? traduireTexte(normaliser(caps[c]), profondeur + 1) : null;
+          if (tc === null){ ok = false; break; }
+          caps[c] = tc;
+        }
+      }
+      if (ok) return substituer(g.trad, caps);
     }
   }
-  /* 5. plusieurs phrases : chacune à son tour */
+  /* 5. plusieurs phrases : CHAQUE phrase doit être traduite (ou être une
+     donnée sans aspect français) — jamais un mélange de langues (V65.2). */
   var phrases = phrasesDe(t);
   if (phrases.length >= 2){
-    var okP = false, outP = [];
-    for (var pi = 0; pi < phrases.length; pi++){ var tp = traduireTexte(phrases[pi], profondeur + 1); if (tp !== null) okP = true; outP.push(tp !== null ? tp : phrases[pi]); }
-    if (okP) return outP.join(" ");
+    var okP = false, toutP = true, outP = [];
+    for (var pi = 0; pi < phrases.length; pi++){
+      var tp = traduireTexte(phrases[pi], profondeur + 1);
+      if (tp !== null) okP = true;
+      else if (aspectFrancais(phrases[pi])) toutP = false;
+      outP.push(tp !== null ? tp : phrases[pi]);
+    }
+    if (okP && toutP) return outP.join(" ");
   }
   /* 6. texte composé de parties : « Devis envoyé · Zoé », « En cours : « Bonnet » » */
   var sep = /( · | — | – | : |, | \/ )/;
   var parts = t.split(sep);
   if (parts.length >= 3){
-    var okS = false, outS = [];
+    var okS = false, toutS = true, outS = [];
     for (var si = 0; si < parts.length; si++){
       if (si % 2 === 1){ outS.push(parts[si]); continue; }
       var ts = parts[si] ? traduireTexte(parts[si], profondeur + 1) : null;
       if (ts !== null) okS = true;
+      /* un morceau sans traduction n'est toléré que s'il ressemble à une
+         donnée (nom, montant), pas à un texte français de l'application */
+      else if (parts[si] && aspectFrancais(parts[si])) toutS = false;
       outS.push(ts !== null ? ts : parts[si]);
     }
-    if (okS) return outS.join("");
+    if (okS && toutS) return outS.join("");
   }
   if (manques && profondeur === 0 && t.length > 1 && /[A-Za-zÀ-ÿ]/.test(t) && !manques[t]) manques[t] = 1;
   return null;
