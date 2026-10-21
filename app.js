@@ -948,14 +948,14 @@ function calculer(cr){
   for (var i=0;i<cr.lignes.length;i++){
     var l = cr.lignes[i], m = matiere(l.mid);
     if (!m) continue;
-    var c = pu(m) * (Number(l.qte)||0);
+    /* Règle des centimes (V64.2) : CHAQUE ligne est arrondie au centime dès
+       ici, et les totaux sont la somme de ces lignes arrondies. Ce qu'on lit
+       à l'écran s'additionne donc toujours exactement. */
+    var c = cts(pu(m) * (Number(l.qte)||0));
     detail.push({mid:m.id, nom:m.nom, cout:c});
     if (m.cat === "fin") emballage += c;
     else { consommable += c; if (!avecPerte(m)) sansPerte += c; }
   }
-  /* Règle des centimes : chaque ligne affichée est arrondie au centime, et
-     le reste est calculé à partir de ces lignes arrondies. Ce qu'on lit à
-     l'écran s'additionne donc toujours exactement. */
   consommable = cts(consommable); emballage = cts(emballage);
   var perte = cts((consommable - sansPerte) * (Number(r.tauxPerte)||0)/100);
   var matieres = cts(consommable + perte + emballage);
@@ -996,6 +996,11 @@ function calculer(cr){
   var mainOeuvreBrute = heures * (Number(r.tauxHoraire)||0);
   for (var e1 = 0; !impossible && e1 < 5 && resteA(prixObjectif) + 0.0001 < mainOeuvreBrute; e1++) prixObjectif = cts(prixObjectif + 0.01);
   for (var e2 = 0; !impossible && e2 < 5 && resteA(prixPlancher) < 0; e2++) prixPlancher = cts(prixPlancher + 0.01);
+  /* …et redescente (V64.2) : le prix conseillé est bien le PLUS BAS prix au
+     centime qui paie le taux visé (l'arrondi laissait parfois 1 à 2 centimes
+     de trop), même chose pour le plancher. */
+  for (var e3 = 0; !impossible && e3 < 5 && prixObjectif > 0.01 && resteA(cts(prixObjectif - 0.01)) + 0.0001 >= mainOeuvreBrute; e3++) prixObjectif = cts(prixObjectif - 0.01);
+  for (var e4 = 0; !impossible && e4 < 5 && prixPlancher > 0.01 && resteA(cts(prixPlancher - 0.01)) >= 0; e4++) prixPlancher = cts(prixPlancher - 0.01);
   var coutRevient = cts(matieres + fixePiece + fraisFixesVente + fraisVar + cotisations + mainOeuvre);
 
   return {detail:detail, consommable:consommable, perte:perte, emballage:emballage, matieres:matieres,
@@ -1037,7 +1042,10 @@ function besoinAchat(cr, n, tenirCompteStock){
                  conditionnement:m.contenance, prixCond:m.prix});
   });
   lignes.sort(function(a,b){ return b.coutAchat - a.coutAchat; });
-  return {n:n, lignes:lignes, investi:investi, consomme:consomme, resteValeur:resteValeur};
+  /* V64.2 : « Utilisé pour n pièces » est exactement n fois les « Matières et
+     emballage » de la fiche — la même valeur partout, mêmes arrondis. */
+  consomme = cts(n * calculer(cr).matieres);
+  return {n:n, lignes:lignes, investi:cts(investi), consomme:consomme, resteValeur:cts(resteValeur)};
 }
 
 /* ═════ 4. STOCK ═════ */
@@ -1476,9 +1484,37 @@ function dialogueModifierMouvement(m, mv){
     }
     mv.n = box.querySelector("#mm-note").value.trim();
     mv.modif = Date.now();
-    rejouerMouvements(m);
+    /* V64.2 : un achat corrigé à un autre prix rejoint la ligne de ce prix
+       (comme au moment de l'achat, « une ligne = un prix », V60), au lieu
+       de changer le prix de la ligne d'origine et d'en créer deux identiques. */
+    var cibleM = m;
+    if (mv.t === "entree" && !mv.est && Number(mv.p) > 0){
+      mv.annule = Date.now();
+      rejouerMouvements(m);
+      var cible = ligneAchat(m, mv.q, Number(mv.p));
+      if (cible.m === m && !cible.nouvelle){
+        delete mv.annule;               /* même prix, ou lot au point de départ : on reste ici */
+        rejouerMouvements(m);
+      } else {
+        if (cible.nouvelle) state.matieres.push(cible.m);
+        m.mouv.unshift({id:"mv_" + uid(), d: Date.now(), t:"annulation", q: mv.q, p:null, pu:null, sa: Number(m.stock)||0,
+                        pmp: Number(m.pmp)||null, ref: mv.id, n: "Achat du " + dateCourte(mv.d) + " déplacé vers la ligne à " + eur(Number(cible.m.prix)||0)});
+        /* L'état de départ du lot d'arrivée, pour que le rejeu par dates
+           reste juste si l'achat déplacé devient son plus ancien mouvement. */
+        var connusC = (cible.m.mouv || []).filter(function(x){ return x.t !== "annulation" && typeof x.sav === "number"; })
+                                          .sort(function(x, y){ return x.d - y.d; });
+        var base0 = connusC.length ? connusC[0] : null;
+        mouvementMatiere(cible.m, "entree", mv.q, Number(mv.p), mv.n, {fid: mv.f, sansOffre: true});
+        var rec2 = cible.m.mouv[0];
+        rec2.d = mv.d;
+        if (base0 && mv.d <= base0.d){ rec2.sav = base0.sav; rec2.pmpav = base0.pmpav; if (typeof base0.prixav === "number") rec2.prixav = base0.prixav; }
+        cible.m.prixIndicatif = false;
+        rejouerMouvements(cible.m);
+        cibleM = cible.m;
+      }
+    } else rejouerMouvements(m);
     sauverTout(); render();
-    toast("Mouvement corrigé. Stock de « " + m.nom + " » : " + qte(m.stock, m.unite) + (m.cat !== "outil" && m.pmp ? " · prix moyen " + eurU(m.pmp, m.unite) : "") + ".");
+    toast("Mouvement corrigé. Stock de « " + cibleM.nom + " » : " + qte(cibleM.stock, cibleM.unite) + (cibleM.cat !== "outil" && cibleM.pmp ? " · prix moyen " + eurU(cibleM.pmp, cibleM.unite) : "") + ".");
   });
 }
 
@@ -1641,6 +1677,9 @@ function grouperMilliers(s){
 function sepDecimal(){ var I = window.CrochompteI18n; var l = I ? I.langue() : "fr"; return (l === "en" || l === "zh") ? "." : ","; }
 function eur(n){
   if (!isFinite(n) || Math.abs(n) < 0.005) n = 0;
+  /* V64.2 : arrondi au centime (cts) avant l'affichage — toFixed arrondissait
+     0,175 à 0,17 alors que les totaux comptaient 0,18. */
+  n = Math.round((Math.abs(n) + 1e-9) * 100) / 100 * (n < 0 ? -1 : 1);
   return (n<0?"−":"") + grouperMilliers(Math.abs(n).toFixed(2).replace(".", sepDecimal())) + " €";
 }
 /* Pour les montants ronds par nature — un plafond légal, un seuil. « 85 000 € »
@@ -2386,11 +2425,24 @@ function appliquerProfil(id, opts){
   state.reglages.profilType = p.id;
   state.reglages.profil = p.profil;
   state.reglages.mode = p.mode;
-  /* Amateur : activité non déclarée, donc aucune cotisation. Pro : un taux
+  /* Amateur : activité non déclarée, donc aucune cotisation — y compris en
+     venant du profil pro (V64.2 : le statut pro restait et 12,4 % étaient
+     retirés en silence alors que l'écran disait « aucune cotisation »).
+     L'ancien statut est gardé de côté pour un retour en pro. Pro : un taux
      reste à choisir avec le statut ; en attendant, l'hypothèse la plus
      courante (vente de ses créations) plutôt que 0 %. */
-  if (!p.pro){ if (!state.reglages.statut) state.reglages.statut = "non_declare"; }
-  else if (state.reglages.statut === "non_declare"){ state.reglages.statut = ""; if (!(Number(state.reglages.cotisations) > 0)) state.reglages.cotisations = 12.4; }
+  if (!p.pro){
+    if (state.reglages.statut && state.reglages.statut !== "non_declare"){
+      state.reglages.statutPro = state.reglages.statut;
+      state.reglages.cotisationsPro = Number(state.reglages.cotisations) || 0;
+    }
+    state.reglages.statut = "non_declare";
+  }
+  else if (!state.reglages.statut || state.reglages.statut === "non_declare"){
+    state.reglages.statut = state.reglages.statutPro || "";
+    state.reglages.cotisations = Number(state.reglages.cotisationsPro) > 0 ? Number(state.reglages.cotisationsPro)
+      : (Number(state.reglages.cotisations) > 0 ? Number(state.reglages.cotisations) : 12.4);
+  }
   if (state.reglages.statut === "non_declare") state.reglages.cotisations = 0;
   sauverTout();
   if (!(opts && opts.sansRendu)) render();
@@ -4068,8 +4120,13 @@ function renderAccueil(main){
 
 
 /* ═════ NOUVEAUTÉS ET SIGNALEMENT ═════ */
-var VERSION_APP = "V64.1";
+var VERSION_APP = "V64.2";
 var NOUVEAUTES = [
+  {v:"V64.2", d:"Octobre 2026", l:[
+    "Annuler une commande livrée remet ses pièces en stock : tes chiffres et ton livre des recettes ne comptent que l'argent réellement reçu.",
+    "Le prix conseillé est maintenant le plus bas prix au centime qui paie ton objectif, et chaque total est la somme exacte des lignes affichées.",
+    "Une pièce réservée pour une commande ne peut plus être vendue ailleurs par erreur."
+  ]},
   {v:"V64.1", d:"Octobre 2026", l:[
     "Une matière prise dans le catalogue apparaît bien dans « Mes matières », même avant ton premier achat.",
     "« Noter une vente » sans création ouvre une fenêtre qui explique quoi faire ; la fiche ouverte depuis le catalogue y ramène."
@@ -5349,7 +5406,15 @@ function dialogueAchatMatiere(m, opts){
   function maj(){
     var n = Number(lireNombre(iN.value)) || 0, p = Number(lireNombre(iP.value)) || 0;
     var q = n * (Number(m.contenance) || 1);
-    aide.textContent = n > 0 ? "+ " + qte(q, m.unite) + " en stock" + (p > 0 ? " · " + eurU(p / q, m.unite) : " · au prix de la fiche, faute de prix") + " · stock après : " + qte((Number(m.stock)||0) + q, m.unite) : "";
+    /* V64.2 : si l'achat ouvre (ou rejoint) un autre lot, le « stock après »
+       annoncé est celui de l'article entier, pas un total qui ne
+       correspondrait à rien. */
+    var la = p > 0 ? ligneAchat(m, q, p) : {m: m, nouvelle: false};
+    var apresTxt = (la.m === m && !la.nouvelle)
+      ? "stock après : " + qte((Number(m.stock)||0) + q, m.unite)
+      : "cet achat ira dans " + (la.nouvelle ? "une nouvelle ligne à " + eur(Number(la.m.prix)||0) : "la ligne à " + eur(Number(la.m.prix)||0)) +
+        " · l'article passera à " + qte(stockArticle(m) + q, m.unite);
+    aide.textContent = n > 0 ? "+ " + qte(q, m.unite) + " en stock" + (p > 0 ? " · " + eurU(p / q, m.unite) : " · au prix de la fiche, faute de prix") + " · " + apresTxt : "";
   }
   var lien = lierPrixAchat(function(){ return Number(lireNombre(iN.value)) || 0; }, iU, iP, maj);
   iN.addEventListener("input", function(){ lien.majDepuisN(); maj(); });
@@ -5488,8 +5553,10 @@ function dialogueVente(cid, opts){
     selCanal.value = opts.canal || c.canal || "direct";
     var n = enStock(c.id);
     /* Pièces encore en fabrication : on propose de vendre l'une d'elles
-       plutôt que d'en créer une en double (V55). */
-    var enCours = piecesDe(c.id).filter(function(x){ return x.prod !== "termine" && x.com !== "vendu" && x.com !== "jete"; });
+       plutôt que d'en créer une en double (V55). V64.2 : jamais une pièce
+       réservée pour une commande — elle « ne peut plus être vendue
+       ailleurs » (V60) ; sa commande la vendra à la livraison. */
+    var enCours = piecesDe(c.id).filter(function(x){ return x.prod !== "termine" && x.com !== "vendu" && x.com !== "jete" && x.com !== "commande" && !x.cmdId; });
     selPiece.innerHTML = "";
     if (!n && enCours.length){
       enCours.forEach(function(x){
@@ -5597,7 +5664,9 @@ function lignesVentes(per){
     var t = dateVersTs(c.livreeLe) || dateVersTs(c.datePromise) || dateVersTs(c.dateCommande) || 0;
     if (t < per.d0 || t >= per.d1) return;
     var arts = articlesCommande(c).filter(function(a){ return a.q > 0; });
-    var moyens = (c.paiements||[]).filter(function(x){ return Number(x.montant) > 0 && x.moyen; }).map(function(x){ return libelleMoyen(x.moyen); });
+    /* V64.2 : le versement initial (acompte, arrhes) compte aussi. */
+    var tousP = (c.versement && Number(c.versement.montant) > 0 ? [c.versement] : []).concat(c.paiements || []);
+    var moyens = tousP.filter(function(x){ return Number(x.montant) > 0 && x.moyen; }).map(function(x){ return libelleMoyen(x.moyen); });
     moyens = moyens.filter(function(x, i){ return moyens.indexOf(x) === i; });
     l.push({t:t, type:"cmd", c:c, quoi:(arts.length ? (arts[0].q > 1 ? arts[0].q + " × " : "") + arts[0].nom + (arts.length > 1 ? " + " + (arts.length - 1) : "") : "Commande " + (c.num || "")),
             qui:(c.client && c.client.nom) || "", ou:"Commande" + (c.factureNum ? " · facturée" : ""), moyen:moyens.join(", ") || "—", montant:totalDu(c), recu:encaisse(c), reste:Math.max(0, soldeDu(c))});
@@ -7732,8 +7801,8 @@ function renderStockMatieres(main){
     }
     main.appendChild(el('<p class="hint" style="margin-top:12px;max-width:78ch">'+
       'Le <b>prix unitaire</b> est celui du jour du mouvement : le prix d\'achat pour une entrée, '+
-      'le prix moyen pour une sortie. Tout l\'historique est conservé. Le dernier mouvement d\'une matière '+
-      'peut être annulé ; pour corriger un mouvement plus ancien, fais un inventaire.</p>'));
+      'le prix moyen pour une sortie. Tout l\'historique est conservé. Chaque mouvement peut être '+
+      'corrigé (crayon) ou annulé : le stock et le prix moyen sont alors recalculés sur tout l\'historique.</p>'));
   }
 }
 
@@ -8837,7 +8906,11 @@ function renderReglages(main){
     card.addEventListener("input", function(e){
       var k = e.target.getAttribute("data-r"); if (!k) return;
       var lim = LIMITES_REGLAGES[k] || [0];
-      state.reglages[k] = borne(Number(e.target.value)||0, lim[0], lim[1]);
+      var val = Number(e.target.value)||0;
+      /* V64.2 : on vend des pièces entières — « 2,5 » répartissait les frais
+         fixes sur 2,5 pièces. */
+      if (k === "piecesParMois") val = Math.max(1, Math.round(val));
+      state.reglages[k] = borne(val, lim[0], lim[1]);
       sauver();
     });
     card.addEventListener("change", function(e){
@@ -10027,6 +10100,7 @@ function majCom(p, k, prix){
   } else if (avant === "jete" && k !== "jete"){ p.jeteLe = null; p.perteFigee = null; }
   if (avant === "vendu" && k !== "vendu"){
     p.venduLe = null; p.fige = null; p.coutFige = null;
+    p.prix = null;   /* V64.2 : la fenêtre promet d'effacer le prix de vente ; revendue, elle repartira du prix de la fiche */
     var cl = commandeLiee(p);
     if (cl){ retirerVenteDeCommande(cl, p); if (cl.pieceId === p.id) cl.pieceId = null; journaliser(cl, "Pièce détachée de la commande (elle n'est plus vendue)"); }
     p.cmdId = null;
@@ -10283,7 +10357,7 @@ function livreRecettes(annee){
   commandes().forEach(function(c){
     var qui = (c.client && c.client.nom) || "Sans nom", ref = c.factureNum ? "Facture " + c.factureNum : "Commande " + (c.num || "");
     var v = c.versement || {}, mv = Number(v.montant)||0, tv = dateVersTs(v.date) || dateVersTs(c.dateCommande);
-    if (mv > 0 && anneeDe(tv) === annee) l.push({t:tv, ref:ref, qui:qui, nature:(v.type === "arrhes" ? "Arrhes" : "Acompte") + " sur commande", montant:mv, moyen:"—"});
+    if (mv > 0 && anneeDe(tv) === annee) l.push({t:tv, ref:ref, qui:qui, nature:(v.type === "arrhes" ? "Arrhes" : "Acompte") + " sur commande", montant:mv, moyen:libelleMoyen(v.moyen)});
     (c.paiements||[]).forEach(function(pp){
       var m = Number(pp.montant)||0; if (!m) return;
       var tp = dateVersTs(pp.date) || pp.saisiLe || null;
@@ -12142,6 +12216,7 @@ function ouvrirPicker(choisie){
         confirmerAdoption(o, function(){
           var m = adopterMatiere(o.id);
           if (!m) return;
+          view.mfQ = "";   /* V64.2 : même recherche restée remplie */
           sauverTout();
           toast("« " + o.nom + " » ajoutée à tes matières");
           fermerPicker(function(){ choisie(m.id); });
@@ -12321,7 +12396,9 @@ function renderCatalogueMatieres(main){
       } else {
         act.appendChild(bouton("Ajouter à mes matières", function(){
           confirmerAdoption(o, function(){
-            adopterMatiere(o.id); sauverTout(); render();
+            adopterMatiere(o.id);
+            view.mfQ = "";   /* V64.2 : une recherche restée remplie cachait la nouvelle matière */
+            sauverTout(); render();
             toast("« " + o.nom + " » ajoutée");
           });
         }));
@@ -14689,12 +14766,20 @@ function dialogueReglement(c, apres){
     enregistrerReglement(c, m, c.dernierMoyen, box.querySelector("#rg-d").value || aujourdhuiISO(), apres);
   });
 }
-/* Les pièces reliées sont détachées explicitement : elles restent vendues,
-   et leur prix compte désormais comme une vente à part (V55). */
+/* Les pièces reliées sont détachées explicitement quand la commande est
+   annulée ou supprimée. V64.2 : une pièce « vendue » par la livraison de
+   cette commande redevient une pièce terminée en stock — elle ne devient
+   plus une vente au comptant fictive, qui gonflait « Encaissé », Mes ventes
+   et le Livre des recettes (l'argent réellement reçu reste compté par les
+   versements de la commande, et le remboursement éventuel s'y note). */
 function detacherPieces(cmdId){
-  /* V59 : une pièce pas encore remise retourne dans le stock de l'atelier ;
-     une pièce déjà vendue reste vendue, et compte à part. */
-  (state.pieces || []).forEach(function(p){ if (p.cmdId === cmdId){ p.cmdId = null; if (p.com === "commande") p.com = "atelier"; } });
+  (state.pieces || []).forEach(function(p){
+    if (p.cmdId !== cmdId) return;
+    p.cmdId = null;
+    if (p.com === "commande") p.com = "atelier";
+    else if (p.com === "vendu"){ p.com = "atelier"; p.venduLe = null; p.fige = null; p.paiement = null; }
+    p.maj = Date.now();
+  });
 }
 
 /* ═════ LA COMMANDE DANS L'ATELIER (V59) ═════
@@ -14942,7 +15027,9 @@ function besoinsCommande(c){
   });
   return b;
 }
-function soldeDu(c){ return Math.max(0, cts(totalDu(c) - encaisse(c))); }
+/* V64.2 : une commande annulée n'a rien à recevoir (seul un remboursement
+   éventuel se note dans sa fiche). */
+function soldeDu(c){ return c.statut === "annulee" ? 0 : Math.max(0, cts(totalDu(c) - encaisse(c))); }
 function tropPercu(c){ return Math.max(0, cts(encaisse(c) - totalDu(c))); }
 /* L'argent qu'on attend vraiment : commandes acceptées, en cours, terminées
    ou livrées. Un devis n'est pas encore une dette ; une commande annulée non
@@ -15226,6 +15313,10 @@ function numerotationPossible(){
 function manquesFacture(c){
   var l = [], r = state.reglages;
   function versReglages(){ view.regSection = "facturation"; aller("reglages"); }
+  /* V64.2 : sans compte, la condition est affichée AVANT le clic, comme les
+     autres (le numéro unique est attribué par le compte en ligne). */
+  if (comptesActives() && typeof modeSansCompte !== "undefined" && modeSansCompte && !compteInfo.connecte)
+    l.push({t:"un compte (gratuit) : le numéro unique de la facture est attribué par ton compte en ligne", a:function(){ numerotationPossible(); }, lib:"Créer mon compte"});
   if (!String(r.raisonSociale || "").trim()) l.push({t:"ton nom (ou le nom de ton entreprise)", a:versReglages, lib:"Compléter mes informations"});
   if (!String(r.adresse || "").trim()) l.push({t:"ton adresse", a:versReglages, lib:"Compléter mes informations"});
   /* Une facture sans identifiant du vendeur est irrégulière : le statut
@@ -15716,7 +15807,8 @@ function renderCommandes(main){
         (et.action ? '<div class="hint etape-suite'+(et.urgent ? ' urgent' : '')+'">'+esc(et.action)+'</div>' : '')+'</div></td>'+
       '<td class="n num" data-l="Prix convenu">'+esc(eur(totalDu(c)))+'</td>'+
       '<td class="n num" data-l="Reçu">'+(encaisse(c) > 0 ? esc(eur(encaisse(c))) : '<span class="hint">—</span>')+'</td>'+
-      '<td class="n num" data-l="Reste à recevoir">'+(solde > 0 ? '<b>'+esc(eur(solde))+'</b>'
+      '<td class="n num" data-l="Reste à recevoir">'+(c.statut === "annulee" ? '<span class="hint">—</span>'
+          : solde > 0 ? '<b>'+esc(eur(solde))+'</b>'
           : tropPercu(c) > 0 ? '<span class="warn">trop-perçu '+esc(eur(tropPercu(c)))+'</span>'
           : totalDu(c) > 0 ? '<span class="good">payée en entier</span>' : '<span class="hint">—</span>')+'</td>'+
       '<td><button type="button" class="btn sm">Ouvrir</button></td></tr>');
@@ -16162,6 +16254,8 @@ function renderCommandeDetail(main, c){
       c[k] = e.target.value;
     }
     maj();
+    majEtatFacture();
+    majBoutonFacture();
   });
   /* Après l'accord de la cliente, changer son nom, le prix convenu ou la
      livraison facturée laisse une trace datée dans l'historique : en cas de
@@ -16220,9 +16314,8 @@ function renderCommandeDetail(main, c){
     if (k !== "statut" && c.statut === "livree" && c.bilanFige && !c.factureNum){
       var bf3 = bilanCommande(c, true); if (bf3) c.bilanFige = bf3;
     }
-    /* Commande annulée : ses pièces vendues redeviennent des ventes à part,
-       comme à la suppression (sinon elles disparaissaient de tous les
-       totaux, V56). */
+    /* Commande annulée : ses pièces reviennent dans le stock de l'atelier
+       (V64.2) ; l'argent déjà reçu reste compté sur la commande. */
     if (k === "statut" && c.statut === "annulee") detacherPieces(c.id);
     if (k === "statut" && avantSt !== c.statut) journaliser(c, "Statut : " + statutCmd(avantSt).nom + " → " + statutCmd(c.statut).nom);
     if (k === "statut") synchroAtelierCommande(c, avantSt);
@@ -16545,7 +16638,6 @@ function renderCommandeDetail(main, c){
   zone.appendChild(dv(carteDocumentsCommande(c), "docs"));
 
   /* --- la facture --- */
-  var manques = manquesFacture(c);
   var cF = el('<div class="card" id="cmd-facture" style="margin-bottom:16px"><header><h2>Facture</h2>'+
     '<p>Numérotée à la suite de tes factures, avec les mentions obligatoires. Le numéro commence par un code '+
     'qui n\'appartient qu\'à toi.</p></header><div class="body"></div></div>');
@@ -16554,12 +16646,25 @@ function renderCommandeDetail(main, c){
     bodyF.appendChild(el('<p class="hint" style="margin:0 0 6px">Facture <b>'+esc(x.num)+'</b> du '+esc(dateLongue(x.le))+
       ', annulée par l\'avoir <b>'+esc(x.avoir)+'</b>.</p>'));
   });
-  if (c.factureNum){
-    bodyF.appendChild(el('<p style="margin:0">Facture <b>'+esc(c.factureNum)+'</b>, émise le '+esc(dateLongue(c.factureLe))+'.'+
-      (c.avoirNum ? ' Annulée par l\'avoir <b>'+esc(c.avoirNum)+'</b> du '+esc(dateLongue(c.avoirLe))+'.' : '')+'</p>'));
-    if (factureActive(c)) bodyF.appendChild(el('<p class="hint" style="margin:6px 0 0">Une facture émise ne se modifie plus : '+
-      'le nom, les prix et l\'acompte sont verrouillés. Pour corriger ou annuler, établis un avoir, puis une nouvelle facture si besoin.</p>'));
-  } else if (manques.length){
+  var zEtatF = el('<div></div>');
+  bodyF.appendChild(zEtatF);
+  /* V64.2 : la liste « il manque » suit la saisie (effacer le nom de la
+     cliente la faisait rester vide et le bouton actif). */
+  majEtatFacture();
+  function majEtatFacture(){
+    zEtatF.innerHTML = "";
+    if (c.factureNum){
+      zEtatF.appendChild(el('<p style="margin:0">Facture <b>'+esc(c.factureNum)+'</b>, émise le '+esc(dateLongue(c.factureLe))+'.'+
+        (c.avoirNum ? ' Annulée par l\'avoir <b>'+esc(c.avoirNum)+'</b> du '+esc(dateLongue(c.avoirLe))+'.' : '')+'</p>'));
+      if (factureActive(c)) zEtatF.appendChild(el('<p class="hint" style="margin:6px 0 0">Une facture émise ne se modifie plus : '+
+        'le nom, les prix et l\'acompte sont verrouillés. Pour corriger ou annuler, établis un avoir, puis une nouvelle facture si besoin.</p>'));
+      return;
+    }
+    var manques = manquesFacture(c);
+    if (!manques.length){
+      zEtatF.appendChild(el('<p style="margin:0" class="hint">Aucune facture émise pour cette commande.</p>'));
+      return;
+    }
     /* Ce qui manque est dit tout de suite, avec le moyen de le compléter. */
     var zM = el('<div class="manques"><p style="margin:0 0 6px"><b>Pour établir la facture, il manque :</b></p><ul></ul></div>');
     var ulM = zM.querySelector("ul");
@@ -16576,9 +16681,13 @@ function renderCommandeDetail(main, c){
       }
       ulM.appendChild(li);
     });
-    bodyF.appendChild(zM);
-  } else {
-    bodyF.appendChild(el('<p style="margin:0" class="hint">Aucune facture émise pour cette commande.</p>'));
+    zEtatF.appendChild(zM);
+  }
+  /* Le bouton « Établir la facture » suit la même liste. */
+  function majBoutonFacture(){
+    if (typeof bF === "undefined" || !bF || c.factureNum) return;
+    var mq = manquesFacture(c);
+    bF.disabled = !!mq.length;
   }
   var barF = el('<div class="savebar" style="margin-top:12px"></div>');
   bodyF.appendChild(barF);
@@ -16637,8 +16746,8 @@ function renderCommandeDetail(main, c){
           toast(cc ? "Facture " + r.numero + " émise." : "Facture " + r.numero + " émise et gardée dans le registre des factures (la commande a été modifiée ailleurs entre-temps).");
         });
       });
-    }, !manques.length);
-    if (manques.length) bF.disabled = true;
+    }, !manquesFacture(c).length);
+    if (manquesFacture(c).length) bF.disabled = true;
     barF.appendChild(bF);
   }
   bodyF.appendChild(el('<p class="hint" style="margin-top:10px">La numérotation doit être continue, sans numéro manquant. '+

@@ -5,7 +5,7 @@ Il sert de référence : **toute modification du code qui change une de ces
 règles doit d'abord changer ce document**, et les tests correspondants
 (`tests/test-v37.js` à `tests/test-v56.js`, `tests/sql/`).
 
-Dernière mise à jour : V60 (4 octobre 2026). Journal des versions : `CHANGELOG.md`.
+Dernière mise à jour : V64.2 (21 octobre 2026). Journal des versions : `CHANGELOG.md`.
 
 ---
 
@@ -17,7 +17,9 @@ Dernière mise à jour : V60 (4 octobre 2026). Journal des versions : `CHANGELOG
   facture, de registres, de seuils ni de rubrique Facturation ; statut
   « pas encore déclarée » par défaut) et **Artisan ou artisane pro**
   (activité déclarée : tout est affiché). Le profil se change dans Réglages ›
-  Mon activité. Un atelier d'avant reçoit un profil deviné (pro si un statut
+  Mon activité. **Passer de pro à amateur** remet le statut à « pas encore
+  déclarée » et les cotisations à 0 (V64.2) ; l'ancien statut et son taux
+  sont gardés de côté et reviennent au retour en pro. Un atelier d'avant reçoit un profil deviné (pro si un statut
   déclaré ou une facture existe). Les cinq profils du rapport de test
   (loisir, quelques ventes, créateur, artisan, marchés) servaient aux tests ;
   leurs identifiants sont ramenés aux deux profils.
@@ -274,8 +276,12 @@ Remplace les règles de couleurs de la §0.5 (gardées plus bas pour l'historiqu
   règlement (`retirerVenteDeCommande`). Un simple changement de statut
   (Mes créations › Vendue) relie la pièce sans rien noter : l'argent d'une
   commande se saisit dans ses règlements.
-- **Commande annulée** : ses pièces vendues sont détachées (comme à la
-  suppression) et redeviennent des ventes à part.
+- **Commande annulée** (ou supprimée) : ses pièces sont détachées et
+  **reviennent dans le stock de l'atelier** (terminées, plus vendues). Rien ne
+  devient une vente au comptant : l'argent réellement reçu reste compté par
+  les versements de la commande, et un remboursement se note dans sa fiche
+  (V64.2 ; avant, elles redevenaient des ventes à part, ce qui gonflait
+  « Encaissé » et le livre des recettes).
 - **Article sans création** (réparation, pièce libre) : la commande livrée a
   un bilan minimal (`sansMatieres` : prix − frais du canal − cotisations,
   matières inconnues = 0) pour compter dans « Gagné ce mois ».
@@ -410,9 +416,12 @@ exactement.
 10. **Gain de l'heure** = reste ÷ heures (si le temps est indiqué).
 11. **Prix conseillé** = (matières + frais fixes + frais fixes de vente +
     main-d'œuvre) ÷ (1 − taux cotisations − pourcentage de vente), **arrondi
-    au centime supérieur**, puis vérifié : au prix affiché, le reste couvre
-    vraiment la main-d'œuvre (sinon +1 centime).
-12. **Plancher** : même calcul sans la main-d'œuvre, même vérification.
+    au centime supérieur**, puis vérifié dans les deux sens (V64.2) : au prix
+    affiché, le reste couvre vraiment la main-d'œuvre (sinon +1 centime), et
+    si le centime du dessous la couvre encore, on descend — c'est **le plus
+    bas prix au centime** qui paie le taux visé.
+12. **Plancher** : même calcul sans la main-d'œuvre, même vérification dans
+    les deux sens.
 13. Si cotisations + pourcentage de vente ≥ 100 % : aucun prix ne peut
     couvrir les coûts (« impossible »).
 
@@ -531,9 +540,12 @@ figées une fois, avec les chiffres connus (marquées « estimé »).
   seule fois par pièce.
 - **Inventaire** : remplace le stock par la quantité comptée, et enregistre
   l'**écart** (quantité et valeur).
-- **Annulation** : seul le **dernier** mouvement d'une matière s'annule ; il
-  remet exactement stock, prix moyen et dernier prix ; le journal garde les
-  deux lignes. Un mouvement plus ancien se corrige par un inventaire.
+- **Annulation et correction** (V58, précisé en V64.2) : **chaque** mouvement
+  peut être annulé ou corrigé (crayon) ; le stock, le prix moyen et le dernier
+  prix sont alors **recalculés en rejouant tout l'historique**. Le journal
+  garde les lignes annulées, barrées. Un **achat corrigé à un autre prix**
+  rejoint la ligne de ce prix (créée au besoin), comme au moment de l'achat :
+  « une ligne = un prix » reste vrai après correction.
 - **Unité** d'une matière déjà utilisée : changement soumis à confirmation
   (rien n'est converti). **Contenance** d'une matière utilisée : confirmation
   avec le prix au g avant/après.
@@ -682,10 +694,13 @@ figées une fois, avec les chiffres connus (marquées « estimé »).
 
 ## 6. Factures et avoirs
 
-- Émission seulement si : vendeur identifié (nom, adresse, SIRET si déclarée),
-  cliente nommée (adresse obligatoire pour une professionnelle), prix > 0,
-  commande **acceptée** (ni devis, ni annulée). Ce qui manque est affiché
-  **avant** le clic, avec le moyen de le compléter.
+- Émission seulement si : vendeur identifié (nom, adresse, statut déclaré et
+  SIRET), cliente nommée (adresse obligatoire pour une professionnelle),
+  prix > 0, commande **livrée** (la facture porte la date de la vente ; ni
+  devis, ni annulée), et **un compte** (le numéro unique est attribué par le
+  serveur). Ce qui manque est affiché **avant** le clic, avec le moyen de le
+  compléter — la condition du compte aussi (V64.2). La liste se met à jour
+  pendant la saisie (effacer le nom de la cliente la fait réapparaître).
 - **Confirmation** avant émission (c'est définitif).
 - Numéro : `CODE-AAAA-NNNN`. Le code appartient à un seul compte. Avec un
   compte, le **serveur** attribue le numéro **et** enregistre la facture figée

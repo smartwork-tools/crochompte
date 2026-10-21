@@ -59,7 +59,10 @@ const oui = async (p) => { await p.locator('.dlg [data-oui]:visible').last().cli
       sauverTout(); view.cmdVue = c.id; aller('commandes', {garderVue:true}); return c.id;
     });
     await p.waitForTimeout(300);
-    await p.locator('#cmd-facture button', {hasText:'Établir la facture'}).click(); await p.waitForTimeout(300);
+    /* V64.2 : la condition du compte est dans la liste « il manque », AVANT le
+       clic (le bouton d'émission est éteint tant qu'elle n'est pas levée). */
+    R.facture_sans_compte_listee = /un compte \(gratuit\)/.test(await txt(p, '#cmd-facture'));
+    await p.locator('#cmd-facture .manques button', {hasText:'Créer mon compte'}).click(); await p.waitForTimeout(300);
     R.facture_sans_compte_prevenue = /Crée ton compte pour numéroter/.test(await txt(p, '.dlg')) && /Créer mon compte/.test(await txt(p, '.dlg [data-oui]'));
     await p.locator('.dlg [data-non]').last().click(); await p.waitForTimeout(250);
     /* 4. le montant du règlement est déjà rempli */

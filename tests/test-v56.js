@@ -60,13 +60,20 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     const apresB = await dans(p, function(){ return {fige: commandes()[0].bilanFige.r.prix, lu: bilanCommande(commandes()[0]).r.prix}; });
     R.bilan_fige_suit_le_prix = avantB === 28 && apresB.fige === 60 && apresB.lu === 60;
 
-    /* ── 3. Commande annulée : la pièce reliée redevient une vente à part ── */
+    /* ── 3. Commande annulée : la pièce revient en stock, l'argent reste sur
+       la commande (V64.2 ; avant, elle devenait une vente au comptant fictive). */
     await dans(p, function(){ var c = commandes()[0]; c.statut = 'encours'; sauverTout(); dialogueVente('c2'); });
     await p.waitForTimeout(300); await p.selectOption('#vt-cmd', {index:1}); await p.fill('#vt-prix', '60');
     if (await p.locator('#vt-faite').isVisible()) await p.check('#vt-faite');   /* V60 */
     await p.click('.dlg [data-oui], .dlg button.primary'); await p.waitForTimeout(400);
     await p.selectOption('[data-c="statut"]', 'annulee'); await p.waitForTimeout(400);
-    R.commande_annulee_detache = await dans(p, function(){ var pc = piecesDe('c2').filter(function(x){ return x.com === 'vendu'; })[0]; return !!pc && !pc.cmdId && lignesVentes({d0:0, d1:Date.now()+864e5}).some(function(x){ return x.type === 'piece' && x.montant === 60; }); });
+    R.commande_annulee_pieces_en_stock = await dans(p, function(){
+      var c = commandes()[0];
+      var vendues = piecesDe('c2').filter(function(x){ return x.com === 'vendu'; });
+      var enStockC2 = piecesDe('c2').filter(function(x){ return x.com === 'atelier' && x.prod === 'termine' && !x.cmdId; });
+      var venteFictive = lignesVentes({d0:0, d1:Date.now()+864e5}).some(function(x){ return x.type === 'piece' && x.montant === 60; });
+      return !vendues.length && enStockC2.length >= 1 && !venteFictive && encaisse(c) === 60 && soldeDu(c) === 0;
+    });
 
     /* ── 4. Commande sans création (article libre) : bilan minimal ── */
     R.bilan_article_libre = await dans(p, function(){ var c = nouvelleCommande(); c.client = {nom:'Léa'}; c.cid = null; c.libelle = 'Réparation'; c.prixConvenu = 20; c.statut = 'livree'; c.livreeLe = aujourdhuiISO(); delete c.brouillon;
