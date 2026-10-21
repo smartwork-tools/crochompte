@@ -2069,6 +2069,18 @@ function sectionProfil(){
   }, true));
   return z;
 }
+/* V65 : le focus clavier reste dans la fenêtre ouverte (aria-modal), au lieu
+   de filer derrière elle — pour toutes les fenêtres, pas seulement confirmer(). */
+function piegerTab(boite, e){
+  if (e.key !== "Tab") return;
+  var f = [].slice.call(boite.querySelectorAll("button:not([disabled]),input,select,textarea,a[href]")).filter(function(x){
+    return !x.hidden && !x.closest("[hidden]") && x.offsetParent !== null;
+  });
+  if (!f.length) return;
+  var i = f.indexOf(document.activeElement);
+  if (e.shiftKey && i <= 0){ e.preventDefault(); f[f.length-1].focus(); }
+  else if (!e.shiftKey && (i === -1 || i === f.length-1)){ e.preventDefault(); f[0].focus(); }
+}
 function confirmer(o, siOui){
   o = o || {};
   var retourFocus = document.activeElement;
@@ -2116,12 +2128,7 @@ function confirmer(o, siOui){
   fond.addEventListener("click", function(e){ if (e.target === fond) fermerCouche(); });
   boite.addEventListener("keydown", function(e){
     if (e.key === "Escape"){ e.preventDefault(); fermerCouche(); return; }
-    if (e.key !== "Tab") return;
-    var f = [].slice.call(boite.querySelectorAll("button:not([disabled]),input"));
-    if (!f.length) return;
-    var i = f.indexOf(document.activeElement);
-    if (e.shiftKey && i <= 0){ e.preventDefault(); f[f.length-1].focus(); }
-    else if (!e.shiftKey && i === f.length-1){ e.preventDefault(); f[0].focus(); }
+    piegerTab(boite, e);
   });
   bOui.addEventListener("click", function(){
     if (bOui.disabled) return;
@@ -2148,7 +2155,7 @@ function dialogueTexte(o, siOk){
   var ta = boite.querySelector("#dlgt-texte"), aide = boite.querySelector("#dlgt-aide");
   function fermer(){ fond.remove(); document.body.classList.remove("menu-ouvert"); if (retourFocus && retourFocus.focus) try{ retourFocus.focus(); }catch(e){} }
   boite.querySelector("[data-non]").addEventListener("click", fermer);
-  fond.addEventListener("keydown", function(e){ if (e.key === "Escape") fermer(); });
+  fond.addEventListener("keydown", function(e){ if (e.key === "Escape") fermer(); piegerTab(boite, e); });
   boite.querySelector("[data-oui]").addEventListener("click", function(){
     var t = ta.value.trim();
     if (t.length < (o.min || 1)){ aide.textContent = "Écris au moins " + (o.min || 1) + " caractères."; ta.setAttribute("aria-invalid", "true"); ta.focus(); return; }
@@ -2210,6 +2217,7 @@ function dialogueChamps(o, siOk){
   boite.addEventListener("keydown", function(e){
     if (e.key === "Escape"){ e.preventDefault(); if (enRecap) sortirRecap(); else fermerCouche(); }
     if (e.key === "Enter" && e.target.tagName === "INPUT"){ e.preventDefault(); boite.querySelector("[data-oui]").click(); }
+    piegerTab(boite, e);
   });
   boite.querySelector("[data-oui]").addEventListener("click", function(){
     if (enRecap){ valide = true; fermerCouche(function(){ siOk(recapValeurs, boite); }); return; }
@@ -2251,7 +2259,19 @@ var nav = {cle:null, i:0, pile:[], restauration:false, couches:[], apres:null, m
 function etatNav(){
   return {tab:view.tab, sub:view.sub||null, modeleVu:view.modeleVu||null, ficheId:view.ficheId||null,
           cmdVue:view.cmdVue||null, patronVu:view.patronVu||null, sousPatrons:view.sousPatrons||null,
-          biblioVu:view.biblioVu||null, regSection:view.regSection||null, catMode:view.catMode||null};
+          biblioVu:view.biblioVu||null, regSection:view.regSection||null, catMode:view.catMode||null,
+          /* V65 : le volet choisi (fiche, commande) survit à F5 et au retour. */
+          voletFiche:view.voletFiche||null, voletFichePour:view.voletFichePour||null,
+          voletCmd:view.voletCmd||null, voletCmdPour:view.voletCmdPour||null};
+}
+/* V65 : met à jour l'étape d'historique COURANTE (sans en ajouter une) :
+   pour les choix qui doivent survivre à F5 sans faire une étape de
+   « précédent » (le volet ouvert d'une fiche ou d'une commande). */
+function majNavCourante(){
+  var e = etatNav(), k = JSON.stringify(e);
+  try{ history.replaceState({crochompte:e, i:nav.i}, ""); }catch(err){}
+  nav.pile[nav.i] = k;
+  nav.cle = k;
 }
 function enregistrerNav(){
   if (nav.restauration){ nav.restauration = false; return; }
@@ -4120,8 +4140,14 @@ function renderAccueil(main){
 
 
 /* ═════ NOUVEAUTÉS ET SIGNALEMENT ═════ */
-var VERSION_APP = "V64.2";
+var VERSION_APP = "V65";
 var NOUVEAUTES = [
+  {v:"V65", d:"Octobre 2026", l:[
+    "Sur téléphone, la barre du bas reste toujours utilisable : le résultat d'une fiche et le chronomètre se posent au-dessus.",
+    "Devis, bons et factures : un nom de client long revient à la ligne, les montants restent bien lisibles.",
+    "« Fournisseurs et prix » : une ligne par matière, et une fenêtre pour noter les prix fournisseur par fournisseur.",
+    "Une nouvelle matière saisie avec du stock est comptée « déjà chez moi » par défaut : plus de faux achats du mois."
+  ]},
   {v:"V64.2", d:"Octobre 2026", l:[
     "Annuler une commande livrée remet ses pièces en stock : tes chiffres et ton livre des recettes ne comptent que l'argent réellement reçu.",
     "Le prix conseillé est maintenant le plus bas prix au centime qui paie ton objectif, et chaque total est la somme exacte des lignes affichées.",
@@ -6177,6 +6203,7 @@ function voletsEcran(corps, liste, cle, quoi){
   Array.prototype.forEach.call(vol.querySelectorAll("button"), function(bv){
     bv.addEventListener("click", function(ev){
       view[cle] = bv.getAttribute("data-v");
+      majNavCourante();
       corps.setAttribute("data-actif", view[cle]);
       Array.prototype.forEach.call(vol.querySelectorAll("button"), function(x){ x.setAttribute("aria-selected", x === bv ? "true" : "false"); });
       /* Un toucher ramène en haut du volet ; une ouverture par le programme
@@ -6425,7 +6452,7 @@ function renderFiche(main){
         '<label class="f"><span>Nombre de pièces à fabriquer</span><input id="f-n" type="number" min="1" step="1" value="1"></label>'+
         '<label class="f"><span>Déduire ce que tu as déjà en stock</span><select id="f-stockopt"><option value="1">Oui, tenir compte de mon stock</option><option value="0">Non, tout acheter</option></select></label>'+
       '</div>'+
-      '<div class="tablewrap" style="margin-top:14px"><table id="f-achat" class="achats-resp" style="min-width:560px"><thead><tr>'+
+      '<div class="tablewrap" style="margin-top:14px"><table id="f-achat" class="achats-resp"><thead><tr>'+
         '<th>Matière</th><th class="n">Besoin</th><th class="n">En stock</th><th class="n">À acheter</th><th class="n">Coût d\'achat</th><th class="n">Restera</th>'+
       '</tr></thead><tbody></tbody></table></div>'+
       '<div id="f-achat-tot" style="margin-top:14px"></div>'+
@@ -7130,7 +7157,7 @@ function renderFournisseurs(main){
     liste.appendChild(el('<p class="hint" style="margin:0">Aucun fournisseur pour l\'instant. Ajoute ceux chez qui tu achètes le plus souvent : '+
       'deux ou trois suffisent pour voir des écarts de prix.</p>'));
   } else {
-    fournisseurs().slice().sort(function(a, b){ return a.nom.localeCompare(b.nom, "fr"); }).forEach(function(f){
+    fournisseurs().slice().sort(function(a, b){ return a.nom.localeCompare(b.nom, "fr", {numeric:true}); }).forEach(function(f){
       var nbT = state.matieres.filter(function(m){ var o = offreDe(m, f.id); return o && Number(o.prix) > 0; }).length;
       var nbM = state.matieres.filter(function(m){ var b = meilleureOffre(m); return b && b.fid === f.id; }).length;
       var lien = /^https?:\/\//i.test(f.site) ? f.site : (/^www\./i.test(f.site) ? "https://" + f.site : "");
@@ -7164,8 +7191,8 @@ function renderFournisseurs(main){
 
   /* --- la comparaison --- */
   var cC = el('<div class="card"><header><h2>Comparer les prix</h2>'+
-    '<p>Tape le prix d\'un lot chez chaque fournisseur. Les lots n\'ont pas toujours la même taille : la comparaison se fait au gramme (ou au mètre, à la pièce). '+
-    'Le moins cher est en vert. Un achat noté dans « Historique du stock » met le prix à jour tout seul.</p></header>'+
+    '<p>Une ligne par matière : ton dernier prix face au fournisseur le moins cher. « Noter les prix » ouvre la saisie, fournisseur par fournisseur. '+
+    'Les lots n\'ont pas toujours la même taille : la comparaison se fait au gramme (ou au mètre, à la pièce). Un achat noté dans « Historique du stock » met le prix à jour tout seul.</p></header>'+
     '<div class="body"><div class="grid2" style="margin-bottom:12px">'+
       '<label class="f"><span>Catégorie</span><select id="fc-cat"><option value="">Toutes</option></select></label>'+
       '<label class="f"><span>Matières affichées</span><select id="fc-quoi"><option value="utiles">Celles de mes créations ou de mon stock</option><option value="toutes">Toutes</option><option value="prix">Celles qui ont au moins un prix noté</option></select></label>'+
@@ -7174,7 +7201,7 @@ function renderFournisseurs(main){
   CATS.forEach(function(c){ selCat.appendChild(el('<option value="'+c.id+'">'+esc(c.nom)+'</option>')); });
   selCat.value = view.fcCat || ""; selQ.value = view.fcQuoi || "utiles";
   var zone = cC.querySelector(".fourn-comp");
-  var fs = fournisseurs().slice().sort(function(a, b){ return a.nom.localeCompare(b.nom, "fr"); });
+  var fs = fournisseurs().slice().sort(function(a, b){ return a.nom.localeCompare(b.nom, "fr", {numeric:true}); });
   function utilisees(){
     var u = {};
     state.creations.forEach(function(c){ if (!c.archive) c.lignes.forEach(function(l){ u[l.mid] = true; }); });
@@ -7191,62 +7218,65 @@ function renderFournisseurs(main){
       return true;
     });
     if (!ms.length){ zone.appendChild(el('<p class="hint" style="margin:0">Aucune matière à afficher avec ces choix. Choisis « Toutes » pour voir tout le catalogue.</p>')); return; }
-    var t = el('<table style="min-width:'+(420 + fs.length * 150)+'px"><thead><tr><th>Matière</th><th class="n">Ton dernier prix</th>'+
-      fs.map(function(f){ return '<th class="n">'+esc(f.nom)+'</th>'; }).join("")+'<th>Le moins cher</th></tr></thead><tbody></tbody></table>');
+    /* V65 : une ligne par matière (le tableau avait une colonne par
+       fournisseur : à 20 fournisseurs, près de 5 000 px de large et des
+       milliers de champs). Les prix d'une matière se notent dans une
+       fenêtre, fournisseur par fournisseur. */
+    var t = el('<table class="t-compact" style="min-width:680px"><thead><tr><th>Matière</th><th class="n">Ton dernier prix</th>'+
+      '<th>Le moins cher</th><th class="n">Prix notés</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody></tbody></table>');
     var tb = t.querySelector("tbody");
     ms.forEach(function(m){
       var best = meilleureOffre(m);
       var dernierPU = m.contenance ? (Number(m.prix)||0) / m.contenance : 0;
-      var tr = el('<tr data-mid="'+esc(m.id)+'"><td><b>'+esc(m.nom)+'</b><div class="hint" style="margin:2px 0 0;font-size:11px">lot de '+esc(qte(m.contenance, m.unite))+'</div></td>'+
-        '<td class="n" data-l="Ton dernier prix">'+esc(eur(m.prix))+'<div class="hint" style="margin:2px 0 0;font-size:11px">'+esc(eurU(dernierPU, m.unite))+'</div></td></tr>');
-      fs.forEach(function(f){
-        var o = offreDe(m, f.id);
-        var moins = best && o && best === o;
-        var td = el('<td class="n fourn-cell'+(moins ? ' moins-cher' : '')+'" data-l="'+esc(f.nom)+'">'+
-          '<input type="number" inputmode="decimal" min="0" step="0.05" data-fid="'+esc(f.id)+'" aria-label="Prix d\'un lot de '+esc(m.nom)+' chez '+esc(f.nom)+'" '+
-          'placeholder="€" value="'+(o && o.prix > 0 ? o.prix : "")+'" style="width:84px;text-align:right">'+
-          '<div class="hint" style="margin:2px 0 0;font-size:11px"></div></td>');
-        var info = td.querySelector(".hint");
-        function majInfo(){
-          var o2 = offreDe(m, f.id);
-          info.innerHTML = "";
-          if (!(o2 && o2.prix > 0)){ info.textContent = ""; return; }
-          var bLot = el('<button type="button" class="lien-mini">lot '+esc(qte(contenanceOffre(o2, m), m.unite))+'</button>');
-          bLot.setAttribute("aria-label", "Taille du lot et lien chez " + f.nom);
-          bLot.addEventListener("click", function(){
-            dialogueChamps({titre: m.nom + " chez " + f.nom, bouton:"Enregistrer",
-              texte:"Si ce fournisseur vend un autre conditionnement (100 g au lieu de 50 g, par exemple), indique-le : la comparaison se fait au " + (m.unite || "gramme") + ".",
-              champs:[{id:"cont", lib:"Contenance du lot (" + m.unite + ")", valeur: contenanceOffre(o2, m), inputmode:"decimal", requis:true},
-                      {id:"lien", lib:"Lien vers le produit (facultatif)", valeur: o2.lien || "", placeholder:"https://…"}],
-              verifier: function(v){ return lireNombre(v.cont) > 0 ? "" : "Indique une contenance supérieure à 0."; }}, function(v){
-              o2.contenance = lireNombre(v.cont); o2.lien = v.lien; sauverTout(); peindre();
-            });
-          });
-          info.appendChild(document.createTextNode(eurU(puOffre(o2, m), m.unite) + " · "));
-          info.appendChild(bLot);
-          if (o2.le) info.appendChild(document.createTextNode(" · " + dateCourte(o2.le)));
-          if (o2.lien && /^https?:\/\//i.test(o2.lien)){
-            info.appendChild(document.createTextNode(" · "));
-            info.appendChild(el('<a href="'+esc(o2.lien)+'" target="_blank" rel="noopener noreferrer">voir</a>'));
-          }
-        }
-        majInfo();
-        td.querySelector("input").addEventListener("change", function(e){
-          var v = Number(e.target.value) || 0;
-          if (v > 0) noterOffre(m, f.id, v, (offreDe(m, f.id) || {}).contenance || m.contenance, "saisie");
-          else m.offres = offresDe(m).filter(function(o3){ return o3.fid !== f.id; });
-          sauverTout(); peindre();
-        });
-        tr.appendChild(td);
-      });
+      var nOffres = offresDe(m).filter(function(o){ return o.prix > 0 && fournisseur(o.fid); }).length;
       var gain = best ? dernierPU - puOffre(best, m) : 0;
-      tr.appendChild(el('<td data-l="Le moins cher">'+(best
-        ? '<b class="good">'+esc(fournisseur(best.fid).nom)+'</b><div class="hint" style="margin:2px 0 0;font-size:11px">'+esc(eurU(puOffre(best, m), m.unite))+
-          (dernierPU > 0 && gain > 0.00001 ? ' · '+esc(nb(Math.round(gain / dernierPU * 100)))+' % de moins que ton dernier prix' : '')+'</div>'
-        : '<span class="hint">aucun prix noté</span>')+'</td>'));
+      var tr = el('<tr data-mid="'+esc(m.id)+'"><td data-l="Matière"><b>'+esc(m.nom)+'</b><div class="hint" style="margin:2px 0 0;font-size:11px">lot de '+esc(qte(m.contenance, m.unite))+'</div></td>'+
+        '<td class="n" data-l="Ton dernier prix">'+esc(eur(m.prix))+'<div class="hint" style="margin:2px 0 0;font-size:11px">'+esc(eurU(dernierPU, m.unite))+'</div></td>'+
+        '<td data-l="Le moins cher">'+(best
+          ? '<b class="good">'+esc(fournisseur(best.fid).nom)+'</b><div class="hint" style="margin:2px 0 0;font-size:11px">'+esc(eurU(puOffre(best, m), m.unite))+' · lot '+esc(qte(contenanceOffre(best, m), m.unite))+
+            (dernierPU > 0 && gain > 0.00001 ? ' · '+esc(nb(Math.round(gain / dernierPU * 100)))+' % de moins que ton dernier prix' : '')+
+            (best.lien && /^https?:\/\//i.test(best.lien) ? ' · <a href="'+esc(best.lien)+'" target="_blank" rel="noopener noreferrer">voir</a>' : '')+'</div>'
+          : '<span class="hint">aucun prix noté</span>')+'</td>'+
+        '<td class="n" data-l="Prix notés">'+(nOffres || '—')+'</td>'+
+        '<td data-role="act"></td></tr>');
+      var bN = bouton(nOffres ? "Modifier les prix" : "Noter les prix", function(){ dialoguePrixFournisseurs(m, peindre); });
+      bN.classList.add("sm");
+      bN.setAttribute("aria-label", "Noter les prix de " + m.nom + " chez tes fournisseurs");
+      tr.querySelector('[data-role="act"]').appendChild(bN);
       tb.appendChild(tr);
     });
     zone.appendChild(t);
+  }
+  /* Les prix d'une matière, fournisseur par fournisseur, dans une fenêtre. */
+  function dialoguePrixFournisseurs(m, apres){
+    var box = el('<div></div>');
+    box.appendChild(el('<p class="hint" style="margin:0 0 4px">Le prix d\'un lot chez chaque fournisseur. Les lots n\'ont pas toujours la même taille : la comparaison se fait '+
+      (m.unite === "g" ? "au gramme" : "à l\'unité (" + esc(m.unite) + ")")+'. Laisse vide pour retirer un prix.</p>'));
+    var lignes = [];
+    fs.forEach(function(f){
+      var o = offreDe(m, f.id);
+      var l = el('<div class="grid3" style="align-items:end;margin-top:8px">'+
+        '<label class="f"><span>'+esc(f.nom)+' — prix du lot (€)</span><input type="number" inputmode="decimal" min="0" step="0.05" data-k="prix" value="'+(o && o.prix > 0 ? o.prix : "")+'"></label>'+
+        '<label class="f"><span>Lot ('+esc(m.unite)+')</span><input type="number" inputmode="decimal" min="0" step="1" data-k="cont" value="'+esc(o ? contenanceOffre(o, m) : m.contenance)+'"></label>'+
+        '<label class="f"><span>Lien (facultatif)</span><input type="url" data-k="lien" placeholder="https://…" value="'+esc((o && o.lien) || "")+'"></label>'+
+      '</div>');
+      lignes.push({f: f, el: l});
+      box.appendChild(l);
+    });
+    dialogueChamps({titre:"Prix de « " + m.nom + " »", contenu: box, champs:[], bouton:"Enregistrer les prix", large:true}, function(){
+      lignes.forEach(function(x){
+        var prix = Number(lireNombre(x.el.querySelector('[data-k="prix"]').value)) || 0;
+        var cont = Number(lireNombre(x.el.querySelector('[data-k="cont"]').value)) || m.contenance;
+        var lien = x.el.querySelector('[data-k="lien"]').value.trim();
+        if (prix > 0){
+          noterOffre(m, x.f.id, prix, cont, "saisie");
+          var o2 = offreDe(m, x.f.id); if (o2) o2.lien = lien;
+        } else m.offres = offresDe(m).filter(function(o3){ return o3.fid !== x.f.id; });
+      });
+      sauverTout();
+      if (apres) apres();
+      toast("Prix de « " + m.nom + " » enregistrés.");
+    });
   }
   selCat.addEventListener("change", function(){ view.fcCat = selCat.value; peindre(); });
   selQ.addEventListener("change", function(){ view.fcQuoi = selQ.value; peindre(); });
@@ -7473,7 +7503,7 @@ function renderStockMatieres(main){
   function remplirFournisseurs(){
     selF.innerHTML = "";
     selF.appendChild(el('<option value="">— non précisé —</option>'));
-    fournisseurs().slice().sort(function(a, b){ return a.nom.localeCompare(b.nom, "fr"); }).forEach(function(f){
+    fournisseurs().slice().sort(function(a, b){ return a.nom.localeCompare(b.nom, "fr", {numeric:true}); }).forEach(function(f){
       selF.appendChild(el('<option value="'+esc(f.id)+'">'+esc(f.nom || "Sans nom")+'</option>'));
     });
     selF.appendChild(el('<option value="__nouveau">+ Nouveau fournisseur…</option>'));
@@ -8342,10 +8372,13 @@ function dialogueNouvelleMatiere(catInit, opts){
         '<p class="hint" id="nm-depart-total" style="margin:8px 0 0"></p>'+
         /* V59 : ce stock a été payé : il compte dans les achats (registre,
            relevé, « ce qui te coûte »), sauf s'il date d'avant l'activité. */
+        /* V65 : « déjà chez moi » par défaut — la rubrique s'appelle « Ce que tu
+           as DÉJÀ en stock » ; des pelotes existantes notées comme un achat du
+           jour gonflaient les achats du mois et le registre. */
         '<div class="grid2 nm-achat" id="nm-achat-w" hidden style="margin-top:10px">'+
           '<label class="f"><span>Ce stock, tu l\'as…</span><select id="nm-achat">'+
-            '<option value="achat">acheté pour mon activité : il compte dans mes achats</option>'+
-            '<option value="avant">déjà chez moi avant (pas un achat à déclarer)</option></select></label>'+
+            '<option value="avant" selected>déjà chez moi avant (pas un achat à déclarer)</option>'+
+            '<option value="achat">acheté récemment pour mon activité : il compte dans mes achats</option></select></label>'+
           '<label class="f" id="nm-achat-d-w"><span>Acheté le</span><input id="nm-achat-d" type="date" value="'+aujourdhuiISO()+'" max="'+aujourdhuiISO()+'"></label>'+
         '</div>'+
       '</fieldset>'+
@@ -8446,7 +8479,7 @@ function dialogueNouvelleMatiere(catInit, opts){
       prixIndicatif:false, perso:true, cree:Date.now(), maj:Date.now(), variantes:[]};
     if (cat === "outil"){ m.typeOutil = typeO; m.diametre = diam; }
     var e71 = zone.querySelector("#nm-en71"); if (e71) m.en71 = !!e71.checked;
-    var achatSel = val("nm-achat") || "achat", achatD = val("nm-achat-d");
+    var achatSel = val("nm-achat") || "avant", achatD = val("nm-achat-d");
     return {m: m, lignes: lignes, cont: cont, achat: achatSel === "achat", achatLe: achatD ? dateVersTs(achatD) : Date.now()};
   }
   var lecture = null;
@@ -8949,7 +8982,7 @@ function renderReglages(main){
   var wp = el('<div class="tablewrap resp"></div>');
   /* V59 : le prélèvement total, ce qui compte, vient juste après le nom ;
      on peut ajouter ses propres canaux (Vinted, Leboncoin, une boutique…). */
-  var tp = el('<table style="min-width:900px"><thead><tr><th style="min-width:170px">Canal</th>'+
+  var tp = el('<table class="t-canaux"><thead><tr><th style="min-width:170px">Canal</th>'+
     '<th class="n" style="width:120px">Prélèvement total</th>'+
     '<th class="n" style="width:88px">Mise en vente €</th><th class="n" style="width:88px">Commission %</th>'+
     '<th class="n" style="width:88px">Paiement %</th><th class="n" style="width:88px">Paiement €</th>'+
@@ -11221,7 +11254,8 @@ function selecteurVue(ecran, defaut, options, apres){
   var cur = vueDe(ecran, defaut);
   var z = el('<div class="vues" role="group" aria-label="Affichage"></div>');
   options.forEach(function(k){
-    var b = el('<button type="button"'+(cur === k ? ' class="on"' : '')+' aria-pressed="'+(cur === k)+'" title="Affichage '+esc(VUES_LIB[k].toLowerCase())+'">'+
+    var titres = {cartes:"Affichage en cartes", liste:"Affichage en liste", compact:"Affichage compact", tableau:"Affichage en tableau"};
+    var b = el('<button type="button"'+(cur === k ? ' class="on"' : '')+' aria-pressed="'+(cur === k)+'" title="'+esc(titres[k] || "Affichage")+'">'+
       '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+ICONES_VUE[k]+'</svg><span>'+esc(VUES_LIB[k])+'</span></button>');
     b.addEventListener("click", function(){ definirVue(ecran, k); if (apres) apres(k); else render(); });
     z.appendChild(b);
@@ -16615,7 +16649,7 @@ function renderCommandeDetail(main, c){
     if (midsB.length){
       var cBes = el('<div class="card" style="margin-bottom:16px"><header><h2>Ce qu\'il faut pour la fabriquer</h2>'+
         '<p>Les matières de toutes les pièces encore à faire, pertes comprises, face à ton stock.</p></header>'+
-        '<div class="body"><div class="tablewrap"><table><thead><tr><th>Matière</th><th class="n">Besoin</th><th class="n">En stock</th><th class="n">À acheter</th></tr></thead><tbody></tbody></table></div></div></div>');
+        '<div class="body"><div class="tablewrap"><table class="achats-resp"><thead><tr><th>Matière</th><th class="n">Besoin</th><th class="n">En stock</th><th class="n">À acheter</th></tr></thead><tbody></tbody></table></div></div></div>');
       var aAcheter = 0;
       midsB.forEach(function(mid){
         var m = matiere(mid); if (!m) return;
@@ -16623,9 +16657,9 @@ function renderCommandeDetail(main, c){
         var lots = manque > 0 && m.contenance > 0 ? Math.ceil(manque / m.contenance - 1e-9) : 0;
         if (lots) aAcheter += lots * (Number(m.prix) || 0);
         var mo = meilleureOffre(m);
-        cBes.querySelector("tbody").appendChild(el('<tr><td>'+esc(m.nom)+'</td><td class="n">'+esc(qte(Math.round(bes[mid] * 10) / 10, m.unite))+'</td>'+
-          '<td class="n">'+esc(qte(Math.max(0, Number(m.stock) || 0), m.unite))+'</td>'+
-          '<td class="n">'+(lots ? '<b>'+esc(pluriel(lots, "lot", "lots"))+'</b> de '+esc(qte(m.contenance, m.unite))+
+        cBes.querySelector("tbody").appendChild(el('<tr><td>'+esc(m.nom)+'</td><td class="n" data-l="Besoin">'+esc(qte(Math.round(bes[mid] * 10) / 10, m.unite))+'</td>'+
+          '<td class="n" data-l="En stock">'+esc(qte(Math.max(0, Number(m.stock) || 0), m.unite))+'</td>'+
+          '<td class="n" data-l="À acheter">'+(lots ? '<b>'+esc(pluriel(lots, "lot", "lots"))+'</b> de '+esc(qte(m.contenance, m.unite))+
             (mo ? '<div class="hint" style="margin:2px 0 0;font-size:11px">moins cher : '+esc(fournisseur(mo.fid).nom)+'</div>' : '') : '<span class="good">en stock</span>')+'</td></tr>'));
       });
       if (aAcheter > 0) cBes.querySelector(".body").appendChild(el('<p class="hint" style="margin:10px 0 0">À acheter : environ <b>'+esc(eur(aAcheter))+'</b> au dernier prix payé. '+

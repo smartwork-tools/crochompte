@@ -246,21 +246,25 @@ function documentPdf(F, fmt, meta){
   y += 26;
 
   /* — Les deux parties — */
-  var C = F.client || {}, colB = M + 292, yA = y + 8, yB = y + 8;
+  var C = F.client || {}, colB = M + 292, wA = 272, wB = D - colB, yA = y + 8, yB = y + 8;
   doc.texte(M, yA, T.parties, {taille: 7.5, gras: true, couleur: GRIS, espacement: 1.1}); yA += 16;
-  doc.texte(M, yA, C.nom || "—", {taille: 11.5, gras: true}); yA += 15;
+  /* V65 : un nom long revient à la ligne dans sa colonne, au lieu de passer
+     sous la colonne de droite (« 51,50 € » pouvait se lire « 151,50 € »). */
+  couper(C.nom || "—", wA, 11.5, true).forEach(function(l){ doc.texte(M, yA, l, {taille: 11.5, gras: true}); yA += 15; });
   [C.adresse, C.siren ? "SIREN " + C.siren : "", F.livraison ? "Livraison : " + F.livraison : "", C.contact].forEach(function(t){
     if (!t) return;
     couper(t, 250, 9.5, false).forEach(function(l){ doc.texte(M, yA, l, {taille: 9.5, couleur: GRIS}); yA += 13; });
   });
   if (facture || bon){
     doc.texte(colB, yB, "RÈGLEMENT", {taille: 7.5, gras: true, couleur: GRIS, espacement: 1.1}); yB += 16;
-    doc.texte(colB, yB, F.solde > 0 ? eur(F.solde) + (bon ? " restent à régler" : " à régler") : "Réglée", {taille: 11.5, gras: true}); yB += 15;
+    couper(F.solde > 0 ? eur(F.solde) + (bon ? " restent à régler" : " à régler") : "Réglée", wB, 11.5, true)
+      .forEach(function(l){ doc.texte(colB, yB, l, {taille: 11.5, gras: true}); yB += 15; });
     doc.texte(colB, yB, F.solde > 0 ? (bon ? "à la livraison" : "à réception de la facture") : "Merci, tout est réglé.", {taille: 9.5, couleur: GRIS}); yB += 13;
   } else if (devis){
     doc.texte(colB, yB, "POUR ACCEPTER", {taille: 7.5, gras: true, couleur: GRIS, espacement: 1.1}); yB += 16;
-    doc.texte(colB, yB, F.acompteDemande > 0 ? "Acompte de " + eur(F.acompteDemande) : "Un accord écrit suffit", {taille: 11.5, gras: true}); yB += 15;
-    couper(F.acompteDemande > 0 ? "à la commande, le reste à la livraison." : "par message ou par mail : la fabrication commence ensuite.", 230, 9.5, false)
+    couper(F.acompteDemande > 0 ? "Acompte de " + eur(F.acompteDemande) : "Un accord écrit suffit", wB, 11.5, true)
+      .forEach(function(l){ doc.texte(colB, yB, l, {taille: 11.5, gras: true}); yB += 15; });
+    couper(F.acompteDemande > 0 ? "à la commande, le reste à la livraison." : "par message ou par mail : la fabrication commence ensuite.", wB, 9.5, false)
       .forEach(function(l){ doc.texte(colB, yB, l, {taille: 9.5, couleur: GRIS}); yB += 13; });
   } else if (livraison){
     var nArt = (F.lignes || []).reduce(function(s, l){ return s + (Number(l.q) || 0); }, 0);

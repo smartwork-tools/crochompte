@@ -85,6 +85,8 @@ const oui = async (p) => { await p.locator('.dlg [data-oui]:visible').last().cli
     await p.click('#nm-plus'); await p.fill('.nm-ligne:nth-child(2) [data-k=coul]', 'rose'); await p.fill('.nm-ligne:nth-child(2) [data-k=lots]', '2');
     await p.waitForTimeout(150);
     R.choix_achat_visible = await p.locator('#nm-achat-w').isVisible();
+    /* V65 : « déjà chez moi » est le choix par défaut ; ce test note un achat. */
+    await p.selectOption('#nm-achat', 'achat');
     await oui(p);
     /* V60 : une ligne par couleur ; l'achat de départ compte pour les deux */
     const ach = await dans(p, function(){ var l = state.matieres.filter(function(x){ return x.nomBase === 'Ricorumi'; }); var m = l.filter(function(x){ return x.couleur === 'blanc'; })[0]; window.__ric = m.id;

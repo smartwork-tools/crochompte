@@ -50,12 +50,15 @@ const dans = (p, fn) => p.evaluate(code => window.__eval('(' + code + ')()'), fn
     });
     R.moins_cher_au_gramme = r1.best === 'Web' && r1.pu === 0.076;
 
-    /* 2. Écran « Fournisseurs et prix » : saisie d'un prix dans le tableau */
+    /* 2. Écran « Fournisseurs et prix » (V65 : une ligne par matière, saisie
+       dans une fenêtre fournisseur par fournisseur) */
     await dans(p, function(){ view.sub = 'fournisseurs'; view.fcQuoi = 'toutes'; aller('stock'); });
     const m1 = await dans(p, function(){ return state.matieres[1].id; });
-    await p.fill('tr[data-mid="'+m1+'"] input[data-fid="'+r1.fa+'"]', '1,50'); await p.press('tr[data-mid="'+m1+'"] input[data-fid="'+r1.fa+'"]', 'Tab'); await p.waitForTimeout(250);
+    await p.locator('tr[data-mid="'+m1+'"] button', {hasText:'Noter les prix'}).click(); await p.waitForTimeout(300);
+    await p.locator('.dlg [data-k="prix"]').first().fill('1,50');
+    await p.locator('.dlg').getByRole('button', {name:'Enregistrer les prix'}).click(); await p.waitForTimeout(400);
     R.prix_saisi_dans_tableau = (await lire(p)).matieres.find(m=>m.id===m1).offres.some(o=>o.fid===r1.fa && o.prix===1.5);
-    R.moins_cher_en_vert = await p.locator('tr[data-mid="'+m1+'"] td.moins-cher').count() === 1;
+    R.moins_cher_en_vert = await p.locator('tr[data-mid="'+m1+'"] td [class*="good"], tr[data-mid="'+m1+'"] .good').count() >= 1;
 
     /* 3. Achat chez un fournisseur : son tarif est mis à jour ; l'annulation le rétablit */
     const r3 = await dans(p, function(){

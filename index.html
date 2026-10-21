@@ -7,8 +7,8 @@
      seules connexions permises sont celles vers le serveur Supabase. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://upload.wikimedia.org https://www.gutenberg.org; connect-src 'self' https://jsmmajntopdozkmzrniy.supabase.co wss://jsmmajntopdozkmzrniy.supabase.co; font-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<script src="boot.js?v=642"></script>
-<script src="i18n.js?v=642"></script>
+<script src="boot.js?v=65"></script>
+<script src="i18n.js?v=65"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0f5f57">
 <link rel="manifest" href="manifest.webmanifest">
@@ -616,13 +616,40 @@
   .qte-u .u{font-size:12px;color:var(--muted);white-space:nowrap;}
   .barre-fiche{display:none;}
   @media (max-width:900px){
-    .barre-fiche{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:70;gap:10px;align-items:center;justify-content:space-between;
-      background:var(--surface);border-top:1px solid var(--rule-strong);padding:10px 16px calc(env(safe-area-inset-bottom,0px) + 10px);
+    /* V65 : posée AU-DESSUS de la barre d'onglets (63 px), qu'elle recouvrait :
+       les cinq onglets du bas ne répondaient plus tant qu'une fiche était ouverte. */
+    .barre-fiche{display:flex;position:fixed;left:0;right:0;bottom:calc(63px + env(safe-area-inset-bottom,0px));z-index:38;gap:10px;align-items:center;justify-content:space-between;
+      background:var(--surface);border-top:1px solid var(--rule-strong);padding:10px 16px;
       box-shadow:0 -4px 16px rgba(0,0,0,.08);font-size:14px;}
+    body:not(.app-ouverte) .barre-fiche{bottom:0;padding-bottom:calc(env(safe-area-inset-bottom,0px) + 10px);}
     .barre-fiche b{font-family:"Public Sans",system-ui,sans-serif;font-variant-numeric:tabular-nums;font-size:17px;}
-    body.avec-barre main{padding-bottom:120px;}
-    body.avec-barre #toasts{bottom:calc(env(safe-area-inset-bottom,0px) + 78px);}
+    body.avec-barre main{padding-bottom:190px;}
+    body.avec-barre #toasts{bottom:calc(env(safe-area-inset-bottom,0px) + 145px);}
   }
+  @media (min-width:901px){ #f-achat{min-width:560px;} }
+  /* V65 : tableaux plus larges que leur cadre (ordinateur) : la colonne des
+     actions reste collée au bord, et une ombre montre qu'il reste des
+     colonnes à faire défiler. */
+  .tablewrap{background:
+    linear-gradient(90deg, var(--card) 36%, rgba(255,255,255,0)) 0 0,
+    linear-gradient(270deg, var(--card) 36%, rgba(255,255,255,0)) 100% 0,
+    radial-gradient(farthest-side at 0 50%, rgba(0,0,0,.22), rgba(0,0,0,0)) 0 0,
+    radial-gradient(farthest-side at 100% 50%, rgba(0,0,0,.22), rgba(0,0,0,0)) 100% 0;
+    background-repeat:no-repeat;background-size:44px 100%,44px 100%,13px 100%,13px 100%;
+    background-attachment:local,local,scroll,scroll;}
+  @media (min-width:901px){
+    .t-cmd th:last-child,.t-cmd td:last-child,
+    .t-ventes th:last-child,.t-ventes td:last-child,
+    .t-compact th:last-child,.t-compact td:last-child{
+      position:sticky;inset-inline-end:0;background:var(--card);
+      box-shadow:-10px 0 10px -10px rgba(0,0,0,.35);}
+    html[dir="rtl"] .t-cmd th:last-child,html[dir="rtl"] .t-cmd td:last-child,
+    html[dir="rtl"] .t-ventes th:last-child,html[dir="rtl"] .t-ventes td:last-child,
+    html[dir="rtl"] .t-compact th:last-child,html[dir="rtl"] .t-compact td:last-child{
+      box-shadow:10px 0 10px -10px rgba(0,0,0,.35);}
+  }
+  .t-canaux{min-width:0;}
+  .t-canaux td input{width:82px;min-width:0;}
   .manques{background:var(--warn-soft);border:1px solid var(--warn);border-radius:10px;padding:12px 14px;}
   .manques ul{margin:0;padding:0;list-style:none;display:grid;gap:8px;}
   .manques li{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;font-size:14px;}
@@ -741,7 +768,7 @@
     .segs button{appearance:none;border:none;font:inherit;font-size:14px;font-weight:500;
       padding:9px 16px;background:var(--surface);color:var(--ink);cursor:pointer;}
     .segs button+button{border-left:1px solid var(--rule);}
-    .segs button[aria-pressed=true]{background:var(--primary);color:#fff;}
+    .segs button[aria-pressed=true]{background:var(--primary);color:var(--on-primary,#fff);}
     .pat-lib{display:grid;gap:12px;}
     .pcard{display:grid;grid-template-columns:76px 1fr auto;gap:14px;align-items:center;
       border:1px solid var(--rule);border-radius:12px;padding:12px 14px;background:var(--card);}
@@ -838,7 +865,18 @@
   /* Chronomètre : visible partout tant qu'il tourne. */
   /* V59 : les messages passent au-dessus de la barre du chronomètre. */
   body.avec-chrono #toasts{bottom:calc(env(safe-area-inset-bottom,0px) + 92px) !important;}
-  @media (max-width:1100px){ body.app-ouverte.avec-chrono #toasts{bottom:calc(env(safe-area-inset-bottom,0px) + 150px) !important;} }
+  /* V65 : tant qu'il tourne, le chronomètre se pose au-dessus de la barre
+     d'onglets (et de la barre de résultat d'une fiche), qu'il recouvrait. */
+  @media (max-width:1100px){
+    body.app-ouverte .chronobar{bottom:calc(env(safe-area-inset-bottom,0px) + 72px);}
+    body.app-ouverte.avec-chrono #toasts{bottom:calc(env(safe-area-inset-bottom,0px) + 175px) !important;}
+    body.app-ouverte.avec-chrono main{padding-bottom:calc(160px + env(safe-area-inset-bottom,0px));}
+  }
+  @media (max-width:900px){
+    body.app-ouverte.avec-barre .chronobar{bottom:calc(env(safe-area-inset-bottom,0px) + 128px);}
+    body.app-ouverte.avec-barre.avec-chrono #toasts{bottom:calc(env(safe-area-inset-bottom,0px) + 230px) !important;}
+    body.app-ouverte.avec-barre.avec-chrono main{padding-bottom:calc(250px + env(safe-area-inset-bottom,0px));}
+  }
   .chronobar{position:fixed;left:50%;transform:translateX(-50%);z-index:85;
     bottom:calc(env(safe-area-inset-bottom,0px) + 18px);
     display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:30px;
@@ -937,9 +975,9 @@
   .tile.acc-3{border-left-color:var(--s-3);}
 
   /* Barre unique de répartition : plus lisible que quatre barres séparées. */
-  .pipe{display:flex;height:22px;border-radius:6px;overflow:hidden;gap:2px;background:var(--surface-2);}
-  .pipe > span{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;
-    color:#fff;min-width:0;}
+  .pipe{display:flex;height:24px;border-radius:6px;overflow:hidden;gap:2px;background:var(--surface-2);}
+  .pipe > span{display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:700;
+    color:#fff;min-width:0;text-shadow:0 1px 2px rgba(0,0,0,.55);}
   .pipeleg{display:flex;gap:14px;flex-wrap:wrap;margin-top:11px;font-size:12.5px;color:var(--muted);}
   .pipeleg b{color:var(--ink);font-family:"Public Sans",system-ui,sans-serif;font-variant-numeric:tabular-nums;}
   /* Sur téléphone et tablette en portrait (jusqu'à 900 px), les tableaux
@@ -1234,6 +1272,8 @@
   .etape-suite{margin:3px 0 0;font-size:12px;}
   .etape-suite.urgent{color:var(--warn);font-weight:600;}
   .cmd-outils-d{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+  .cmd-outils-d .f{flex:1 1 260px;}
+  .cmd-outils-d input[type="search"], .cmd-outils-d #cmd-q{width:100%;min-width:260px;}
   details.registre > summary{cursor:pointer;list-style:none;padding:14px 18px;}
   details.registre > summary::-webkit-details-marker{display:none;}
   details.registre > summary h2{margin:0;font-size:17px;} details.registre > summary p{margin:4px 0 0;}
@@ -1410,7 +1450,11 @@
   @media (pointer:coarse){
     button.btn,.fchip,select,input[type=text],input[type=number],input[type=search],input[type=date],input[type=email],input[type=password]{min-height:44px;}
     .lien-mini{padding:10px 4px;margin:-10px -4px;}
-    .aide-q{width:26px;height:26px;}
+    .aide-q{width:26px;height:26px;position:relative;}
+    .aide-q::after{content:"";position:absolute;inset:-9px;}
+    .vues button{position:relative;}
+    .vues button::after{content:"";position:absolute;inset:-6px;}
+    .lien-nom{padding:10px 2px;margin:-10px -2px;}
   }
   /* ═══ V55 — lisibilité, mobile, abonnement ═══ */
   .crea-card{min-width:0;}
@@ -1430,6 +1474,7 @@
     .frise-card .body{position:relative;}
     .frise::after{content:"";position:sticky;right:0;top:0;flex:0 0 28px;margin-left:-28px;background:linear-gradient(90deg,transparent,var(--card));pointer-events:none;}
     /* le tableau « ce que tu dois acheter » devient des cartes */
+    .achats-resp{min-width:0 !important;}
     .achats-resp thead{display:none;}
     .achats-resp tbody tr{display:grid;grid-template-columns:1fr 1fr;gap:2px 10px;padding:10px 12px;border-bottom:1px solid var(--rule);}
     .achats-resp td{display:block;padding:2px 0;border:none;}
@@ -1518,14 +1563,14 @@
      Sans ce fichier (ou s'il ne se charge pas), rien ne change : l'objet
      global reste absent et l'application démarre hors ligne, comme avant. -->
 <script src="config.js"></script>
-<script src="pdf.js?v=642"></script>
-<script src="app.js?v=642"></script>
+<script src="pdf.js?v=65"></script>
+<script src="app.js?v=65"></script>
 
 <!-- Comptes et synchronisation (module facultatif) : sans config.js,
      l'application fonctionne hors ligne, tout reste dans le navigateur.
      Avec config.js, se connecter devient obligatoire. Le message de repli
      (si ce module ne se charge pas) et l'écouteur d'erreur vivent dans
      app.js, section DÉMARRAGE. -->
-<script type="module" src="sync.js?v=642" id="script-sync"></script>
+<script type="module" src="sync.js?v=65" id="script-sync"></script>
 </body>
 </html>
