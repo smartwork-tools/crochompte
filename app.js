@@ -777,8 +777,30 @@ function marque(cle){
 function uidSession(){ var m = marque(CLE_SESSION); return m && m.uid || null; }
 function sauverTout(){
   oublierIndex();
+  oublierCalculs();
   ecrireLocal();
   signalerModification();
+}
+/* V65.1 : les calculs d'ensemble (points à faire, besoins en matières) sont
+   gardés en mémoire entre deux enregistrements : chaque affichage les
+   recalculait en parcourant tout l'atelier, ce qui coûtait 200 ms par écran
+   (et plus d'une seconde sur téléphone) avec beaucoup de données. Une
+   sécurité de 30 s évite toute donnée affichée périmée en cas de
+   modification qui n'enregistre pas. */
+var memoRendu = {}, generationDonnees = 0;
+function oublierCalculs(){ generationDonnees++; memoRendu = {}; }
+/* Empreinte bon marché des quatre listes : un ajout ou un retrait qui
+   n'aurait pas (encore) été enregistré invalide aussi le mémo. */
+function empreinteListes(){
+  return (state.pieces || []).length + "|" + state.creations.length + "|" +
+         (state.commandes || []).length + "|" + state.matieres.length;
+}
+function memoCalc(cle, calc){
+  var m = memoRendu[cle], t = Date.now(), e = empreinteListes();
+  if (m && m.gen === generationDonnees && m.e === e && t - m.t < 30000) return m.val;
+  var val = calc();
+  memoRendu[cle] = {gen: generationDonnees, t: t, e: e, val: val};
+  return val;
 }
 
 /* ═════ PONT DE SYNCHRONISATION ═════
@@ -796,6 +818,8 @@ window.CrochomptePont = {
     if (!nouvel || typeof nouvel !== "object") return false;
     state = nouvel;
     normaliser();
+    oublierIndex();
+    oublierCalculs();
     ecrireLocal();   /* prévient si la mémoire est pleine (memoireOk = false) */
     render();
     return true;
@@ -918,9 +942,15 @@ var bibliothequePartagee = null;
 
 /* ═════ 3. MOTEUR DE CALCUL ═════ */
 
+/* V65.1 : même index pour les matières (voir creation()). */
+var indexMatieres = null;
 function matiere(mid){
-  for (var i=0;i<state.matieres.length;i++) if (state.matieres[i].id===mid) return state.matieres[i];
-  return null;
+  if (!indexMatieres || indexMatieres.src !== state.matieres || indexMatieres.n !== state.matieres.length){
+    var mm = {};
+    for (var i=0;i<state.matieres.length;i++) mm[state.matieres[i].id] = state.matieres[i];
+    indexMatieres = {src: state.matieres, n: state.matieres.length, m: mm};
+  }
+  return indexMatieres.m[mid] || null;
 }
 /* Coût d'une unité : dernier prix payé, ou coût moyen pondéré selon le réglage. */
 function pu(m){
@@ -1743,10 +1773,19 @@ function nb(x){
    la ponctuation ne comptent pas ; une ou deux lettres de travers non plus.
    Les résultats exacts passent toujours en premier ; s'il n'y en a aucun,
    on montre les plus proches et on propose le mot corrigé. */
+/* V65.1 : résultat gardé en mémoire — la normalisation repassait sur les
+   mêmes noms des centaines de fois par écran (clé d'article des lots). */
+var cachePlier = Object.create(null), nCachePlier = 0;
 function plier(s){
-  return String(s == null ? "" : s).normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+  var k = String(s == null ? "" : s);
+  var c = cachePlier[k];
+  if (c !== undefined) return c;
+  var v = k.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .toLowerCase().replace(/œ/g, "oe").replace(/æ/g, "ae").replace(/ß/g, "ss")
     .replace(/[^a-z0-9]+/g, " ").trim();
+  if (nCachePlier > 5000){ cachePlier = Object.create(null); nCachePlier = 0; }
+  cachePlier[k] = v; nCachePlier++;
+  return v;
 }
 /* Distance d'édition (insertion, suppression, substitution, inversion de
    deux lettres voisines), arrêtée dès qu'elle dépasse le plafond. */
@@ -3691,7 +3730,8 @@ function dateDuJour(){
 /* La liste « À faire » : chaque ligne dit ce qui se passe, pourquoi c'est
    important, et mène à l'écran où l'on règle la question. Les plus urgentes
    d'abord (rouge), puis ce qui mérite attention (orange), puis le reste. */
-function pointsAFaire(){
+function pointsAFaire(){ return memoCalc("pointsAFaire", calculerPointsAFaire); }
+function calculerPointsAFaire(){
   var l = [];
   var r = state.reglages;
   var vend = r.profil !== "passion";
@@ -4140,8 +4180,12 @@ function renderAccueil(main){
 
 
 /* ═════ NOUVEAUTÉS ET SIGNALEMENT ═════ */
-var VERSION_APP = "V65";
+var VERSION_APP = "V65.1";
 var NOUVEAUTES = [
+  {v:"V65.1", d:"Octobre 2026", l:[
+    "L'application est beaucoup plus rapide quand l'atelier grossit : ouverture en 1 à 2 secondes et changements d'écran immédiats, même avec des centaines de créations et de commandes.",
+    "Les longues listes de ventes et de commandes s'affichent par 60, avec « Afficher les suivantes »."
+  ]},
   {v:"V65", d:"Octobre 2026", l:[
     "Sur téléphone, la barre du bas reste toujours utilisable : le résultat d'une fiche et le chronomètre se posent au-dessus.",
     "Devis, bons et factures : un nom de client long revient à la ligne, les montants restent bien lisibles.",
@@ -5947,7 +5991,14 @@ function renderVentes(main){
   var t = el('<table class="t-ventes" style="min-width:900px"><thead><tr><th style="width:96px">Quand</th><th style="min-width:200px">Quoi</th><th style="width:130px">À qui</th><th style="width:120px">Où</th><th style="width:105px">Payé comment</th><th class="n" style="width:90px">Montant</th><th class="n" style="width:90px">Reçu</th><th class="n" style="width:100px">Reste</th><th style="width:90px"><span class="sr-only">Action</span></th></tr></thead><tbody></tbody></table>');
   var tb = t.querySelector("tbody");
   var aff = fv.f ? lignes.filter(fv.f) : lignes;
-  aff.forEach(function(x){
+  /* V65.1 : les longues périodes se découpent (1 800 lignes d'un coup
+     faisaient une page de 300 000 px et plusieurs secondes de rendu). */
+  /* changer de période ou de filtre repart du début de la liste */
+  var clePageV = pk + "|" + fk + "|" + (view.ventesDate || "");
+  if (view.ventesMaxPour !== clePageV){ view.ventesMaxPour = clePageV; view.ventesMax = 0; }
+  var maxV = Math.max(60, Number(view.ventesMax) || 60);
+  var resteV = Math.max(0, aff.length - maxV);
+  aff.slice(0, maxV).forEach(function(x){
     var d = new Date(x.t);
     var tr = el('<tr>'+
       '<td data-l="Quand" class="num">'+esc(d.toLocaleDateString(localeApp()))+(pk === "jour" && (d.getHours() || d.getMinutes()) ? '<div class="hint" style="font-size:11px">'+esc(d.toLocaleTimeString(localeApp(), {hour:"2-digit", minute:"2-digit"}))+'</div>' : '')+'</td>'+
@@ -5978,6 +6029,15 @@ function renderVentes(main){
     tb.appendChild(tr);
   });
   cL.querySelector(".tablewrap").appendChild(densifier(t, "Quoi"));
+  if (resteV > 0){
+    var bPlusV = bouton("Afficher les " + Math.min(120, resteV) + " suivantes (encore " + resteV + ")", function(){
+      view.ventesMax = maxV + 120; render();
+    });
+    bPlusV.classList.add("sm");
+    var zPlusV = el('<div class="savebar" style="margin-top:12px;justify-content:center"></div>');
+    zPlusV.appendChild(bPlusV);
+    cL.querySelector(".body").appendChild(zPlusV);
+  }
   cL.querySelector("#vt-vide").hidden = aff.length > 0;
   main.appendChild(cL);
 }
@@ -9337,16 +9397,24 @@ var COM = [
 function libProd(k){ for (var i=0;i<PROD.length;i++) if (PROD[i].k===k) return PROD[i].nom; return k; }
 function libCom(k){ for (var i=0;i<COM.length;i++) if (COM[i].k===k) return COM[i].nom; return k; }
 
+/* V65.1 : index par identifiant — la recherche linéaire (400 créations),
+   appelée pour chacune des 3 000 pièces à chaque écran, coûtait à elle
+   seule 130 ms par affichage de Mes chiffres sur un gros atelier. */
+var indexCreations = null;
 function creation(cid){
-  for (var i=0;i<state.creations.length;i++) if (state.creations[i].id===cid) return state.creations[i];
-  return null;
+  if (!indexCreations || indexCreations.src !== state.creations || indexCreations.n !== state.creations.length){
+    var m = {};
+    for (var i=0;i<state.creations.length;i++) m[state.creations[i].id] = state.creations[i];
+    indexCreations = {src: state.creations, n: state.creations.length, m: m};
+  }
+  return indexCreations.m[cid] || null;
 }
 /* Les pièces rangées par création, calculées une fois par affichage :
    parcourir toutes les pièces pour chaque ligne de chaque tableau devenait
    lent dès quelques milliers de pièces. L'index est jeté à chaque rendu et à
    chaque enregistrement, donc jamais périmé. */
 var indexPieces = null;
-function oublierIndex(){ indexPieces = null; }
+function oublierIndex(){ indexPieces = null; indexCreations = null; indexMatieres = null; }
 /* Le numéro d'une pièce est celui de son ordre de création (N° 1 = la
    première fabriquée) : il ne change plus quand on la modifie. */
 function numeroPiece(p){
@@ -9354,13 +9422,24 @@ function numeroPiece(p){
   l.sort(function(a, b){ var d = (a.cree || 0) - (b.cree || 0); return d ? d : state.pieces.indexOf(a) - state.pieces.indexOf(b); });
   return l.indexOf(p) + 1;
 }
+function majIndexPieces(){
+  if (indexPieces && indexPieces.src === state.pieces && indexPieces.n === state.pieces.length) return;
+  var m = {}, parCmd = {};
+  state.pieces.forEach(function(p){
+    (m[p.cid] = m[p.cid] || []).push(p);
+    if (p.cmdId) (parCmd[p.cmdId] = parCmd[p.cmdId] || []).push(p);
+  });
+  indexPieces = {src: state.pieces, n: state.pieces.length, m: m, parCmd: parCmd};
+}
 function piecesDe(cid){
-  if (!indexPieces || indexPieces.src !== state.pieces || indexPieces.n !== state.pieces.length){
-    var m = {};
-    state.pieces.forEach(function(p){ (m[p.cid] = m[p.cid] || []).push(p); });
-    indexPieces = {src: state.pieces, n: state.pieces.length, m: m};
-  }
+  majIndexPieces();
   return (indexPieces.m[cid] || []).slice();
+}
+/* V65.1 : les pièces d'une commande par l'index (un parcours des 3 000
+   pièces par commande rendait chaque écran lent sur un gros atelier). */
+function piecesParCmdIdx(cmdId){
+  majIndexPieces();
+  return indexPieces.parCmd[cmdId] || [];
 }
 /* V60 : le stock de produits finis, c'est ce qui peut se vendre : les pièces
    terminées, ni vendues ni données, et pas réservées (commande ou
@@ -9576,7 +9655,8 @@ function manquesPourFabriquer(lots){
    (pas encore sorties du stock) et les pièces encore à créer pour les
    commandes acceptées. Comparé au stock de chaque article (tous ses lots),
    moins rien d'autre : c'est la liste d'achats. */
-function besoinsMatieres(){
+function besoinsMatieres(){ return memoCalc("besoinsMatieres", calculerBesoinsMatieres); }
+function calculerBesoinsMatieres(){
   var besoins = {}, rep = {};
   function ajouter(cr, n){
     var q = consommationPrevue(cr);
@@ -14821,7 +14901,7 @@ function detacherPieces(cmdId){
    pièces de la commande (reliées, chronométrables), « C'est prêt » les
    termine et sort leurs matières du stock, « C'est livré » les marque
    vendues — l'argent, lui, reste compté une seule fois, dans la commande. */
-function piecesCommande(c){ return (state.pieces || []).filter(function(p){ return p.cmdId === c.id; }); }
+function piecesCommande(c){ return piecesParCmdIdx(c.id).slice(); }
 /* Ce qui manque encore, article par article : {cr, n}. */
 function piecesManquantes(c){
   return articlesCommande(c).filter(function(a){ return a.q > 0 && a.cid && creation(a.cid); }).map(function(a){
@@ -15816,7 +15896,13 @@ function renderCommandes(main){
     if (nCmd) zNoteCmd.appendChild(nCmd);
   }
   videCmd.hidden = affichees.length > 0;
-  affichees.forEach(function(c){
+  /* V65.1 : les longues listes se découpent (800 commandes d'un coup
+     coûtaient plusieurs secondes sur téléphone). */
+  var clePageC = (fc.k || "") + "|" + q;
+  if (view.cmdMaxPour !== clePageC){ view.cmdMaxPour = clePageC; view.cmdMax = 0; }
+  var maxC = Math.max(60, Number(view.cmdMax) || 60);
+  var resteC = Math.max(0, affichees.length - maxC);
+  affichees.slice(0, maxC).forEach(function(c){
     var j = joursRestants(c);
     var et = etapeCommande(c);
     var fini = !!et.fini;
@@ -15855,11 +15941,21 @@ function renderCommandes(main){
     tb.appendChild(tr);
   });
   densifier(t, "Commandé par");
+  zPlusCmd.innerHTML = "";
+  if (resteC > 0){
+    var bPlusC = bouton("Afficher les " + Math.min(120, resteC) + " suivantes (encore " + resteC + ")", function(){
+      view.cmdMax = maxC + 120; peindreCmd();
+    });
+    bPlusC.classList.add("sm");
+    zPlusCmd.appendChild(bPlusC);
   }
+  }
+  var zPlusCmd = el('<div class="savebar" style="margin-top:12px;justify-content:center"></div>');
   entetesTriables(t.querySelector("thead"), "cmd", function(){ peindreCmd(); });
   peindreCmd();
   wrap.appendChild(t);
   main.appendChild(wrap);
+  main.appendChild(zPlusCmd);
   main.appendChild(videCmd);
   if (estPro()) main.appendChild(carteRegistre());
 }
