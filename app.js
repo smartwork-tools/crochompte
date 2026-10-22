@@ -4189,8 +4189,11 @@ function renderAccueil(main){
 
 
 /* ═════ NOUVEAUTÉS ET SIGNALEMENT ═════ */
-var VERSION_APP = "V66.2";
+var VERSION_APP = "V66.3";
 var NOUVEAUTES = [
+  {v:"V66.3", d:"Octobre 2026", l:[
+    "Quand tu partages le lien de Crochompte, l'aperçu montre maintenant son image."
+  ]},
   {v:"V66.2", d:"Octobre 2026", l:[
     "L'application installée sur ton téléphone se met maintenant à jour toute seule, comme le site."
   ]},
