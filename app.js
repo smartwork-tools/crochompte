@@ -4189,8 +4189,11 @@ function renderAccueil(main){
 
 
 /* ═════ NOUVEAUTÉS ET SIGNALEMENT ═════ */
-var VERSION_APP = "V66.1";
+var VERSION_APP = "V66.2";
 var NOUVEAUTES = [
+  {v:"V66.2", d:"Octobre 2026", l:[
+    "L'application installée sur ton téléphone se met maintenant à jour toute seule, comme le site."
+  ]},
   {v:"V66.1", d:"Octobre 2026", l:[
     "Le compteur de rangs est de retour en un geste : bouton « Compter les rangs » sur chaque création, même sans patron relié."
   ]},
@@ -18276,7 +18279,52 @@ if (window.CrochompteNatif && window.CrochompteNatif.actif){
 /* Pas de copie hors ligne gérée par sw.js dans l'application installée :
    ses fichiers sont déjà sur le téléphone. */
 if (!(window.CrochompteNatif && window.CrochompteNatif.actif) && "serviceWorker" in navigator && (location.protocol === "https:" || /^(localhost|127\.0\.0\.1)$/.test(location.hostname))){
-  window.addEventListener("load", function(){ navigator.serviceWorker.register("sw.js").catch(function(){}); });
+  /* V66.2 : la mise à jour de l'application installée sur le téléphone.
+     Une application installée n'est presque jamais « rechargée » : elle
+     revient de l'arrière-plan. Elle gardait donc l'ancienne version des
+     jours durant, alors que le site, lui, était à jour. Désormais :
+     - au retour au premier plan (et toutes les 30 minutes), on demande au
+       serveur s'il y a une nouvelle version ;
+     - quand elle est installée, la page se recharge d'elle-même : tout de
+       suite si l'application vient d'être ouverte et que rien n'est en
+       cours de saisie, sinon dès qu'elle passe en arrière-plan (sans que
+       personne ne le voie), avec un bouton « Mettre à jour » en attendant.
+     Rien n'est perdu : ce qui attendait d'être écrit l'est avant, et
+     l'écran ouvert est rouvert au même endroit. */
+  var regSW = null, majPrete = false, enRecharge = false;
+  var dejaControlee = !!navigator.serviceWorker.controller;
+  var visibleDepuis = Date.now();
+  var momentSurMaj = function(){
+    if (document.querySelector(".dlg-fond")) return false;
+    var a = document.activeElement;
+    if (a && a.matches && a.matches("input, textarea, select")) return false;
+    try{ if (ficheModifiee()) return false; }catch(e){}
+    try{ if (vocal && vocal.actif) return false; }catch(e){}
+    return true;
+  };
+  var rechargerMaj = function(){
+    if (enRecharge) return; enRecharge = true;
+    try{ ecrireEnAttente(); }catch(e){}
+    location.reload();
+  };
+  navigator.serviceWorker.addEventListener("controllerchange", function(){
+    /* La toute première installation n'est pas une mise à jour. */
+    if (!dejaControlee){ dejaControlee = true; return; }
+    majPrete = true;
+    if (document.hidden || (Date.now() - visibleDepuis < 20000 && momentSurMaj())){ rechargerMaj(); return; }
+    toast("Une nouvelle version de Crochompte est prête.", {libelle:"Mettre à jour", fn: rechargerMaj});
+  });
+  document.addEventListener("visibilitychange", function(){
+    if (document.hidden){ if (majPrete) rechargerMaj(); return; }
+    visibleDepuis = Date.now();
+    if (regSW) regSW.update().catch(function(){});
+  });
+  window.addEventListener("load", function(){
+    navigator.serviceWorker.register("sw.js").then(function(reg){
+      regSW = reg;
+      setInterval(function(){ if (!document.hidden) reg.update().catch(function(){}); }, 30 * 60 * 1000);
+    }).catch(function(){});
+  });
 }
 
 /* Message par défaut de la zone « compte » (il vivait dans index.html ; sorti
