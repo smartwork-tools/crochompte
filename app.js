@@ -287,7 +287,14 @@ var CANAUX_DEFAUT = [
 
 /* ═════ 2. ÉTAT ═════ */
 
-var KEY = "crochompte-v1";
+/* V66 : atelier de démonstration — crochompte.com/?demo ouvre un atelier
+   d'artisane pro déjà rempli (créations, stock, ventes, commandes à toutes
+   les étapes, patron). Il vit sous sa propre clé dans ce navigateur : il ne
+   touche jamais un vrai atelier, et rien ne part en ligne (pas de compte,
+   pas de synchronisation). Pour montrer l'application et pour les tests
+   automatiques. */
+var DEMO = (function(){ try{ return /(^|&)demo(=|&|$)/.test(String(location.search || "").replace(/^\?/, "")); }catch(e){ return false; } })();
+var KEY = DEMO ? "crochompte-demo-v1" : "crochompte-v1";
 var state = null;
 function vueInitiale(){
   return {tab:"accueil", sub:"matieres", ficheId:null, draft:null, modeleVu:null, catMode:"types", patronVu:null,
@@ -811,6 +818,8 @@ function memoCalc(cle, calc){
    et en version hébergée avec comptes. */
 function normaliser(){ if (typeof migrer === "function") migrer(state); }
 window.CrochomptePont = {
+  /* V66 : en démonstration, le module de comptes ne démarre pas. */
+  demo: DEMO,
   cle: KEY,
   version: 1,
   lire: function(){ return state; },
@@ -3061,8 +3070,7 @@ function nettoyerBrouillons(){
    « Connexion en cours… » : un redimensionnement, un autre onglet ou une
    photo reçue appellent render() à tout moment. */
 function atelierFerme(){
-  var cfg = window.CROCHOMPTE_CONFIG || {};
-  if (cfg.supabaseUrl && cfg.supabaseAnonKey && !etatAcces.recu) return true;
+  if (comptesActives() && !etatAcces.recu) return true;
   return etatAcces.exige && !etatAcces.connecte && !modeSansCompte;
 }
 /* Deux appareils ont écrit l'un après l'autre : on le dit sur l'écran où
@@ -3391,6 +3399,7 @@ function render(){
   renderNav();
   var main = document.getElementById("main");
   main.innerHTML = "";
+  if (DEMO) main.appendChild(bandeauDemo());
   if (modeHorsLigne) main.appendChild(bandeauHorsLigne());
   if (view.conflit) main.appendChild(bandeauConflit());
   /* Accès terminé : l'atelier reste lisible dans Mes données et Mon compte
@@ -4180,8 +4189,14 @@ function renderAccueil(main){
 
 
 /* ═════ NOUVEAUTÉS ET SIGNALEMENT ═════ */
-var VERSION_APP = "V65.2";
+var VERSION_APP = "V66.1";
 var NOUVEAUTES = [
+  {v:"V66.1", d:"Octobre 2026", l:[
+    "Le compteur de rangs est de retour en un geste : bouton « Compter les rangs » sur chaque création, même sans patron relié."
+  ]},
+  {v:"V66", d:"Octobre 2026", l:[
+    "Un atelier de démonstration tout rempli, à l'adresse crochompte.com/?demo : pour découvrir Crochompte sans rien saisir."
+  ]},
   {v:"V65.2", d:"Octobre 2026", l:[
     "Anglais, arabe et chinois fiabilisés : plus de phrases mélangées entre deux langues, et plus de deux cents textes traduits en plus (unités, listes, catalogue des matières)."
   ]},
@@ -5172,6 +5187,10 @@ function carteCreation(x, filtre, vend, complet, opts){
   var act = card.querySelector(".crea-act");
   var bF = bouton("Ouvrir la fiche", function(){ ouvrirFiche(c.id); }); bF.classList.add("sm"); act.appendChild(bF);
   var bD = bouton("Dupliquer", function(){ dupliquerCreation(c.id); }); bD.classList.add("sm"); act.appendChild(bD);
+  /* V66.1 : le compteur de rangs en un geste depuis la liste */
+  var nRang = Number(objetCompteurLu(c.id)) || 0;
+  var bRg = bouton("Compter les rangs" + (nRang ? " (rang " + nRang + ")" : ""), function(){ ouvrirCompteurCreation(c.id); });
+  bRg.classList.add("sm"); act.appendChild(bRg);
   if (complet){ var bP = bouton("+ Pièce", function(){ dialogueAjoutPieces(c.id); }); bP.classList.add("sm"); act.appendChild(bP); }
   if (vend) act.appendChild(boutonVendreOuFabriquer(c));
   if (!complet) return card;
@@ -6355,7 +6374,15 @@ function renderFiche(main){
   function peindrePatronFiche(){
     zonePatron.innerHTML = "";
     var cp = cartePatronPerso(d);
-    if (cp){ zonePatron.appendChild(cp); hydraterPhotos(zonePatron); }
+    if (cp){ cp.id = "compteur-fiche"; zonePatron.appendChild(cp); hydraterPhotos(zonePatron); return; }
+    /* V66.1 : sans patron relié, le compteur de rangs reste là (il avait
+       disparu des créations sans patron). */
+    if (!view.ficheId || !creation(view.ficheId)) return;
+    var cc = el('<div class="card" id="compteur-fiche"><header><h2>Compteur de rangs</h2>'+
+      '<p>Pour suivre où tu en es pendant que tu crochètes. Relie un patron à cette création pour l\'avoir sous les yeux à côté du compteur.</p></header>'+
+      '<div class="body"><div class="cptr" style="display:block"></div></div></div>');
+    cc.querySelector(".cptr").appendChild(compteurMainsLibres(objetCompteur(view.ficheId)));
+    zonePatron.appendChild(cc);
   }
   peindrePatronFiche();
   left.appendChild(volet(blocPhoto(d, function(){
@@ -9115,8 +9142,7 @@ function renderReglages(main){
   cP.querySelector(".body").appendChild(bReset);
 
   /* --- données --- */
-  var cfgCompte = window.CROCHOMPTE_CONFIG || {};
-  var avecCompte = !!(cfgCompte.supabaseUrl && cfgCompte.supabaseAnonKey);
+  var avecCompte = comptesActives();
   var texteDonnees = avecCompte
     ? 'Ton atelier est enregistré automatiquement dans ton compte. Une sauvegarde reste utile '
       + 'pour garder une version datée de ton atelier et pouvoir y revenir.'
@@ -13855,7 +13881,7 @@ function renderDemarrage(main){
       titre: "Ta sauvegarde",
       texte: b.sauvegarde
         ? "Dernière sauvegarde exportée le " + dateLongue(b.sauvegarde) + ". Refais-en une de temps en temps."
-        : ((window.CROCHOMPTE_CONFIG || {}).supabaseUrl
+        : (comptesActives()
             ? "Ton atelier est déjà enregistré automatiquement dans ton compte. Exporte aussi un fichier de "
               + "temps en temps : c'est une copie supplémentaire, indépendante du compte."
             : "Tes données sont enregistrées uniquement sur cet appareil : effacer les données de navigation les supprime. "
@@ -15405,7 +15431,7 @@ function journaliser(c, txt){
   c.journal.push({t: Date.now(), txt: txt});
   if (c.journal.length > 300) c.journal.splice(0, c.journal.length - 300);
 }
-function comptesActives(){ var cfg = window.CROCHOMPTE_CONFIG || {}; return !!(cfg.supabaseUrl && cfg.supabaseAnonKey); }
+function comptesActives(){ if (DEMO) return false; var cfg = window.CROCHOMPTE_CONFIG || {}; return !!(cfg.supabaseUrl && cfg.supabaseAnonKey); }
 /* V59 : une facture ou un avoir reçoit son numéro du compte en ligne. On le
    dit AVANT la confirmation, avec le bon geste : créer son compte pendant
    l'essai sans compte, ou attendre le réseau. Renvoie vrai si on peut y aller. */
@@ -17913,6 +17939,34 @@ function demarrerVoix(onPlus, onMoins, badge){
 
 /* Le bloc complet, réutilisé dans « Mes patrons » et dans la fiche création :
    une seule implémentation, donc un seul comportement. */
+/* V66.1 : chaque création a son compteur de rangs, avec ou sans patron
+   relié. Avec un patron, c'est celui du patron (le même partout) ; sans
+   patron, il est gardé à part (state.compteurs), hors de la fiche : compter
+   un rang ne marque pas la fiche « modifiée ». */
+function objetCompteur(cid){
+  var cr = creation(cid);
+  var pat = cr && cr.patron ? patronPerso(cr.patron) : null;
+  if (pat) return pat;
+  if (!state.compteurs || typeof state.compteurs !== "object") state.compteurs = {};
+  if (!state.compteurs[cid]) state.compteurs[cid] = {rang: 0};
+  return state.compteurs[cid];
+}
+function objetCompteurLu(cid){
+  var cr = creation(cid);
+  var pat = cr && cr.patron ? patronPerso(cr.patron) : null;
+  if (pat) return pat.rang || 0;
+  return (state.compteurs && state.compteurs[cid] && state.compteurs[cid].rang) || 0;
+}
+/* Ouvrir une création directement sur son compteur (onglet « Fabrication »
+   sur téléphone et tablette). */
+function ouvrirCompteurCreation(cid){
+  view.voletFiche = "fab"; view.voletFichePour = cid;
+  ouvrirFiche(cid);
+  setTimeout(function(){
+    var z = document.getElementById("compteur-fiche");
+    if (z){ try{ z.scrollIntoView({block:"start", behavior:"smooth"}); }catch(e){ z.scrollIntoView(); } }
+  }, 120);
+}
 function compteurMainsLibres(obj, apresChangement){
   var box = el('<div></div>');
   var zone = el('<button type="button" class="zoneTap" aria-live="polite">'+
@@ -17979,9 +18033,182 @@ function compteurMainsLibres(obj, apresChangement){
 }
 
 
+/* ═════ 39 bis. ATELIER DE DÉMONSTRATION (V66) ═════
+   Un atelier d'artisane pro crédible, daté par rapport à aujourd'hui (les
+   ventes du mois, le retard, l'acompte, le marché de la semaine sont
+   toujours d'actualité). Tout passe par les vraies fonctions de
+   l'application : stock, lots, pièces, ventes et commandes sont cohérents
+   exactement comme s'ils avaient été saisis à la main. */
+var DEMO_VERSION = 1;
+function bandeauDemo(){
+  var b = el('<div class="bandeau-demo" role="note"><div><b>Atelier de démonstration</b>'+
+    '<span>Données fictives, enregistrées seulement dans ce navigateur. Essaie tout : rien n\'est envoyé en ligne.</span></div>'+
+    '<div class="bandeau-demo-act"></div></div>');
+  var act = b.querySelector(".bandeau-demo-act");
+  var bR = bouton("Recommencer la démo", function(){
+    confirmer({titre:"Recommencer la démonstration ?", texte:"L'atelier de démonstration revient à son état de départ. Ton vrai atelier n'est pas touché.",
+               bouton:"Recommencer"}, function(){
+      try{ localStorage.removeItem(KEY); localStorage.removeItem(KEY + ".brouillon"); }catch(e){}
+      state = atelierDemo(); ecrireLocal(); view = vueInitiale(); render(); toast("Démonstration remise à zéro.");
+    });
+  });
+  bR.classList.add("sm");
+  var bQ = bouton("Quitter la démo", function(){ location.href = location.pathname; });
+  bQ.classList.add("sm", "ghost");
+  act.appendChild(bR); act.appendChild(bQ);
+  return b;
+}
+function atelierDemo(){
+  var J = 864e5, maint = Date.now();
+  function ilYa(j, h){ return maint - j * J - (h || 0) * 36e5; }
+  function iso(t){ return dateISO(t); }
+  state = etatInitial();
+  state.demoVersion = DEMO_VERSION;
+  var r = state.reglages;
+  r.profilType = "pro"; r.profil = "vend"; r.mode = "complet";
+  r.statut = "marchandises"; r.cotisations = 12.4;
+  r.tauxHoraire = 15; r.fraisFixes = 30; r.piecesParMois = 12; r.heuresParJour = 3;
+  r.confirmeLe = ilYa(120);
+  r.raisonSociale = "Atelier de démonstration";
+  r.adresse = "1 rue de l'Exemple, 00000 Démoville";
+  r.siret = "00000000000000";
+  r.contact = "demo@example.com";
+  r.codeFacture = "DEMXX";
+
+  /* Fournisseurs (fictifs) */
+  state.fournisseurs = [
+    {id:"f_demo1", nom:"Mercerie des Exemples", site:"", note:"Magasin du quartier"},
+    {id:"f_demo2", nom:"Laines en ligne", site:"", note:"Commande sur internet, livraison 3 jours"}
+  ];
+
+  /* Achats de matières, datés : le stock et les lots sont réels. */
+  function achat(mid, nLots, prixLot, jours, fid){
+    var m = matiere(mid); if (!m) return;
+    m.prixIndicatif = false; m.adoptee = true;
+    var q = nLots * (Number(m.contenance) || 1);
+    mouvementMatiere(m, "entree", q, cts(nLots * prixLot), "Achat", {fid: fid, sansOffre: !fid});
+    m.mouv[0].d = ilYa(jours);
+  }
+  /* quantités calculées pour couvrir les pièces et commandes ci-dessous,
+     avec un peu de reste en stock */
+  achat("coton_dk", 16, 2.7, 110, "f_demo1");
+  achat("coton_fin", 34, 2.0, 100, "f_demo1");
+  achat("ouate", 2, 13, 105, "f_demo2");
+  achat("yeux", 4, 4, 100, "f_demo2");
+  achat("nez", 1, 3.5, 100, "f_demo2");
+  achat("broder", 2, 1.2, 90, "f_demo1");
+  achat("etiquette", 1, 18, 95, "f_demo2");
+  achat("pochon", 2, 5, 95, "f_demo2");
+  achat("mousqueton", 1, 4, 60, "f_demo2");
+  achat("corde", 6, 12, 80, "f_demo1");
+  achat("melange", 14, 4.2, 75, "f_demo1");
+  /* un réassort récent, à un autre prix : il ouvre une autre ligne (lot),
+     exactement comme « J'ai acheté » */
+  var mR = matiere("coton_dk");
+  if (mR){
+    var rR = noterAchatLigne(mR, 6 * (Number(mR.contenance) || 50), cts(6 * 3.1), "Réassort", {fid: "f_demo2", sansOffre: true});
+    rR.m.mouv[0].d = ilYa(12); rR.m.cree = ilYa(12); rR.m.adoptee = true;
+  }
+  /* les prix notés chez les deux fournisseurs, pour la comparaison */
+  [["coton_dk", 2.7, 3.1], ["coton_fin", 2.0, 2.2], ["ouate", 13.5, 13], ["corde", 12, 12.9]].forEach(function(x){
+    var m = matiere(x[0]); if (!m) return;
+    noterOffre(m, "f_demo1", x[1], m.contenance, "saisie");
+    noterOffre(m, "f_demo2", x[2], m.contenance, "saisie");
+  });
+  /* une pelote abîmée */
+  var mp = matiere("coton_fin");
+  if (mp){ mouvementMatiere(mp, "perte", 50, null, "Pelote tachée", {motif:"abime"}); mp.mouv[0].d = ilYa(40); }
+
+  /* Créations, depuis les modèles du catalogue */
+  function crea(id, modele, nom, prix, canal, jours){
+    var c = creationDepuisModele(modele, nom, prix, canal);
+    c.id = id; c.cree = ilYa(jours);
+    state.creations.push(c);
+    return c;
+  }
+  crea("cr_lapin", "ami_moyen", "Lapin des bois", 38, "etsy", 115);
+  crea("cr_renard", "ami_petit", "Petit renard", 24, "marche", 110);
+  crea("cr_bonnet", "bonnet", "Bonnet côtelé", 32, "direct", 100);
+  crea("cr_panier", "panier", "Panier en corde", 35, "direct", 85);
+  crea("cr_doudou", "doudou", "Doudou étoile", 26, "marche", 75);
+  crea("cr_cles", "pcle", "Porte-clés hibou", 10, "marche", 60);
+
+  /* Pièces terminées (stock de produits finis), puis vendues au fil des mois */
+  function terminer(cid, n, jours){
+    ajouterPieces(cid, n, "termine", "atelier");
+    piecesDe(cid).forEach(function(p){ if (!p.demoDate){ p.demoDate = true; p.cree = ilYa(jours + 2); p.termineLe = ilYa(jours); } });
+  }
+  terminer("cr_lapin", 6, 95); terminer("cr_renard", 8, 90); terminer("cr_bonnet", 4, 70);
+  terminer("cr_panier", 3, 60); terminer("cr_doudou", 5, 50); terminer("cr_cles", 10, 45);
+  var ventes = [
+    ["cr_lapin", 38, "carte", 92, "etsy"], ["cr_renard", 24, "especes", 88, "marche"], ["cr_renard", 24, "especes", 88, "marche"],
+    ["cr_cles", 10, "especes", 88, "marche"], ["cr_lapin", 38, "carte", 70, "etsy"], ["cr_bonnet", 32, "virement", 64, "direct"],
+    ["cr_panier", 35, "paypal", 55, "direct"], ["cr_doudou", 26, "carte", 45, "marche"], ["cr_cles", 10, "especes", 40, "marche"],
+    ["cr_renard", 24, "carte", 33, "marche"], ["cr_lapin", 38, "carte", 26, "etsy"], ["cr_bonnet", 32, "virement", 18, "direct"],
+    ["cr_doudou", 26, "especes", 9, "marche"], ["cr_cles", 10, "especes", 9, "marche"], ["cr_renard", 24, "carte", 4, "marche"],
+    ["cr_lapin", 38, "carte", 0, "etsy"]
+  ];
+  ventes.forEach(function(v){ vendrePiece(v[0], v[1], v[2], {le: ilYa(v[3], 2), canal: v[4]}); });
+  /* un marché il y a 9 jours, avec ses frais de stand */
+  var jourMarche = iso(ilYa(9));
+  state.marches = [{id:"mk_demo", date: jourMarche, lieu:"Marché artisanal de Démoville", frais:15, note:""}];
+  (state.pieces || []).forEach(function(p){ if (p.com === "vendu" && p.venduLe && dateISO(p.venduLe) === jourMarche) p.marche = jourMarche; });
+
+  /* Pièces en cours, dont une avec du temps chronométré */
+  ajouterPieces("cr_lapin", 1, "encours", "atelier");
+  ajouterPieces("cr_panier", 1, "afaire", "atelier");
+  var pc = piecesDe("cr_lapin").filter(function(p){ return p.prod === "encours"; })[0];
+  if (pc){ pc.mesure = {prep:15, crochet:95, assemb:0, finition:0, emball:0}; pc.cree = ilYa(3); }
+
+  /* Commandes : une à chaque étape */
+  function cmd(o){
+    var c = nouvelleCommande();
+    delete c.brouillon;
+    c.client = {nom:o.nom, contact:o.contact || "", note:""};
+    c.cid = o.cid; c.qte = o.qte || 1; c.prixConvenu = o.prix; c.canal = o.canal || "direct";
+    c.dateCommande = new Date(ilYa(o.passee)).toISOString();
+    c.datePromise = o.pour !== undefined ? iso(maint + o.pour * J) : "";
+    if (o.versement) c.versement = {montant:o.versement[0], date: iso(ilYa(o.passee)), type:o.versement[1], moyen:o.versement[2]};
+    if (o.statut !== "devis"){ c.accordLe = ilYa(o.passee); }
+    var avant = "acceptee";
+    c.statut = o.statut === "devis" ? "devis" : "acceptee";
+    if (["encours", "terminee", "livree"].indexOf(o.statut) !== -1){
+      if (o.statut === "livree") c.livreeLe = iso(ilYa(o.livree || 2));
+      c.statut = o.statut;
+      if (o.statut === "livree"){ var bf = bilanCommande(c, true); if (bf) c.bilanFige = bf; }
+      synchroAtelierCommande(c, avant);
+    }
+    if (o.statut === "annulee"){ c.statut = "annulee"; }
+    (o.reglements || []).forEach(function(x){ c.paiements.push({montant:x[0], moyen:x[1], date: iso(ilYa(x[2])), saisiLe: ilYa(x[2])}); });
+    journaliser(c, "Commande créée (démonstration)");
+    return c;
+  }
+  cmd({nom:"Sophie Lemaire", contact:"sophie@example.com", cid:"cr_doudou", qte:2, prix:26, statut:"devis", passee:3, pour:25});
+  cmd({nom:"Inès Moreau", contact:"06 00 00 00 01", cid:"cr_lapin", prix:42, statut:"acceptee", passee:6, pour:14, versement:[15, "acompte", "carte"]});
+  cmd({nom:"Claire Bernard", cid:"cr_panier", qte:2, prix:35, statut:"encours", passee:20, pour:-3, versement:[20, "arrhes", "virement"]});
+  cmd({nom:"Julie Petit", cid:"cr_bonnet", prix:34, statut:"terminee", passee:15, pour:2, versement:[10, "acompte", "especes"]});
+  cmd({nom:"Marc Dubois", cid:"cr_renard", qte:3, prix:24, statut:"livree", passee:30, pour:-6, livree:6, versement:[20, "acompte", "carte"], reglements:[[30, "cheque", 5]]});
+  cmd({nom:"Emma Roux", contact:"emma@example.com", cid:"cr_lapin", prix:40, statut:"livree", passee:40, pour:-20, livree:20, versement:[15, "acompte", "paypal"], reglements:[[25, "virement", 19]]});
+  cmd({nom:"Paul Thomas", cid:"cr_cles", qte:5, prix:9, statut:"annulee", passee:50, pour:-30});
+
+  /* Un patron écrit à la main, relié au lapin */
+  var pat = nouveauPatron();
+  delete pat.brouillon;
+  pat.titre = "Lapin des bois — mon patron"; pat.auteur = "Atelier de démonstration"; pat.origine = "Création personnelle";
+  pat.texte = "Coton DK, crochet 3 mm, rembourrage.\n\nTÊTE\nR1 : 6 ms dans un cercle magique (6)\nR2 : 6 aug (12)\nR3 : *1 ms, 1 aug* x6 (18)\nR4 : *2 ms, 1 aug* x6 (24)\nR5 à R9 : 24 ms (24)\nR10 : *2 ms, 1 dim* x6 (18)\nR11 : *1 ms, 1 dim* x6 (12)\nRembourrer, puis R12 : 6 dim (6). Fermer.\n\nOREILLES (x2)\nR1 : 6 ms dans un cercle magique (6)\nR2 : *1 ms, 1 aug* x3 (9)\nR3 à R10 : 9 ms (9). Aplatir et coudre.";
+  pat.rang = 4;
+  var crL = creation("cr_lapin"); if (crL) crL.patron = pat.id;
+
+  /* L'atelier se présente comme une activité déjà en route */
+  state.chrono = {pid:null, poste:"crochet", debut:null};
+  oublierIndex(); oublierCalculs();
+  return state;
+}
+
 /* ═════ 40. DÉMARRAGE ═════ */
 
 state = charger();
+if (DEMO && !state.demoVersion){ try{ state = atelierDemo(); ecrireLocal(); }catch(e){ console.error("Démonstration :", e); } }
 if (!(window.CrochompteI18n && window.CrochompteI18n.langue() !== "fr")) document.documentElement.lang = "fr";
 /* Un réglage modifié juste avant de fermer l'onglet ne doit pas être perdu :
    on force l'écriture au moment où la page part ou passe en arrière-plan. */
@@ -18091,8 +18318,7 @@ window.addEventListener("error", function(e){
    écran de connexion. Sans config.js, rien ne change : l'outil démarre
    comme avant. */
 (function(){
-  var cfg = window.CROCHOMPTE_CONFIG || {};
-  if (cfg.supabaseUrl && cfg.supabaseAnonKey){
+  if (comptesActives()){
     renderChargement();
     minuteurChargement = setTimeout(function(){
       if (!etatAcces.recu) renderErreurChargement();

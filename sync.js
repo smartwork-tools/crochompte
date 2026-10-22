@@ -45,6 +45,8 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
   /* Sans configuration ou sans pont : on ne fait rien, silencieusement.
      L'application reste pleinement utilisable hors ligne. */
   if (!pont) return;
+  /* V66 : atelier de démonstration (?demo) : aucun compte, rien ne part en ligne. */
+  if (pont.demo) return;
   if (!cfg.supabaseUrl || !cfg.supabaseAnonKey){
     return;   /* le repli hors ligne d'index.html dit déjà ce qu'il faut */
   }
@@ -64,6 +66,10 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
     return cfg.supabaseUrl.replace(/\/+$/, "") + "/functions/v1/" + nom;
   }
   function urlPage(){
+    /* Dans l'application installée, l'adresse de la page est locale au
+       téléphone : les liens des e-mails mènent au site (V64). */
+    var N = window.CrochompteNatif;
+    if (N && N.actif) return N.site;
     return window.location.href.split("#")[0];
   }
 
