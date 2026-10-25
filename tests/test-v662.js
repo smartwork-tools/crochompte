@@ -57,7 +57,7 @@ async function attendreVersion(p, v, ms){
 
     /* 2. Version 3 publiée pendant qu'une fenêtre est ouverte */
     await attendre(21000);   /* l'application est ouverte depuis un moment */
-    await p.evaluate(() => { var b = document.querySelector('.bandeau-demo button'); if (b) b.click(); });
+    await p.evaluate(() => { var b = Array.from(document.querySelectorAll('.bandeau-demo button')).find(x => /Recommencer/.test(x.textContent)); if (b) b.click(); });
     await attendre(400);
     R.fenetre_ouverte = (await p.locator('.dlg-fond').count()) === 1;
     version = 3;

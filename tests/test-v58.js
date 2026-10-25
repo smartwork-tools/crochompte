@@ -54,7 +54,7 @@ const txt = async (p, sel) => (await p.locator(sel).first().textContent()).repla
        flottant : l'Accueil dit déjà quoi faire. Un salut affiché doit rester un vrai salut. */
     const vierge = true;
     R.salutation = (await p.locator('#salut').count()) === 0 || /Bonjour|Bonsoir|Bon retour/.test(await txt(p, '#salut'));
-    R.pas_de_bande_sombre = (await p.locator('.acc-hero').count()) === 0 && /Bonjour/.test(await txt(p, '#main h1'));
+    R.pas_de_bande_sombre = (await p.locator('.acc-hero').count()) === 0 && /Bonjour|Bonsoir/.test(await txt(p, '#main h1'));
     R.accueil_a_faire_et_crochet = (vierge || /À faire/.test(await txt(p, '#main'))) && /Sur le crochet/.test(await txt(p, '#main'));
     R.pas_de_debordement = await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1);
 

@@ -47,7 +47,7 @@ async function seConnecter(p){
     R.base_connue_oubliee = await p.evaluate(()=> localStorage.getItem('crochompte-v1.versionConnue') === null);
     await seConnecter(p);
     const txt1 = await p.locator('#main').textContent();
-    R.atelier_recupere_a_la_reconnexion = /Lapin Céleste|Pour bien démarrer|Bonjour/.test(txt1) && await dans(p, function(){ return state.creations.length === 3 && state.reglages.profilType === 'amateur'; });
+    R.atelier_recupere_a_la_reconnexion = /Lapin Céleste|Pour bien démarrer|Bonjour|Bonsoir/.test(txt1) && await dans(p, function(){ return state.creations.length === 3 && state.reglages.profilType === 'amateur'; });
     R.pas_de_question_profil = !/Tu crochètes en amateur ou en pro/.test(txt1);
     R.pas_de_recuperation_bloquee = !/Récupération de ton atelier/.test(txt1);
 

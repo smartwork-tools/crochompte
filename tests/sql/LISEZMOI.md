@@ -17,7 +17,7 @@ createdb crochompte_test
 psql -d crochompte_test -f 01-socle-imitation-supabase.sql -f 02-droits-par-defaut-supabase.sql
 cd ../..   # racine du projet
 for f in schema.sql schema-pseudo.sql schema-versions.sql schema-patrons-publics.sql \
-         schema-signalements.sql schema-fiabilite.sql schema-factures.sql schema-securite-moderation.sql schema-abonnement.sql; do   # même ordre que README.md
+         schema-signalements.sql schema-fiabilite.sql schema-factures.sql schema-securite-moderation.sql schema-abonnement.sql schema-visites.sql; do   # même ordre que README.md
   psql -d crochompte_test -f $f
 done
 cd tests/sql
@@ -27,6 +27,7 @@ psql -d crochompte_test -f 30-contournements-et-factures.sql
 psql -d crochompte_test -f 31-registre-factures.sql
 psql -d crochompte_test -f 32-limites.sql
 psql -d crochompte_test -f 40-abonnement.sql             # abonnement, codes cadeaux, administration, envoi atomique (V55)
+psql -d crochompte_test -f 50-visites.sql                # compteur de visites sans cookies (V66.4)
 ```
 
 ## Résultats attendus

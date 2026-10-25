@@ -12,7 +12,8 @@ const R = {}; const errs = [];
     p.on('pageerror', e=>errs.push(e.message));
     p.on('dialog', d=>d.dismiss());
     const externes = [];
-    p.on('request', r=>{ if (!/^http:\/\/127\.0\.0\.1/.test(r.url()) && !/^data:|^blob:/.test(r.url())) externes.push(r.url()); });
+    /* V66.4 : seul le compteur anonyme de visites (compter_visite) a le droit de partir. */
+    p.on('request', r=>{ if (!/^http:\/\/127\.0\.0\.1/.test(r.url()) && !/^data:|^blob:/.test(r.url()) && !/\/rest\/v1\/rpc\/compter_visite$/.test(r.url())) externes.push(r.url()); });
     const appEval = async r=>{
       const src = fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
       const i = src.lastIndexOf('})();');

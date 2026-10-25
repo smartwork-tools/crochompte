@@ -30,7 +30,7 @@ appareil à l'autre.
 
 | Fichier | Rôle |
 |---|---|
-| `schema.sql` → `schema-abonnement.sql` (9 fichiers) | les tables, les règles de sécurité et les fonctions de la base, **dans l'ordre de l'étape 1** |
+| `schema.sql` → `schema-visites.sql` (10 fichiers) | les tables, les règles de sécurité et les fonctions de la base, **dans l'ordre de l'étape 1** |
 | `supabase/functions/inscription`, `connexion`, `mot-de-passe-oublie` | compte : création, connexion par pseudo ou adresse, lien de réinitialisation (l'adresse e-mail ne passe jamais par le navigateur) |
 | `supabase/functions/supprimer-compte` | effacement complet d'un compte (mot de passe vérifié côté serveur, abonnement Stripe résilié) |
 | `supabase/functions/stripe-webhook` | réception des paiements Stripe |
@@ -87,6 +87,9 @@ Compte 30 minutes la première fois. Tout est gratuit à cette échelle.
    9. `schema-abonnement.sql` — abonnement, codes cadeaux, administration,
       envoi atomique, **accès vérifié par le serveur** (un compte expiré ne
       peut plus écrire). Il fait de `karimfarhani01@gmail.com` un administrateur.
+   10. `schema-visites.sql` — compteur de visites sans cookies (V66.4) : des
+      totaux anonymes par jour, lisibles dans le SQL Editor (requêtes en bas
+      du fichier).
 
    Tous sont rejouables sans risque. Si tu rejoues un fichier plus tard,
    rejoue aussi **tous ceux qui le suivent** dans la liste : c'est l'ordre

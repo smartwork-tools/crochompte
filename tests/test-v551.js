@@ -17,7 +17,7 @@ const R = {}; const errs = [];
   await p.goto('http://127.0.0.1:8934/index.html'); await p.waitForTimeout(500);
   await p.fill('#sy-c-identifiant','LaineTest'); await p.fill('#sy-c-mdp','motdepasse123');
   await p.click('#sy-c-valider'); await p.waitForTimeout(1800);
-  R.accueil_apres_connexion = (await p.textContent('body')).includes('Bonjour');
+  R.accueil_apres_connexion = /Bonjour|Bonsoir/.test(await p.textContent('body'));
   // Plusieurs ouvertures de suite (comme Safari qui recharge l'onglet) :
   // on regarde l'écran toutes les 40 ms pendant l'ouverture.
   let recup = 0, maj = 0;
@@ -36,7 +36,7 @@ const R = {}; const errs = [];
   console.log('ouvertures : récupération vue', recup, 'fois ; message maj vu', maj, 'fois');
   R.pas_d_ecran_recuperation_aux_ouvertures = recup === 0;
   R.pas_de_message_maj_pour_rien = maj === 0;
-  R.accueil_visible = (await p.textContent('body')).includes('Bonjour');
+  R.accueil_visible = /Bonjour|Bonsoir/.test(await p.textContent('body'));
   R.pas_d_erreur = errs.length === 0;
   console.log(JSON.stringify(R, null, 1), errs.join(' | '));
   const ko = Object.keys(R).filter(k => !R[k]);

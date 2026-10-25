@@ -137,11 +137,12 @@ async function connecter(p){
     await p.screenshot({path:require('path').join(__dirname,'captures','accueil-tel.png'), fullPage:true});
     await p.close();
 
-    // 10. Écran de connexion sur téléphone : le formulaire d'abord
+    // 10. Écran de connexion sur téléphone : la promesse courte et le bouton
+    //     démo, puis le formulaire, qui commence dans le premier écran (V66.4)
     p = await page(b, {width:390, height:844});
     const yForm = await p.evaluate(()=> document.querySelector('.portail-form').getBoundingClientRect().top);
     const yPres = await p.evaluate(()=> document.querySelector('.portail-pres').getBoundingClientRect().top);
-    R.tel_formulaire_avant_presentation = yForm < yPres;
+    R.tel_promesse_puis_formulaire = yPres < yForm && yForm < 844;
     await p.screenshot({path:require('path').join(__dirname,'captures','portail-tel.png'), fullPage:true});
     await p.close();
     p = await page(b);

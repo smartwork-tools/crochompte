@@ -7,8 +7,8 @@
      seules connexions permises sont celles vers le serveur Supabase. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://upload.wikimedia.org https://www.gutenberg.org; connect-src 'self' https://jsmmajntopdozkmzrniy.supabase.co wss://jsmmajntopdozkmzrniy.supabase.co; font-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<script src="boot.js?v=663"></script>
-<script src="i18n.js?v=663"></script>
+<script src="boot.js?v=664"></script>
+<script src="i18n.js?v=664"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0f5f57">
 <link rel="manifest" href="manifest.webmanifest">
@@ -473,8 +473,17 @@
   /* ── accueil ── */
   .foot{max-width:1060px;margin:44px auto 0;padding:22px 20px 0;border-top:1px solid var(--rule);font-size:12.5px;color:var(--muted);}
   /* Écran de connexion */
-  .portail{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,440px);gap:48px;align-items:start;padding:28px 0 60px;}
-  .portail-pres{padding-top:18px;}
+  .portail{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,440px);grid-template-rows:auto 1fr;
+    grid-template-areas:"pres form" "plus form";column-gap:48px;row-gap:0;align-items:start;padding:28px 0 60px;}
+  .portail-pres{grid-area:pres;padding-top:18px;}
+  .portail-form{grid-area:form;}
+  .portail-plus{grid-area:plus;}
+  .portail-demo{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin:20px 0 0;}
+  .portail-demo a.btn{display:inline-flex;align-items:center;min-height:46px;padding:10px 20px;border-radius:8px;font-weight:600;font-size:15px;
+    background:var(--primary);border:1px solid var(--primary);color:var(--on-primary);text-decoration:none;}
+  .portail-demo a.btn:hover{filter:brightness(1.08);}
+  .portail-demo a.btn:focus-visible{outline:3px solid var(--primary);outline-offset:3px;}
+  .portail-demo .hint{font-size:13.5px;}
   .portail-pres .eyebrow{font-size:12px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--primary-ink);}
   .portail-pres h1{font-size:clamp(28px,4vw,40px);line-height:1.08;letter-spacing:-.025em;margin:12px 0 0;}
   .portail-pres .lede{font-size:16.5px;color:var(--muted);margin:16px 0 0;max-width:54ch;}
@@ -494,16 +503,13 @@
   .portail-video .pv-play svg{margin-left:3px;}
   .portail-video .pv-lib{position:absolute;left:14px;bottom:12px;font-weight:600;font-size:14px;background:rgba(11,63,53,.85);padding:6px 11px;border-radius:999px;}
   .portail-video .pv-lib small{font-weight:500;opacity:.85;font-size:12.5px;}
-  .portail-lien-video{display:none;text-align:center;margin:10px 0 0;}
-  @media (max-width:900px){ .portail-lien-video{display:block;} }
   .pres-fond{position:fixed;inset:0;z-index:200;background:rgba(10,14,13,.88);display:flex;align-items:center;justify-content:center;padding:max(16px,env(safe-area-inset-top,0px)) 16px max(16px,env(safe-area-inset-bottom,0px));}
   .pres-boite{position:relative;width:min(1100px,100%);}
   .pres-boite video{display:block;width:100%;aspect-ratio:16/9;background:#15644a;border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,.5);}
   .pres-x{position:absolute;right:-6px;top:-46px;width:40px;height:40px;border-radius:50%;border:0;background:#fff;color:#111;font-size:26px;line-height:1;cursor:pointer;}
   @media (max-width:700px){ .pres-x{top:-48px;right:0;} }
   @media (max-width:860px){
-    .portail{grid-template-columns:minmax(0,1fr);gap:28px;padding-top:12px;}
-    .portail-form{order:-1;}
+    .portail{grid-template-columns:minmax(0,1fr);grid-template-rows:none;grid-template-areas:"pres" "form" "plus";row-gap:24px;padding-top:12px;}
     .portail-pres{padding-top:0;}
   }
 
@@ -1581,14 +1587,14 @@
      Sans ce fichier (ou s'il ne se charge pas), rien ne change : l'objet
      global reste absent et l'application démarre hors ligne, comme avant. -->
 <script src="config.js"></script>
-<script src="pdf.js?v=663"></script>
-<script src="app.js?v=663"></script>
+<script src="pdf.js?v=664"></script>
+<script src="app.js?v=664"></script>
 
 <!-- Comptes et synchronisation (module facultatif) : sans config.js,
      l'application fonctionne hors ligne, tout reste dans le navigateur.
      Avec config.js, se connecter devient obligatoire. Le message de repli
      (si ce module ne se charge pas) et l'écouteur d'erreur vivent dans
      app.js, section DÉMARRAGE. -->
-<script type="module" src="sync.js?v=663" id="script-sync"></script>
+<script type="module" src="sync.js?v=664" id="script-sync"></script>
 </body>
 </html>

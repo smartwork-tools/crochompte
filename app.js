@@ -295,6 +295,61 @@ var CANAUX_DEFAUT = [
    automatiques. */
 var DEMO = (function(){ try{ return /(^|&)demo(=|&|$)/.test(String(location.search || "").replace(/^\?/, "")); }catch(e){ return false; } })();
 var KEY = DEMO ? "crochompte-demo-v1" : "crochompte-v1";
+
+/* V66.4 : compteur de visites, sans cookies ni identifiant. Le serveur ne
+   reçoit que « tel jour, tel événement, telle provenance » et ajoute 1 à un
+   total (schema-visites.sql). Ni adresse IP gardée, ni identifiant de
+   personne, ni suivi d'une page à l'autre : seulement des totaux par jour.
+   La provenance vient du lien suivi (crochompte.com/?src=tiktok) ou, à
+   défaut, du site d'où l'on arrive (TikTok, Instagram…), puis elle est
+   retirée de l'adresse. Un même événement n'est compté qu'une fois par
+   visite (mémoire de l'onglet, effacée à sa fermeture). */
+var SOURCES_VISITE = ["tiktok", "instagram", "linkedin", "facebook"];
+var sourceVisite = (function(){
+  var src = "";
+  try{
+    var p = new URLSearchParams(location.search);
+    src = String(p.get("src") || "").toLowerCase();
+    if (p.has("src")){
+      p.delete("src");
+      var q = p.toString().replace(/=(&|$)/g, "$1");
+      history.replaceState(history.state, "", location.pathname + (q ? "?" + q : "") + location.hash);
+    }
+    if (src) sessionStorage.setItem("crochompte-src", src);
+    else src = sessionStorage.getItem("crochompte-src") || "";
+  }catch(e){}
+  if (!src){
+    var ref = "";
+    try{ ref = new URL(document.referrer).hostname; }catch(e){}
+    for (var i = 0; i < SOURCES_VISITE.length; i++){
+      if (ref && (ref === SOURCES_VISITE[i] + ".com" || ref.slice(-(SOURCES_VISITE[i].length + 5)) === "." + SOURCES_VISITE[i] + ".com")) src = SOURCES_VISITE[i];
+    }
+    if (ref === "lnkd.in") src = "linkedin";
+  }
+  if (!src) return "direct";
+  return SOURCES_VISITE.indexOf(src) !== -1 ? src : "autre";
+})();
+function lienDemo(){ return "?demo"; }
+function compterVisite(ev){
+  try{
+    var cle = "crochompte-vu-" + ev;
+    if (sessionStorage.getItem(cle)) return;
+    sessionStorage.setItem(cle, "1");
+  }catch(e){}
+  try{
+    var cfg = window.CROCHOMPTE_CONFIG || {};
+    if (!cfg.supabaseUrl || !cfg.supabaseAnonKey || !window.fetch) return;
+    /* Sur un poste de développement ou pendant les tests, rien n'est compté :
+       les chiffres ne reflètent que les vraies visites du site. */
+    if (/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname) && !window.__compteurEnTest) return;
+    fetch(cfg.supabaseUrl.replace(/\/+$/, "") + "/rest/v1/rpc/compter_visite", {
+      method: "POST", keepalive: true, credentials: "omit",
+      headers: {"apikey": cfg.supabaseAnonKey, "Authorization": "Bearer " + cfg.supabaseAnonKey, "Content-Type": "application/json"},
+      body: JSON.stringify({p_evenement: ev, p_source: sourceVisite})
+    }).catch(function(){});
+  }catch(e){}
+}
+window.CrochompteVisite = compterVisite;
 var state = null;
 function vueInitiale(){
   return {tab:"accueil", sub:"matieres", ficheId:null, draft:null, modeleVu:null, catMode:"types", patronVu:null,
@@ -3495,7 +3550,7 @@ function saluer(){
     if (n.factures) morceaux.push(pluriel(n.factures, "facture émise", "factures émises"));
     if (n.reglements) morceaux.push(pluriel(n.reglements, "règlement reçu", "règlements reçus"));
   }
-  var h = new Date().getHours(), bonjour = h >= 18 || h < 5 ? "Bonsoir" : "Bonjour";
+  var bonjour = salutation();
   var titre, texte;
   /* V59 : la toute première visite n'est pas un « bonjour, rien d'urgent ». */
   var vierge = !state.creations.length && !commandes().length && !(state.pieces || []).length;
@@ -3670,8 +3725,10 @@ function renderPortail(){
   viderEntete();
   var main = document.getElementById("main");
   main.innerHTML = "";
-  /* À gauche (en dessous sur téléphone) : ce que fait l'outil, en trois
-     points vérifiables. À droite : le formulaire, tout de suite accessible. */
+  /* V66.4 : la promesse et l'atelier de démonstration d'abord, puis le
+     formulaire, puis la vidéo et les détails. Sur téléphone, c'est l'ordre
+     de lecture ; sur ordinateur, le formulaire est à droite. Une personne
+     qui arrive d'une vidéo voit ce que fait l'outil avant un écran de compte. */
   var enveloppe = el(
     '<div class="portail">'+
       '<section class="portail-pres">'+
@@ -3679,6 +3736,11 @@ function renderPortail(){
         '<h1>Sache ce que chaque création te rapporte vraiment.</h1>'+
         '<p class="lede">Matières, frais de plateforme, cotisations et temps passé : Crochompte fait le calcul '+
         'et te donne ton vrai gain à l\'heure. Puis il t\'aide à suivre tes commandes, ton stock et tes ventes.</p>'+
+        '<p class="portail-demo"><a class="btn primary" id="portail-demo" href="' + esc(lienDemo()) + '">Voir un atelier rempli</a>'+
+        '<span class="hint">Exemple complet, sans inscription</span></p>'+
+      '</section>'+
+      '<div class="portail-form"></div>'+
+      '<section class="portail-plus">'+
         '<button type="button" class="portail-video" id="portail-video" aria-label="Voir la présentation de Crochompte, moins de deux minutes">'+
           '<img src="media/presentation-poster.jpg" alt="" width="1280" height="720" loading="lazy">'+
           '<span class="pv-play" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span>'+
@@ -3695,7 +3757,6 @@ function renderPortail(){
         '<a href="cgv.html" target="_blank" rel="noopener">Conditions générales</a> · '+
         '<a href="mentions-legales.html" target="_blank" rel="noopener">Mentions légales</a></p>'+
       '</section>'+
-      '<div class="portail-form"></div>'+
     '</div>'
   );
   var zone = el('<div id="zone-compte-portail"></div>');
@@ -3711,10 +3772,7 @@ function renderPortail(){
   var bE = essai.querySelector("#portail-sans-compte");
   if (bE) bE.addEventListener("click", commencerSansCompte);
   enveloppe.querySelector(".portail-form").appendChild(essai);
-  /* Sur téléphone, le formulaire passe en premier : un lien vers la vidéo juste dessous. */
-  var lienV = el('<p class="portail-lien-video"><button type="button" class="lien-mini">▶ Voir la présentation · 2 min</button></p>');
-  lienV.querySelector("button").addEventListener("click", ouvrirPresentation);
-  enveloppe.querySelector(".portail-form").appendChild(lienV);
+  compterVisite("accueil");
   main.appendChild(enveloppe);
   if (pontCompte){
     try{ pontCompte(zone); }catch(e){}
@@ -3731,6 +3789,10 @@ function renderPortail(){
    un accès direct à ce qu'on fait le plus souvent. Tout est calculé sur les
    données réelles de l'atelier ; rien n'est affiché qui n'existe pas. */
 
+/* V66.4 : une seule règle pour dire bonjour ou bonsoir, partout (le titre
+   de l'Accueil et le message du bas disaient l'un « Bonjour », l'autre
+   « Bonsoir », au même moment). */
+function salutation(){ var h = new Date().getHours(); return h >= 18 || h < 5 ? "Bonsoir" : "Bonjour"; }
 function dateDuJour(){
   var t = new Date().toLocaleDateString(localeApp(), {weekday:"long", day:"numeric", month:"long"});
   return t.charAt(0).toUpperCase() + t.slice(1);
@@ -4031,7 +4093,7 @@ function renderAccueil(main){
     if (vend){ var ncO = commandesOuvertes().length; if (ncO) morceaux.push(pluriel(ncO, "commande en cours", "commandes en cours")); }
     phrase = morceaux.join(" · ") + ".";
   }
-  var hero = el('<header class="pagehead acc-tete"><div><div class="eyebrow">' + esc(dateDuJour()) + '</div><h1>Bonjour' + (qui ? ' ' + esc(qui) : '') + '</h1>'+
+  var hero = el('<header class="pagehead acc-tete"><div><div class="eyebrow">' + esc(dateDuJour()) + '</div><h1>' + salutation() + (qui ? ' ' + esc(qui) : '') + '</h1>'+
     '<p>' + esc(phrase) + '</p></div><div class="ph-act"></div></header>');
   var cta = hero.querySelector(".ph-act");
   if (!calcs.length){
@@ -4189,8 +4251,11 @@ function renderAccueil(main){
 
 
 /* ═════ NOUVEAUTÉS ET SIGNALEMENT ═════ */
-var VERSION_APP = "V66.3";
+var VERSION_APP = "V66.4";
 var NOUVEAUTES = [
+  {v:"V66.4", d:"Octobre 2026", l:[
+    "L\'accueil montre d\'abord ce que fait Crochompte, avec un atelier d\'exemple à découvrir sans inscription. Depuis cet exemple, un bouton crée ton atelier."
+  ]},
   {v:"V66.3", d:"Octobre 2026", l:[
     "Quand tu partages le lien de Crochompte, l'aperçu montre maintenant son image."
   ]},
@@ -18048,7 +18113,7 @@ function compteurMainsLibres(obj, apresChangement){
 var DEMO_VERSION = 1;
 function bandeauDemo(){
   var b = el('<div class="bandeau-demo" role="note"><div><b>Atelier de démonstration</b>'+
-    '<span>Données fictives, enregistrées seulement dans ce navigateur. Essaie tout : rien n\'est envoyé en ligne.</span></div>'+
+    '<span>Données fictives, enregistrées seulement dans ce navigateur. Essaie tout : rien de ce que tu saisis n\'est envoyé en ligne.</span></div>'+
     '<div class="bandeau-demo-act"></div></div>');
   var act = b.querySelector(".bandeau-demo-act");
   var bR = bouton("Recommencer la démo", function(){
@@ -18061,7 +18126,10 @@ function bandeauDemo(){
   bR.classList.add("sm");
   var bQ = bouton("Quitter la démo", function(){ location.href = location.pathname; });
   bQ.classList.add("sm", "ghost");
-  act.appendChild(bR); act.appendChild(bQ);
+  /* V66.4 : la personne convaincue par la démo a une suite évidente. */
+  var bC = bouton("Créer mon atelier gratuit", function(){ location.href = location.pathname + "?inscription"; });
+  bC.classList.add("sm", "primary");
+  act.appendChild(bC); act.appendChild(bR); act.appendChild(bQ);
   return b;
 }
 function atelierDemo(){
@@ -18154,7 +18222,13 @@ function atelierDemo(){
     ["cr_doudou", 26, "especes", 9, "marche"], ["cr_cles", 10, "especes", 9, "marche"], ["cr_renard", 24, "carte", 4, "marche"],
     ["cr_lapin", 38, "carte", 0, "etsy"]
   ];
-  ventes.forEach(function(v){ vendrePiece(v[0], v[1], v[2], {le: ilYa(v[3], 2), canal: v[4]}); });
+  /* V66.4 : la vente « du jour » reste aujourd'hui même ouverte peu après
+     minuit (deux heures plus tôt, c'était encore la veille). */
+  var debutJour = new Date(maint).setHours(0, 0, 0, 0);
+  ventes.forEach(function(v){
+    var le = v[3] === 0 ? Math.min(maint, Math.max(ilYa(0, 2), debutJour + 6e4)) : ilYa(v[3], 2);
+    vendrePiece(v[0], v[1], v[2], {le: le, canal: v[4]});
+  });
   /* un marché il y a 9 jours, avec ses frais de stand */
   var jourMarche = iso(ilYa(9));
   state.marches = [{id:"mk_demo", date: jourMarche, lieu:"Marché artisanal de Démoville", frais:15, note:""}];
@@ -18215,6 +18289,7 @@ function atelierDemo(){
 
 state = charger();
 if (DEMO && !state.demoVersion){ try{ state = atelierDemo(); ecrireLocal(); }catch(e){ console.error("Démonstration :", e); } }
+if (DEMO) compterVisite("demo");
 if (!(window.CrochompteI18n && window.CrochompteI18n.langue() !== "fr")) document.documentElement.lang = "fr";
 /* Un réglage modifié juste avant de fermer l'onglet ne doit pas être perdu :
    on force l'écriture au moment où la page part ou passe en arrière-plan. */

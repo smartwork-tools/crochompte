@@ -135,6 +135,21 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
        est pénible à retaper. */
     brouillon: Object.assign(brouillonInscriptionVide(), {identifiantOubli:"", identifiantConnexion:""})
   };
+  /* V66.4 : « Créer mon atelier gratuit » depuis la démo ouvre directement
+     l'inscription (crochompte.com/?inscription). Le mot est retiré de
+     l'adresse aussitôt : le lien de confirmation envoyé par e-mail reprend
+     l'adresse de la page, il ne doit pas ramener sur l'inscription. */
+  (function(){
+    try{
+      var p = new URLSearchParams(window.location.search);
+      if (!p.has("inscription")) return;
+      etat.mode = "inscription";
+      p.delete("inscription");
+      var q = p.toString().replace(/=(&|$)/g, "$1");
+      history.replaceState(history.state, "", window.location.pathname + (q ? "?" + q : "") + window.location.hash);
+    }catch(e){}
+  })();
+  function compter(ev){ try{ if (window.CrochompteVisite) window.CrochompteVisite(ev); }catch(e){} }
 
   /* Sans ceci, la personne qui clique sur un lien périmé arrivait sur le
      formulaire d'inscription sans un mot d'explication, avec l'erreur en
@@ -1029,6 +1044,7 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
     if (!zone) return;
     msg = msg || {};
     var connecte = !!etat.session && !etat.recuperation;
+    if (!connecte && etat.mode === "inscription") compter("creer");
 
     /* L'enregistrement automatique repasse ici toutes les quelques secondes.
        Tout redessiner effacerait ce que la personne est en train de taper
@@ -1307,6 +1323,7 @@ import { createClient } from "./vendor/supabase/supabase.min.mjs";
             etat.courrielEnvoye = mail;
             etat.brouillon = Object.assign(brouillonInscriptionVide(), {identifiantOubli:"", identifiantConnexion: pseudo});
             etat.mode = "verifier";
+            compter("inscrit");
             peindre();
           });
         });
